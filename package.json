@@ -1,0 +1,28 @@
+{
+  "name": "wanderlight",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Wanderlight: a walking motivator that lights up the streets you actually walk.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "phone": "vite build && vite preview --host --mode phone",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource/outfit": "^5.3.0",
+    "maplibre-gl": "^6.18.0"
+  },
+  "devDependencies": {
+    "@types/geojson": "^7946.0.16",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.1.0"
+  }
+}
