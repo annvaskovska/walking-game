@@ -53,12 +53,4 @@ export interface WalkRecord {
   newPieces: number;
   newLenM: number;
   newStreets: string[];
-  visitedPark: boolean;
-  stamps: string[];
-}
-
-export interface StampRecord {
-  id: string;
-  earnedAt: number;
-  walkId: string | null;
 }

@@ -62,62 +62,66 @@ export interface Theme {
   };
 }
 
-export const nightTheme: Theme = {
-  name: 'night',
+/**
+ * Bare-bones look: neutral greys, warm lamplight for lit streets, a blue "you are here" dot and
+ * the system font. A designed skin replaces this object once a direction is chosen.
+ */
+export const plainTheme: Theme = {
+  name: 'plain',
   font: {
-    ui: "'Outfit', system-ui, -apple-system, 'Segoe UI', sans-serif",
+    ui: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
     map: ['Noto Sans Regular'],
     mapBold: ['Noto Sans Bold'],
   },
-  radius: { sm: 10, md: 16, lg: 24, pill: 999 },
+  radius: { sm: 8, md: 12, lg: 18, pill: 999 },
   color: {
-    bg: '#080c1a',
-    surface: '#121931',
-    surface2: '#1b2443',
+    bg: '#0e0e10',
+    surface: '#19191c',
+    surface2: '#242428',
     line: 'rgba(255,255,255,0.08)',
-    text: '#eef1ff',
-    textDim: '#a3abcf',
-    textFaint: '#626b93',
-    accent: '#ffb38a',
-    accentInk: '#2b1408',
-    lit: '#8ef0cf',
-    litInk: '#062a20',
-    warn: '#ffd38a',
-    danger: '#ff9a9a',
-    shadow: 'rgba(0,0,0,0.45)',
+    text: '#f2f2f3',
+    textDim: '#a1a1a8',
+    textFaint: '#6b6b73',
+    accent: '#f2f2f3',
+    accentInk: '#111113',
+    lit: '#ffd27a',
+    litInk: '#2a1d00',
+    warn: '#f5c26b',
+    danger: '#ff8a80',
+    shadow: 'rgba(0,0,0,0.5)',
   },
   fog: {
-    color: '#060918',
-    opacity: 0.97,
-    ghost: 'rgba(142,240,207,0.16)',
+    color: '#0a0a0c',
+    opacity: 0.96,
+    ghost: 'rgba(255,255,255,0.12)',
     ghostWidthPx: 1.4,
     corridorM: 22,
     minCorridorPx: 7,
     lanternM: 38,
   },
-  lit: { core: '#d8fff1', glow: '#8ef0cf', glowOpacity: 0.55 },
-  user: { dot: '#ffb38a', ring: 'rgba(255,179,138,0.18)', cone: 'rgba(255,179,138,0.35)' },
+  lit: { core: '#fff4d6', glow: '#ffd27a', glowOpacity: 0.5 },
+  user: { dot: '#4ea1ff', ring: 'rgba(78,161,255,0.18)', cone: 'rgba(78,161,255,0.35)' },
   map: {
-    background: '#1d2742',
-    residential: '#212c4a',
-    park: '#1f4a3f',
-    wood: '#1c4238',
-    water: '#1f4a78',
-    waterway: '#2a5a8c',
-    building: '#2b375a',
-    buildingEdge: '#35426a',
-    roadCasing: '#141b31',
-    roadMinor: '#3d4a72',
-    roadMajor: '#59648f',
-    roadPath: '#4b5a85',
-    rail: '#3a4363',
-    label: '#e3e8ff',
-    labelHalo: '#121a33',
-    placeLabel: '#fff1e8',
+    background: '#26262a',
+    residential: '#2a2a2f',
+    park: '#26332b',
+    wood: '#243028',
+    water: '#23303d',
+    waterway: '#2c3c4d',
+    building: '#333338',
+    buildingEdge: '#3c3c42',
+    roadCasing: '#1a1a1d',
+    roadMinor: '#4a4a50',
+    roadMajor: '#5e5e66',
+    roadPath: '#55555c',
+    rail: '#404046',
+    label: '#e6e6e8',
+    labelHalo: '#1a1a1d',
+    placeLabel: '#f2f2f3',
   },
 };
 
-export let theme: Theme = nightTheme;
+export let theme: Theme = plainTheme;
 
 const kebab = (s: string) => s.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase());
 

@@ -1,11 +1,11 @@
-import { Map as MlMap, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl';
+import { AttributionControl, Map as MlMap, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import type { Feature } from 'geojson';
 import type { LitPiece } from '../core/types';
 import type { BBox } from '../geo/geo';
 import type { Theme } from '../theme';
 import { FogLayer, type FogSources } from './fogLayer';
-import { buildStyle, FIRST_LABEL_LAYER, PARK_LAYERS } from './style';
+import { buildStyle, FIRST_LABEL_LAYER } from './style';
 import { UserMarker } from './userMarker';
 
 setWorkerUrl(workerUrl);
@@ -34,8 +34,10 @@ export class MapView {
       dragRotate: false,
       pitchWithRotate: false,
       touchPitch: false,
-      attributionControl: { compact: true },
+      attributionControl: false,
     });
+    // Credits go top-right, beside the brand, so the walk dock can use the whole bottom edge.
+    this.map.addControl(new AttributionControl({ compact: true }), 'top-right');
     this.map.touchZoomRotate.disableRotation();
     this.map.keyboard.disableRotation();
 
@@ -47,7 +49,7 @@ export class MapView {
     this.ready = new Promise((resolve) => {
       this.map.on('load', () => {
         // Map credits start folded behind their ⓘ button (as MapLibre does after the first drag),
-        // so on a phone they never sit on top of the walk dock.
+        // so on a phone they never sit on top of the brand or banners.
         container.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
         this.addLitLayers();
         this.loaded = true;
@@ -133,14 +135,5 @@ export class MapView {
   bounds(): BBox {
     const b = this.map.getBounds();
     return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-  }
-
-  /** Is this spot inside a park on the basemap? Cheap: asks the rendered tiles. */
-  inPark(lon: number, lat: number): boolean {
-    if (!this.loaded) return false;
-    const p = this.map.project([lon, lat]);
-    const c = this.map.getCanvas();
-    if (p.x < 0 || p.y < 0 || p.x > c.clientWidth || p.y > c.clientHeight) return false;
-    return this.map.queryRenderedFeatures(p, { layers: PARK_LAYERS }).length > 0;
   }
 }

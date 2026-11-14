@@ -1,7 +1,3 @@
-import '@fontsource/outfit/400.css';
-import '@fontsource/outfit/500.css';
-import '@fontsource/outfit/600.css';
-import '@fontsource/outfit/700.css';
 // MapLibre's stylesheet first, so the app's own rules (e.g. the full-screen .wl-map) win.
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './styles.css';
