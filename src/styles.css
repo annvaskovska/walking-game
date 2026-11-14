@@ -18,7 +18,6 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 [hidden] { display: none !important; }
 
 :root {
-  --tabbar-h: 64px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
@@ -30,9 +29,8 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 /* ---- Map + fog ---- */
 .wl-map, .wl-map.maplibregl-map { position: absolute; inset: 0; background: var(--fog); }
 .wl-fog { position: absolute; left: 0; top: 0; pointer-events: none; }
-.maplibregl-ctrl-bottom-right, .maplibregl-ctrl-bottom-left {
-  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 4px);
-}
+/* Map credits sit in the top bar, so the walk dock can take the whole bottom edge. */
+.maplibregl-ctrl-top-right { top: calc(var(--safe-top) + 6px); right: calc(var(--safe-right) + 4px); }
 .maplibregl-ctrl-attrib.maplibregl-compact { background: var(--surface); color: var(--text-dim); }
 .maplibregl-ctrl-attrib a { color: var(--text-dim); }
 .maplibregl-ctrl-attrib-button { filter: invert(1); }
@@ -76,11 +74,11 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 }
 .wl-brand-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--lit); box-shadow: 0 0 10px var(--lit); }
 .wl-badge {
-  margin-left: auto; padding: 6px 10px; border-radius: var(--radius-pill);
+  margin-left: auto; margin-right: 34px; padding: 6px 10px; border-radius: var(--radius-pill);
   background: var(--warn); color: var(--accent-ink); font-size: 12px; font-weight: 700;
 }
 
-/* ---- Banners & toasts ---- */
+/* ---- Banners ---- */
 .wl-banners {
   position: absolute; z-index: 6; left: calc(var(--safe-left) + 12px); right: calc(var(--safe-right) + 12px);
   top: calc(var(--safe-top) + 58px); display: flex; flex-direction: column; gap: 8px;
@@ -97,28 +95,11 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
   min-height: 44px; padding: 0 14px; border-radius: var(--radius-pill);
   background: var(--surface-2); font-weight: 600; font-size: 14px;
 }
-.wl-toasts {
-  position: absolute; z-index: 7; left: 50%; transform: translateX(-50%);
-  top: calc(var(--safe-top) + 58px); width: min(92vw, 420px);
-  display: flex; flex-direction: column; gap: 8px; pointer-events: none;
-}
-.wl-toast {
-  display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: var(--radius-pill);
-  background: var(--surface-2); box-shadow: 0 8px 24px var(--shadow); font-weight: 600; font-size: 15px;
-  animation: wl-in 0.35s cubic-bezier(.2,1.4,.4,1);
-  transition: opacity 0.4s, transform 0.4s;
-}
-.wl-toast.is-street { background: var(--lit); color: var(--lit-ink); box-shadow: 0 0 26px color-mix(in srgb, var(--lit) 55%, transparent); }
-.wl-toast.is-stamp { background: var(--accent); color: var(--accent-ink); }
-.wl-toast.is-leaving { opacity: 0; transform: translateY(-8px); }
-.wl-toast-icon { font-size: 18px; }
-@keyframes wl-in { from { opacity: 0; transform: translateY(-12px) scale(0.95); } }
-
 /* ---- Map controls & walk dock ---- */
 .wl-map-ui {
   position: absolute; z-index: 4; left: 0; right: 0;
-  bottom: calc(var(--tabbar-h) + var(--safe-bottom));
-  padding: 0 calc(var(--safe-right) + 12px) 12px calc(var(--safe-left) + 12px);
+  bottom: 0;
+  padding: 0 calc(var(--safe-right) + 12px) calc(var(--safe-bottom) + 16px) calc(var(--safe-left) + 12px);
   display: flex; flex-direction: column; align-items: stretch; gap: 10px; pointer-events: none;
 }
 .wl-map-ui > * { pointer-events: auto; }
@@ -153,58 +134,20 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 .wl-live-gps.is-error::before { background: var(--danger); }
 .wl-live-gps.is-searching::before { animation: wl-blink 1s infinite; }
 @keyframes wl-blink { 50% { opacity: 0.2; } }
-.wl-live-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-.wl-live-stats div, .wl-summary-stats div, .wl-you-grid div {
+.wl-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.wl-stats div {
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
   padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2);
 }
-.wl-live-stats b { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.wl-live-stats span, .wl-summary-stats span, .wl-you-grid span { font-size: 11px; color: var(--text-dim); }
+.wl-stats b { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wl-stats span { font-size: 12px; color: var(--text-dim); }
+.wl-stats.is-summary { margin-top: 16px; }
+.wl-stats.is-summary div { padding: 12px; }
+.wl-stats.is-summary b { font-size: 22px; }
 .wl-end {
   min-height: 48px; border-radius: var(--radius-pill); background: var(--surface-2);
   border: 1px solid var(--accent); color: var(--accent); font-weight: 700; font-size: 16px;
 }
-
-/* ---- Screens ---- */
-.wl-screen {
-  position: absolute; z-index: 8; inset: 0; bottom: calc(var(--tabbar-h) + var(--safe-bottom));
-  overflow-y: auto; background: var(--bg); -webkit-overflow-scrolling: touch;
-}
-.wl-screen-inner { padding: calc(var(--safe-top) + 20px) calc(var(--safe-right) + 18px) 28px calc(var(--safe-left) + 18px); max-width: 640px; margin: 0 auto; }
-.wl-screen h1 { margin: 0 0 4px; font-size: 30px; font-weight: 700; }
-.wl-screen h3, .wl-sheet h3 { margin: 22px 0 10px; font-size: 16px; font-weight: 600; }
-.wl-muted { color: var(--text-dim); font-size: 14px; margin: 0; font-weight: 400; }
-.wl-foot { margin-top: 28px; color: var(--text-faint); font-size: 12px; }
-
-.wl-stamp-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 18px; }
-.wl-stamp {
-  display: flex; flex-direction: column; gap: 4px; padding: 14px; border-radius: var(--radius-md);
-  background: var(--surface); border: 1px dashed var(--line); min-height: 160px;
-}
-.wl-stamp-icon { font-size: 34px; filter: grayscale(1) opacity(0.4); }
-.wl-stamp.is-earned { border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
-.wl-stamp.is-earned .wl-stamp-icon { filter: none; }
-.wl-stamp-title { font-weight: 700; font-size: 15px; }
-.wl-stamp-desc { font-size: 12.5px; color: var(--text-dim); flex: 1; }
-.wl-stamp-date { font-size: 12px; color: var(--text-faint); }
-.wl-stamp.is-earned .wl-stamp-date { color: var(--accent); }
-.wl-stamp-prog { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
-.wl-stamp-prog i { display: block; height: 100%; background: var(--lit); }
-
-.wl-you-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 18px; }
-.wl-you-grid b { font-size: 28px; font-weight: 700; }
-.wl-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; height: 130px; }
-.wl-bar { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.wl-bar-track { flex: 1; width: 100%; max-width: 30px; border-radius: 8px; background: var(--surface); display: flex; align-items: flex-end; overflow: hidden; }
-.wl-bar-track i { display: block; width: 100%; background: var(--lit); border-radius: 8px; min-height: 0; }
-.wl-bar span { font-size: 11px; color: var(--text-dim); }
-.wl-bar.is-today span { color: var(--accent); font-weight: 700; }
-.wl-nudges { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.wl-nudges li {
-  display: flex; justify-content: space-between; align-items: center; gap: 10px;
-  padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface);
-}
-.wl-nudges b { color: var(--accent); font-weight: 600; font-size: 13px; white-space: nowrap; }
 
 /* ---- Sheet ---- */
 .wl-sheet-wrap {
@@ -220,16 +163,8 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 @keyframes wl-up { from { transform: translateY(40px); opacity: 0; } }
 .wl-sheet h2 { margin: 4px 0 0; font-size: 24px; }
 .wl-sheet p { line-height: 1.5; }
+.wl-muted { color: var(--text-dim); font-size: 14px; margin: 16px 0 0; }
 .wl-kicker { color: var(--lit); font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
-.wl-summary-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 16px; }
-.wl-summary-stats b { font-size: 22px; }
-.wl-street-list { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
-.wl-street-list li {
-  padding: 6px 12px; border-radius: var(--radius-pill); font-size: 14px;
-  background: color-mix(in srgb, var(--lit) 16%, transparent); color: var(--lit);
-}
-.wl-mini-stamps { display: flex; flex-wrap: wrap; gap: 8px; }
-.wl-mini-stamp { display: inline-flex; gap: 8px; align-items: center; padding: 8px 12px; border-radius: var(--radius-pill); background: var(--surface-2); font-weight: 600; }
 .wl-help { padding-left: 18px; line-height: 1.5; color: var(--text-dim); }
 .wl-help li { margin-bottom: 8px; }
 .wl-primary {
@@ -237,24 +172,9 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
   background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 17px;
 }
 
-/* ---- Tab bar ---- */
-.wl-tabs {
-  position: absolute; z-index: 10; left: 0; right: 0; bottom: 0;
-  height: calc(var(--tabbar-h) + var(--safe-bottom)); padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  background: var(--surface); border-top: 1px solid var(--line);
-}
-.wl-tab {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  min-height: 44px; color: var(--text-faint); font-size: 12px; font-weight: 500;
-}
-.wl-tab svg { width: 24px; height: 24px; }
-.wl-tab.is-active { color: var(--lit); }
-
 .wl-fatal { padding: 40px 24px; text-align: center; }
 .wl-fatal button { min-height: 48px; padding: 0 24px; border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-ink); font-weight: 700; }
 
 @media (min-width: 700px) {
   .wl-map-ui { left: auto; width: 420px; }
-  .wl-stamp-grid { grid-template-columns: repeat(3, 1fr); }
 }

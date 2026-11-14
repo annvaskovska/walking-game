@@ -4,7 +4,6 @@ import type { Theme } from '../theme';
 export const TILEJSON_URL = 'https://tiles.openfreemap.org/planet';
 export const GLYPHS_URL = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
 
-export const PARK_LAYERS = ['park', 'landcover-park'];
 /** Layer id the lit-street glow is inserted under, so labels stay on top. */
 export const FIRST_LABEL_LAYER = 'waterway-label';
 

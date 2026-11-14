@@ -1,4 +1,4 @@
-/** Tunable numbers for tracking, lighting and street loading. No colours here: see theme.ts. */
+/** Tunable numbers for tracking, lighting, street loading and step estimates. No colours here: see theme.ts. */
 export const CONFIG = {
   /** Target length of one street piece, in metres. */
   pieceLengthM: 20,
@@ -32,8 +32,9 @@ export const CONFIG = {
 
   /** A walk shorter than this (and lighting nothing) is not saved. */
   minSavedWalkM: 50,
-  /** A walk counts for streaks and time-of-day stamps from this distance. */
-  realWalkMinM: 100,
+
+  /** Average adult walking step, metres. Steps are estimated as distance / this. */
+  stepLengthM: 0.75,
 } as const;
 
 export type Config = typeof CONFIG;

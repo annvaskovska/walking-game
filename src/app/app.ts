@@ -1,10 +1,8 @@
 import { CONFIG } from '../config';
-import { newlyEarned, type StampContext } from '../core/achievements';
 import { newFilterState, stepFilter, type FilterState } from '../core/gpsFilter';
 import { piecesNearSegment, piecesNearTrack } from '../core/lighting';
 import { Progress, toStoredLit } from '../core/progress';
-import { nearbyUnlitStreets, streaks, weekBars } from '../core/stats';
-import type { Fix, LitPiece, Piece, StampRecord, WalkRecord } from '../core/types';
+import type { Fix, LitPiece, Piece, WalkRecord } from '../core/types';
 import { StreetLoader, type LoaderStatus } from '../data/streetLoader';
 import { bearingDeg } from '../geo/geo';
 import { GridIndex } from '../geo/spatialIndex';
@@ -15,11 +13,9 @@ import { createSimLocation, simFactor } from '../platform/simLocation';
 import { SIM_ROUTE } from '../platform/simRoute';
 import { openStorage } from '../platform/storage';
 import { WakeLockKeeper } from '../platform/wakeLock';
-import { applyTheme, nightTheme } from '../theme';
-import { buildShell, openSheet, selectTab, setBanner, toast, type Tab } from '../ui/shell';
-import {
-  renderIdleDock, renderLiveDock, renderStamps, renderYou, summaryHtml, updateLiveDock, type LiveView,
-} from '../ui/views';
+import { applyTheme, plainTheme } from '../theme';
+import { buildShell, openSheet, setBanner } from '../ui/shell';
+import { renderIdleDock, renderLiveDock, summaryHtml, updateLiveDock, type LiveView } from '../ui/views';
 
 /** The walk in progress. Persisted on every change so a reload mid-walk picks it up again. */
 interface ActiveSession {
@@ -29,11 +25,9 @@ interface ActiveSession {
   newPieces: number;
   newLenM: number;
   newStreets: string[];
-  stamps: string[];
   /** Raw walked segments [aLon, aLat, bLon, bLat, radius, ...], replayed when streets load late. */
   segs: number[];
   filter: FilterState;
-  visitedPark: boolean;
   lastFix: Fix | null;
   fixes: number;
 }
@@ -48,13 +42,11 @@ function sessionAsWalk(s: ActiveSession, now: number): WalkRecord {
     newPieces: s.newPieces,
     newLenM: s.newLenM,
     newStreets: [...s.newStreets],
-    visitedPark: s.visitedPark,
-    stamps: [...s.stamps],
   };
 }
 
 export async function startApp(root: HTMLElement): Promise<void> {
-  applyTheme(nightTheme);
+  applyTheme(plainTheme);
   const params = new URLSearchParams(location.search);
   const sim = params.has('sim');
   const provider: LocationProvider = sim ? createSimLocation(simFactor(params.get('sim'))) : createBrowserLocation();
@@ -66,20 +58,17 @@ export async function startApp(root: HTMLElement): Promise<void> {
   }
 
   const storage = await openStorage();
-  const [litRecords, walkRecords, stampRecords, lastPos, savedSession] = await Promise.all([
+  const [litRecords, walkRecords, lastPos, savedSession] = await Promise.all([
     storage.getAll<LitPiece>('lit'),
     storage.getAll<WalkRecord>('walks'),
-    storage.getAll<StampRecord>('stamps'),
     storage.get<Fix>('meta', 'lastPos'),
     storage.get<ActiveSession>('meta', 'activeSession'),
   ]);
   const progress = new Progress();
   progress.load(litRecords);
   const walks = walkRecords.sort((a, b) => a.startedAt - b.startedAt);
-  const earned = new Map(stampRecords.map((s) => [s.id, s]));
   let session: ActiveSession | null = savedSession ?? null;
   let here: Fix | null = session?.lastFix ?? lastPos ?? null;
-  let tab: Tab = 'map';
   let dataVersion = 0;
   let stopWatch: (() => void) | null = null;
   let locError: LocationError | null = null;
@@ -87,7 +76,6 @@ export async function startApp(root: HTMLElement): Promise<void> {
   let weakAcc = 0;
   let vehicleUntil = 0;
   let lastBearing: number | null = null;
-  let segCount = 0;
 
   // ---- Map ----
   const fogSources: FogSources = {
@@ -97,7 +85,7 @@ export async function startApp(root: HTMLElement): Promise<void> {
     version: () => dataVersion,
   };
   const start: [number, number] = here ? [here.lon, here.lat] : sim ? [SIM_ROUTE[0], SIM_ROUTE[1]] : [10, 35];
-  const mapView = new MapView(ui.map, nightTheme, start, here || sim ? 16 : 2, fogSources);
+  const mapView = new MapView(ui.map, plainTheme, start, here || sim ? 16 : 2, fogSources);
   mapView.setLit(() => progress.lit.values());
   mapView.onFollowChange = () => renderRecenter();
   mapView.map.on('moveend', () => {
@@ -168,27 +156,6 @@ export async function startApp(root: HTMLElement): Promise<void> {
     if (document.visibilityState === 'hidden') saveNow();
   });
 
-  // ---- Stamps ----
-  function stampContext(extra?: WalkRecord): StampContext {
-    return {
-      streetsMet: progress.streetsMet,
-      piecesLit: progress.piecesLit,
-      litLenM: progress.litLenM,
-      walks: extra ? [...walks, extra] : walks,
-      now: provider.now(),
-    };
-  }
-
-  function awardStamps(ctx: StampContext, walkId: string | null): string[] {
-    const fresh = newlyEarned(ctx, new Set(earned.keys()));
-    if (!fresh.length) return [];
-    const recs: StampRecord[] = fresh.map((s) => ({ id: s.id, earnedAt: provider.now(), walkId }));
-    for (const r of recs) earned.set(r.id, r);
-    for (const s of fresh) toast(ui, `Stamp earned: ${s.title}`, 'stamp', s.icon);
-    void storage.putMany('stamps', recs);
-    return fresh.map((s) => s.id);
-  }
-
   // ---- Lighting ----
   function light(pieces: Piece[]): void {
     if (!session || !pieces.length) return;
@@ -202,13 +169,7 @@ export async function startApp(root: HTMLElement): Promise<void> {
       dataVersion++;
       mapView.fog.invalidate();
     }
-    for (const name of res.newStreets) {
-      session.newStreets.push(name);
-      toast(ui, `New street: ${name}`, 'street', '✦');
-    }
-    if (res.newPieces.length) {
-      session.stamps.push(...awardStamps(stampContext(sessionAsWalk(session, provider.now())), session.id));
-    }
+    session.newStreets.push(...res.newStreets);
     persistSession();
   }
 
@@ -221,7 +182,6 @@ export async function startApp(root: HTMLElement): Promise<void> {
       for (const p of pieces) fresh.insert(p);
       light(piecesNearTrack(fresh, session.segs));
     }
-    if (tab === 'you') renderYouTab();
     updateDock();
   }
 
@@ -253,9 +213,6 @@ export async function startApp(root: HTMLElement): Promise<void> {
         session.segs.push(from.lon, from.lat, to.lon, to.lat, Math.round(verdict.radiusM * 10) / 10);
         lastBearing = bearingDeg(from.lon, from.lat, to.lon, to.lat);
         light(piecesNearSegment(loader.index, from.lon, from.lat, to.lon, to.lat, verdict.radiusM));
-        if (!session.visitedPark && ++segCount % 5 === 0 && mapView.inPark(fix.lon, fix.lat)) {
-          session.visitedPark = true;
-        }
       }
       if (verdict.kind !== 'reject') mapView.follow(fix.lon, fix.lat);
       persistSession();
@@ -309,10 +266,8 @@ export async function startApp(root: HTMLElement): Promise<void> {
       newPieces: 0,
       newLenM: 0,
       newStreets: [],
-      stamps: [],
       segs: [],
       filter: newFilterState(),
-      visitedPark: false,
       lastFix: null,
       fixes: 0,
     };
@@ -358,7 +313,6 @@ export async function startApp(root: HTMLElement): Promise<void> {
     const saved = rec.distanceM >= CONFIG.minSavedWalkM || rec.newPieces > 0;
     if (saved) {
       walks.push(rec);
-      rec.stamps = [...s.stamps, ...awardStamps(stampContext(), rec.id)];
       await storage.putMany('walks', [rec]);
     }
     await flushLit();
@@ -370,7 +324,7 @@ export async function startApp(root: HTMLElement): Promise<void> {
     openSheet(ui, summaryHtml(rec, saved));
   }
 
-  // ---- Dock, banners, tabs ----
+  // ---- Dock and banners ----
   function gpsState(): LiveView['gps'] {
     if (locError && locError.kind !== 'timeout') return { kind: 'error', text: 'Location unavailable' };
     if (!session?.lastFix) return { kind: 'searching', text: 'Finding you…' };
@@ -387,8 +341,6 @@ export async function startApp(root: HTMLElement): Promise<void> {
     updateLiveDock(ui.dock, {
       elapsedMs: provider.now() - session.startedAt,
       distanceM: session.distanceM,
-      newStreets: session.newStreets.length,
-      newPieces: session.newPieces,
       gps: gpsState(),
     });
   }
@@ -446,46 +398,16 @@ export async function startApp(root: HTMLElement): Promise<void> {
     }
   }
 
-  function renderStampsTab(): void {
-    renderStamps(ui.stamps, stampContext(), earned);
-  }
-
-  function renderYouTab(): void {
-    const now = provider.now();
-    const st = streaks(walks, now);
-    renderYou(ui.you, {
-      streetsMet: progress.streetsMet,
-      litLenM: progress.litLenM,
-      walks: walks.length,
-      streak: st.current,
-      bestStreak: st.best,
-      week: weekBars(walks, now),
-      nudges: here ? nearbyUnlitStreets(loader.index.values(), (n) => progress.hasStreet(n), here.lon, here.lat) : null,
-      storageKind: storage.kind,
-    });
-  }
-
-  ui.tabs.addEventListener('click', (e) => {
-    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]');
-    if (!b) return;
-    tab = b.dataset.tab as Tab;
-    selectTab(ui, tab);
-    if (tab === 'stamps') renderStampsTab();
-    if (tab === 'you') renderYouTab();
-  });
-
   setInterval(() => {
     updateDock();
     if (loader.status.state === 'retrying') onLoaderStatus(loader.status);
   }, 1000);
 
   // ---- Boot ----
-  selectTab(ui, 'map');
   renderDock();
   if (here) mapView.user.update(here.lon, here.lat, here.acc, null);
 
   if (session) {
-    toast(ui, 'Walk resumed', 'info', '↺');
     if (here) loader.ensureAround(here.lon, here.lat);
     beginTracking();
   } else {
@@ -505,7 +427,7 @@ export async function startApp(root: HTMLElement): Promise<void> {
   if (sim) {
     // Hidden test hook for desktop verification (only with ?sim).
     (window as unknown as Record<string, unknown>).__wanderlight = {
-      progress, loader, mapView, walks, earned,
+      progress, loader, mapView, walks,
       get session() {
         return session;
       },
@@ -522,7 +444,6 @@ export async function startApp(root: HTMLElement): Promise<void> {
           newStreets: session.newStreets, segs: session.segs.length / 5, fixes: session.fixes,
         },
         walks: walks.length,
-        stamps: [...earned.keys()],
       }),
     };
   }

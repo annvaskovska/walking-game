@@ -2,12 +2,14 @@
 
 Your city starts dark. Every street you actually walk lights up, for good.
 
-Wanderlight is a small walking motivator: a night map of your city under fog. Start a walk and
-your phone's GPS cuts a glowing path through the fog along the streets you pass. Streets stay lit
-forever, new streets get a little "New street" toast, and walks earn stamps (First Light, 10/50/100
-streets, 5 km lit, Night Owl, Early Bird, 3- and 7-day streaks, a park walk). The **You** tab
-shows streets met, km lit, walks, your streak, this week's distance and the nearest streets you
-haven't walked yet.
+Wanderlight is a small walking motivator: a dark map of your city under fog. Start a walk and
+your phone's GPS cuts a lit path through the fog along the streets you pass. Streets stay lit
+forever. While you walk, the app shows the time, the distance and an estimate of your steps
+(distance ÷ 0.75 m, since browsers can't read the phone's step counter); the same three numbers
+make up the summary when you end the walk.
+
+This is the bare-bones version: one screen, a plain neutral look, no achievements yet. A designed
+skin and stamps come once a design direction is chosen.
 
 Only real walking counts: there is no tap-to-explore. Fixes that are too inaccurate, glitchy jumps
 and anything faster than a brisk walk (bike, tram, car) are ignored.
@@ -19,7 +21,7 @@ All your data stays on the device (IndexedDB). There is no account and no server
 ```sh
 npm install
 npm run dev        # http://localhost:5173
-npm test           # unit tests for the pure logic (GPS filter, lighting, stats, stamps…)
+npm test           # unit tests for the pure logic (GPS filter, lighting, pieces, formatting…)
 npm run build      # type-check + production build into dist/
 ```
 
@@ -73,9 +75,9 @@ platform calls (geolocation, wake lock, storage) already live behind small modul
   canvas overlay with soft corridors cut out along lit streets; lit streets glow as a MapLibre
   layer.
 
-Code map: `src/core` (pure logic: GPS filter, lighting, progress, stats, stamps), `src/geo`
+Code map: `src/core` (pure logic: GPS filter, lighting, progress, walk stats), `src/geo`
 (geometry, pieces, spatial index), `src/data` (Overpass, street loader), `src/platform`
-(location, wake lock, storage, sim), `src/map` (style, fog, marker), `src/ui` (shell, screens),
-`src/app` (the controller).
+(location, wake lock, storage, sim), `src/map` (style, fog, marker), `src/ui` (shell, walk dock,
+summary), `src/app` (the controller).
 
 Map data © OpenStreetMap contributors · Tiles: OpenFreeMap / OpenMapTiles.

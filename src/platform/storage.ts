@@ -3,13 +3,13 @@
  * touches it, so a native store (e.g. under Capacitor) can replace it later.
  */
 
-export type StoreName = 'cells' | 'lit' | 'walks' | 'stamps' | 'meta';
+export type StoreName = 'cells' | 'lit' | 'walks' | 'meta';
 
 export interface Storage {
   get<T>(store: StoreName, key: string): Promise<T | undefined>;
   getAll<T>(store: StoreName): Promise<T[]>;
   getAllKeys(store: StoreName): Promise<string[]>;
-  /** For stores with a key path ('cells', 'lit', 'walks', 'stamps'). */
+  /** For stores with a key path ('cells', 'lit', 'walks'). */
   putMany(store: StoreName, values: unknown[]): Promise<void>;
   /** For the key/value 'meta' store. */
   set(key: string, value: unknown): Promise<void>;
@@ -23,7 +23,6 @@ const KEYED: Record<Exclude<StoreName, 'meta'>, string> = {
   cells: 'key',
   lit: 'id',
   walks: 'id',
-  stamps: 'id',
 };
 
 function req<T>(r: IDBRequest<T>): Promise<T> {
