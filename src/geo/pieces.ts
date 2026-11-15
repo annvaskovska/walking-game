@@ -1,6 +1,6 @@
 import { CONFIG } from '../config';
 import { bboxOfCoords, distanceM } from './geo';
-import type { Piece, WayInput } from '../core/types';
+import type { Piece, PieceKind, WayInput } from '../core/types';
 
 const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
 
@@ -62,6 +62,7 @@ export function splitWay(way: WayInput, target: number = CONFIG.pieceLengthM): P
       idx: k,
       name: way.name,
       hw: way.highway,
+      kind: way.kind,
       len: d1 - d0,
       coords: clean,
       bbox: bboxOfCoords(clean),
@@ -73,4 +74,14 @@ export function splitWay(way: WayInput, target: number = CONFIG.pieceLengthM): P
 /** Streets are pieces grouped by name; unnamed ways are "paths" that still light up. */
 export function isStreet(p: { name: string | null }): p is { name: string } {
   return !!p.name;
+}
+
+/**
+ * Fallback kind for records saved before kinds existed: walkway classes become paths, everything
+ * else a road. New data gets a precise kind from its OSM tags in `parseOverpass`.
+ */
+export function kindFromHighway(hw: string): PieceKind {
+  return hw === 'footway' || hw === 'path' || hw === 'cycleway' || hw === 'steps' || hw === 'bridleway'
+    ? 'path'
+    : 'road';
 }

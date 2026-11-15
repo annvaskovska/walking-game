@@ -7,6 +7,9 @@ export const GLYPHS_URL = 'https://tiles.openfreemap.org/fonts/{fontstack}/{rang
 /** Layer id the lit-street glow is inserted under, so labels stay on top. */
 export const FIRST_LABEL_LAYER = 'waterway-label';
 
+/** The basemap's street-name layer. Names of unlocked streets are hidden here, then drawn in gold. */
+export const ROAD_LABEL_LAYER = 'road-label';
+
 const minor = ['minor', 'service', 'track', 'raceway', 'busway'];
 const major = ['motorway', 'trunk', 'primary', 'secondary', 'tertiary'];
 
