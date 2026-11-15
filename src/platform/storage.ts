@@ -3,7 +3,7 @@
  * touches it, so a native store (e.g. under Capacitor) can replace it later.
  */
 
-export type StoreName = 'cells' | 'lit' | 'walks' | 'meta';
+export type StoreName = 'cells' | 'lit' | 'walks' | 'houses' | 'bldCells' | 'meta';
 
 export interface Storage {
   get<T>(store: StoreName, key: string): Promise<T | undefined>;
@@ -18,11 +18,14 @@ export interface Storage {
 }
 
 const DB_NAME = 'wanderlight';
-const DB_VERSION = 1;
+/** v2 added lit houses and cached building cells. */
+const DB_VERSION = 2;
 const KEYED: Record<Exclude<StoreName, 'meta'>, string> = {
   cells: 'key',
   lit: 'id',
   walks: 'id',
+  houses: 'id',
+  bldCells: 'key',
 };
 
 function req<T>(r: IDBRequest<T>): Promise<T> {
