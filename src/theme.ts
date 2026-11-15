@@ -40,7 +40,28 @@ export interface Theme {
     /** Soft glow cleared around you during a walk, metres. */
     lanternM: number;
   };
-  lit: { core: string; glow: string; glowOpacity: number };
+  lit: {
+    /** Soft halo under a lit street. */
+    glow: string;
+    glowOpacity: number;
+    /** Street line once it has settled, and the cream it flashes when it unlocks. */
+    street: string;
+    streetFresh: string;
+    /** Thin highlight running along the middle of a lit street. */
+    shine: string;
+    /** Street names, written over their lit street. */
+    name: string;
+    nameHalo: string;
+    /** Houses: settled gold, the flash when their block unlocks, edge and halo. */
+    house: string;
+    houseFresh: string;
+    houseEdge: string;
+    houseGlow: string;
+    /** The little window pattern repeated over a lit house. */
+    windowBase: string;
+    windowLight: string;
+    windowBright: string;
+  };
   user: { dot: string; ring: string; cone: string };
   map: {
     background: string;
@@ -95,11 +116,27 @@ export const plainTheme: Theme = {
     opacity: 0.96,
     ghost: 'rgba(255,255,255,0.12)',
     ghostWidthPx: 1.4,
-    corridorM: 22,
+    // Wide enough to read as one unlocked block, with the houses at its edge fully in the clear.
+    corridorM: 15,
     minCorridorPx: 7,
     lanternM: 38,
   },
-  lit: { core: '#fff4d6', glow: '#ffd27a', glowOpacity: 0.5 },
+  lit: {
+    glow: '#ffd27a',
+    glowOpacity: 0.45,
+    street: '#ffc85a',
+    streetFresh: '#fff6dc',
+    shine: '#fffaf0',
+    name: '#ffd27a',
+    nameHalo: '#1b1406',
+    house: '#e9a13f',
+    houseFresh: '#fff3cf',
+    houseEdge: '#ffe6a8',
+    houseGlow: '#ffb547',
+    windowBase: '#d98f2f',
+    windowLight: '#ffe9b3',
+    windowBright: '#fff8e0',
+  },
   user: { dot: '#4ea1ff', ring: 'rgba(78,161,255,0.18)', cone: 'rgba(78,161,255,0.35)' },
   map: {
     background: '#26262a',

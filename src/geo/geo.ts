@@ -120,6 +120,75 @@ export function segmentToPolylineM(
   return best;
 }
 
+export interface Projection {
+  /** Shortest distance from the point to the polyline, metres. */
+  distM: number;
+  /** Distance along the polyline to the nearest point, metres from its start. */
+  alongM: number;
+}
+
+/**
+ * Project a point onto a polyline (flat lon/lat), returning how far away it is and how far along
+ * the nearest point lies. All in metres on a local plane; exact enough at street scale.
+ */
+export function projectOnPolylineM(lon: number, lat: number, flat: ArrayLike<number>): Projection {
+  const m = metresPerDegree(lat);
+  if (flat.length <= 2) {
+    return { distM: distanceM(lon, lat, flat[0], flat[1]), alongM: 0 };
+  }
+  // Coordinates relative to the point, so projecting the origin on each segment is cheap.
+  let px = (flat[0] - lon) * m.lon, py = (flat[1] - lat) * m.lat;
+  let along = 0, best = Infinity, bestAlong = 0;
+  for (let i = 2; i < flat.length; i += 2) {
+    const qx = (flat[i] - lon) * m.lon, qy = (flat[i + 1] - lat) * m.lat;
+    const dx = qx - px, dy = qy - py;
+    const len2 = dx * dx + dy * dy;
+    const segLen = Math.sqrt(len2);
+    let t = len2 > 0 ? -(px * dx + py * dy) / len2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const cx = px + t * dx, cy = py + t * dy;
+    const d2 = cx * cx + cy * cy;
+    if (d2 < best) {
+      best = d2;
+      bestAlong = along + t * segLen;
+    }
+    along += segLen;
+    px = qx;
+    py = qy;
+  }
+  return { distM: Math.sqrt(best), alongM: bestAlong };
+}
+
+/** Shortest distance between two polylines (flat lon/lat), metres. */
+export function polylineDistanceM(a: ArrayLike<number>, b: ArrayLike<number>): number {
+  if (!a.length || !b.length) return Infinity;
+  if (a.length < 4 || b.length < 4) {
+    // Degenerate input: compare the few points we have.
+    let best = Infinity;
+    for (let i = 0; i < a.length; i += 2) {
+      for (let j = 0; j < b.length; j += 2) best = Math.min(best, distanceM(a[i], a[i + 1], b[j], b[j + 1]));
+    }
+    return best;
+  }
+  const m = metresPerDegree(a[1]);
+  const ax = (i: number) => (a[i] - a[0]) * m.lon;
+  const ay = (i: number) => (a[i + 1] - a[1]) * m.lat;
+  const bx = (i: number) => (b[i] - a[0]) * m.lon;
+  const by = (i: number) => (b[i + 1] - a[1]) * m.lat;
+  let best = Infinity;
+  for (let i = 2; i < a.length; i += 2) {
+    for (let j = 2; j < b.length; j += 2) {
+      const d = segmentSegmentDist(
+        ax(i - 2), ay(i - 2), ax(i), ay(i),
+        bx(j - 2), by(j - 2), bx(j), by(j),
+      );
+      if (d < best) best = d;
+      if (best === 0) return 0;
+    }
+  }
+  return best;
+}
+
 /** Bearing in degrees clockwise from north, from a to b. */
 export function bearingDeg(aLon: number, aLat: number, bLon: number, bLat: number): number {
   const φ1 = aLat * RAD, φ2 = bLat * RAD, Δλ = (bLon - aLon) * RAD;

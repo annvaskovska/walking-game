@@ -1,6 +1,6 @@
 import { MercatorCoordinate, type Map as MlMap } from 'maplibre-gl';
 import { toMercator, type BBox } from '../geo/geo';
-import type { Piece } from '../core/types';
+import type { Building, Piece } from '../core/types';
 import type { Theme } from '../theme';
 
 const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
@@ -11,15 +11,17 @@ export interface FogSources {
   ghost(b: BBox): Iterable<Piece>;
   /** Lit pieces in a box (cut out of the fog). */
   lit(b: BBox): Iterable<Piece>;
+  /** Lit houses in a box (cut out of the fog as filled shapes). */
+  houses(b: BBox): Iterable<Building>;
   /** Where to hold the lantern (your position during a walk), or null. */
   lantern(): { lon: number; lat: number } | null;
   /** Changes whenever any of the above changes. */
   version(): number;
 }
 
-/** Soft edge: wide faint passes first, a fully clearing core last. */
+/** Soft edge: a wide faint pass, then the fully clearing corridor. */
 const CUT_PASSES: [width: number, alpha: number][] = [
-  [2.6, 0.14], [2.1, 0.2], [1.7, 0.28], [1.35, 0.42], [1, 1],
+  [1.2, 0.5], [1, 1],
 ];
 
 /**
@@ -34,7 +36,7 @@ export class FogLayer {
   private dpr = 1;
   private lastKey = '';
   /** Draw statistics, for the debug handle. */
-  stats = { ghost: 0, lit: 0, ms: 0, frames: 0 };
+  stats = { ghost: 0, lit: 0, houses: 0, ms: 0, frames: 0 };
 
   constructor(private map: MlMap, private theme: Theme, private sources: FogSources) {
     this.canvas = document.createElement('canvas');
@@ -101,13 +103,14 @@ export class FogLayer {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    const pathOf = (pieces: Iterable<Piece>): [Path2D, number] => {
+    const pathOf = (items: Iterable<Piece | Building>, closed = false): [Path2D, number] => {
       const path = new Path2D();
       let n = 0;
-      for (const p of pieces) {
+      for (const p of items) {
         const m = (p.merc ??= toMercator(p.coords));
         path.moveTo((m[0] - ox) * sx, (m[1] - oy) * sy);
         for (let i = 2; i < m.length; i += 2) path.lineTo((m[i] - ox) * sx, (m[i + 1] - oy) * sy);
+        if (closed) path.closePath();
         n++;
       }
       return [path, n];
@@ -135,6 +138,17 @@ export class FogLayer {
         ctx.stroke(lit);
       }
     }
+
+    // Houses along an unlocked block are uncovered whole, with a little air around the walls.
+    const [homes, homeN] = pathOf(this.sources.houses(view), true);
+    if (homeN) {
+      ctx.globalAlpha = 1;
+      ctx.fill(homes);
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = Math.max(12 / mpp, 3);
+      ctx.stroke(homes);
+    }
+
     if (lantern) {
       const m = MercatorCoordinate.fromLngLat([lantern.lon, lantern.lat]);
       const x = (m.x - ox) * sx, y = (m.y - oy) * sy;
@@ -149,6 +163,9 @@ export class FogLayer {
     }
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
-    this.stats = { ghost: ghostN, lit: litN, ms: performance.now() - t0, frames: this.stats.frames + 1 };
+    this.stats = {
+      ghost: ghostN, lit: litN, houses: homeN,
+      ms: performance.now() - t0, frames: this.stats.frames + 1,
+    };
   }
 }
