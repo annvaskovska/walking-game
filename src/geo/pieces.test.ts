@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { metresPerDegree, polylineLengthM } from './geo';
-import { isStreet, splitWay } from './pieces';
+import { isStreet, kindFromHighway, splitWay } from './pieces';
 import type { WayInput } from '../core/types';
 
 const lat0 = 52.37, lon0 = 4.88;
@@ -8,7 +8,7 @@ const m = metresPerDegree(lat0);
 const pt = (x: number, y: number) => [lon0 + x / m.lon, lat0 + y / m.lat];
 
 function way(id: number, pts: number[][], name: string | null = 'Teststraat'): WayInput {
-  return { id, name, highway: 'residential', coords: pts.flat() };
+  return { id, name, highway: 'residential', kind: 'road', coords: pts.flat() };
 }
 
 describe('splitWay', () => {
@@ -48,7 +48,13 @@ describe('splitWay', () => {
 
   it('gives short ways a single piece and skips degenerate ones', () => {
     expect(splitWay(way(3, [pt(0, 0), pt(4, 0)]))).toHaveLength(1);
-    expect(splitWay({ id: 4, name: null, highway: 'path', coords: pt(0, 0) })).toHaveLength(0);
+    expect(splitWay({ id: 4, name: null, highway: 'path', kind: 'path', coords: pt(0, 0) })).toHaveLength(0);
+  });
+
+  it('carries the way kind onto every piece', () => {
+    const pieces = splitWay({ id: 5, name: null, highway: 'footway', kind: 'path', coords: [pt(0, 0), pt(40, 0)].flat() });
+    expect(pieces).toHaveLength(2);
+    expect(pieces.every((p) => p.kind === 'path')).toBe(true);
   });
 
   it('computes bboxes that contain the geometry', () => {
@@ -67,5 +73,16 @@ describe('isStreet', () => {
   it('treats named ways as streets and unnamed ones as paths', () => {
     expect(isStreet({ name: 'Bloemgracht' })).toBe(true);
     expect(isStreet({ name: null })).toBe(false);
+  });
+});
+
+describe('kindFromHighway', () => {
+  it('falls back to a path for walkway classes and a road for streets', () => {
+    for (const hw of ['footway', 'path', 'cycleway', 'steps', 'bridleway']) {
+      expect(kindFromHighway(hw)).toBe('path');
+    }
+    for (const hw of ['residential', 'pedestrian', 'service', 'secondary']) {
+      expect(kindFromHighway(hw)).toBe('road');
+    }
   });
 });

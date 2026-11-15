@@ -1,4 +1,5 @@
 import { CONFIG } from '../config';
+import { Blocks, type Block } from '../core/blocks';
 import { cellKey, lonLatToTile, parseCellKey, tileToBBox, type BBox } from '../geo/geo';
 import { splitWay } from '../geo/pieces';
 import { GridIndex } from '../geo/spatialIndex';
@@ -6,8 +7,11 @@ import type { Piece, WayInput } from '../core/types';
 import type { Storage } from '../platform/storage';
 import { fetchWays, OVERPASS_ENDPOINTS, OverpassError } from './overpass';
 
-/** Bump to refetch every cell after a change to what is fetched. */
-const CELL_VERSION = 1;
+/**
+ * Bump to refetch every cell after a change to what is fetched. v2 added street kinds and the
+ * junction nodes that split ways into city blocks.
+ */
+const CELL_VERSION = 2;
 
 interface CellRecord {
   key: string;
@@ -37,6 +41,8 @@ type Fetcher = typeof fetchWays;
  */
 export class StreetLoader {
   readonly index = new GridIndex<Piece>();
+  /** City blocks of every way loaded so far, indexed for drawing and lookup. */
+  readonly blocks = new Blocks();
   private known = new Set<string>();
   private loaded = new Set<string>();
   private loading = new Map<string, Promise<void>>();
@@ -50,7 +56,11 @@ export class StreetLoader {
 
   constructor(
     private storage: Storage,
-    private hooks: { onPieces(pieces: Piece[]): void; onStatus(s: LoaderStatus): void },
+    private hooks: {
+      onPieces(pieces: Piece[]): void;
+      onBlocks(blocks: Block[]): void;
+      onStatus(s: LoaderStatus): void;
+    },
     private fetcher: Fetcher = fetchWays,
   ) {}
 
@@ -136,13 +146,18 @@ export class StreetLoader {
   }
 
   private addWays(ways: WayInput[]): void {
-    const fresh: Piece[] = [];
+    const freshPieces: Piece[] = [];
+    const freshBlocks: Block[] = [];
     for (const w of ways) {
       if (this.ways.has(w.id)) continue;
       this.ways.add(w.id);
-      for (const p of splitWay(w)) if (this.index.insert(p)) fresh.push(p);
+      const pieces = splitWay(w);
+      for (const p of pieces) if (this.index.insert(p)) freshPieces.push(p);
+      freshBlocks.push(...this.blocks.add(w, pieces));
     }
-    if (fresh.length) this.hooks.onPieces(fresh);
+    // Blocks first: a replay triggered by new pieces needs their blocks to exist.
+    if (freshBlocks.length) this.hooks.onBlocks(freshBlocks);
+    if (freshPieces.length) this.hooks.onPieces(freshPieces);
   }
 
   private kick(): void {

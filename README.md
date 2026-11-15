@@ -21,7 +21,7 @@ All your data stays on the device (IndexedDB). There is no account and no server
 ```sh
 npm install
 npm run dev        # http://localhost:5173
-npm test           # unit tests for the pure logic (GPS filter, lighting, pieces, formatting…)
+npm test           # unit tests for the pure logic (GPS filter, walked-along rule, blocks…)
 npm run build      # type-check + production build into dist/
 ```
 
@@ -65,19 +65,30 @@ platform calls (geolocation, wake lock, storage) already live behind small modul
 ## How it works
 
 - **Streets** come from OpenStreetMap through the Overpass API, one z15 map cell at a time, and are
-  cached in IndexedDB. Each walkable way is cut into ~20 m pieces (`wayId:index`); a street is all
-  pieces sharing a name, and unnamed ways count as paths.
-- **Lighting:** good GPS fixes (≤ 35 m accuracy, no impossible jumps, not faster than walking) are
-  joined into segments, and every piece within `clamp(accuracy × 0.8, 12, 25)` m of a segment
-  lights up. Each piece keeps a visit count (once per walk) for future heat colouring. If streets
-  load late (offline, Overpass busy), the walk's track is kept and lit once they arrive.
-- **Map:** the OpenFreeMap basemap, with the style built in code from `src/theme.ts`. The fog is a
-  canvas overlay with soft corridors cut out along lit streets; lit streets glow as a MapLibre
-  layer.
+  cached in IndexedDB. Each walkable way is cut into ~20 m pieces (`wayId:index`). Pieces between
+  two junctions form a **block** (capped at 160 m) — the unit that unlocks. Unnamed ways count as
+  paths and light up in their own right.
+- **Walked along it:** a good GPS step only lights the street it is actually following. Both ends
+  of the step must be within 20 m of the street, the step must run alongside it rather than across
+  it, and only the nearest parallel street is considered, so walking past a side street does not
+  light it. Tagged sidewalks and crossings never light on their own, and an untagged footway right
+  beside a road you are following is treated as that road's sidewalk. Good GPS fixes (≤ 35 m
+  accuracy, no impossible jumps, not faster than walking) are joined into segments first.
+- **Whole-block unlocks:** walked stretches accumulate along each block without double-counting
+  backtracks. Once about half a block (and at least 8 m) has been walked, the whole block lights at
+  once. Each piece keeps a visit count (once per walk) for future heat colouring. If streets load
+  late (offline, Overpass busy), the walk's track is kept and replayed once they arrive.
+- **Houses:** building footprints are loaded from OpenStreetMap too, per z16 cell around the walk,
+  and cached in IndexedDB. When a block unlocks, the buildings within 30 m of it light up with a
+  gold fill and lit windows. Houses, like streets, stay lit for good.
+- **Map:** the OpenFreeMap basemap, with the style built in code from `src/theme.ts`. Newly lit
+  streets flash cream and settle to gold, with their names written in gold above the fog; the
+  basemap's own labels are hidden for unlocked streets. The fog is a canvas overlay with soft
+  corridors cut out along lit streets and around lit houses.
 
-Code map: `src/core` (pure logic: GPS filter, lighting, progress, walk stats), `src/geo`
-(geometry, pieces, spatial index), `src/data` (Overpass, street loader), `src/platform`
-(location, wake lock, storage, sim), `src/map` (style, fog, marker), `src/ui` (shell, walk dock,
-summary), `src/app` (the controller).
+Code map: `src/core` (pure logic: GPS filter, walked-along rule, blocks, progress, walk stats),
+`src/geo` (geometry, pieces, spatial index), `src/data` (Overpass, street and building loaders),
+`src/platform` (location, wake lock, storage, sim), `src/map` (style, fog, marker), `src/ui` (shell,
+walk dock, summary), `src/app` (the controller).
 
 Map data © OpenStreetMap contributors · Tiles: OpenFreeMap / OpenMapTiles.

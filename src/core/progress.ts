@@ -1,12 +1,16 @@
+import { kindFromHighway } from '../geo/pieces';
 import { GridIndex } from '../geo/spatialIndex';
-import type { LitPiece, Piece } from './types';
+import type { Block } from './blocks';
+import type { Building, LitHouse, LitPiece, Piece } from './types';
 
 export interface LightResult {
   /** Pieces lit for the very first time. */
   newPieces: LitPiece[];
   /** Street names that got their first lit piece ever. */
   newStreets: string[];
-  /** Every record that changed (new or visit count bumped); these need saving. */
+  /** Houses that switched on for the first time. */
+  newHouses: LitHouse[];
+  /** Every piece record that changed (new or visit count bumped); these need saving. */
   changed: LitPiece[];
 }
 
@@ -16,10 +20,12 @@ export interface LightResult {
  */
 export class Progress {
   readonly lit = new GridIndex<LitPiece>();
+  readonly houses = new GridIndex<LitHouse>();
   /** Street name → number of lit pieces. */
   private streetPieces = new Map<string, number>();
   private _litLenM = 0;
   private _pathPieces = 0;
+  private _housesLit = 0;
   /** Bumped on every change; lets renderers cache. */
   version = 0;
 
@@ -28,11 +34,25 @@ export class Progress {
     this.version++;
   }
 
+  loadHouses(records: Iterable<LitHouse>): void {
+    for (const r of records) {
+      if (this.houses.insert(r)) this._housesLit++;
+    }
+    this.version++;
+  }
+
   private add(r: LitPiece): void {
-    if (!this.lit.insert(r)) return;
-    this._litLenM += r.len;
-    if (r.name) this.streetPieces.set(r.name, (this.streetPieces.get(r.name) ?? 0) + 1);
+    // Records saved before street kinds existed get a sensible one from their highway class.
+    const rec: LitPiece = r.kind ? r : { ...r, kind: kindFromHighway(r.hw) };
+    if (!this.lit.insert(rec)) return;
+    this._litLenM += rec.len;
+    if (rec.name) this.streetPieces.set(rec.name, (this.streetPieces.get(rec.name) ?? 0) + 1);
     else this._pathPieces++;
+  }
+
+  /** Has every piece of this block been lit? Used to recognise whole blocks from old walks. */
+  isBlockLit(block: Block): boolean {
+    return block.pieces.every((p) => this.isLit(p.id));
   }
 
   isLit(id: string): boolean {
@@ -59,6 +79,10 @@ export class Progress {
     return this._pathPieces;
   }
 
+  get housesLit(): number {
+    return this._housesLit;
+  }
+
   streetNames(): string[] {
     return [...this.streetPieces.keys()];
   }
@@ -81,7 +105,7 @@ export class Progress {
         continue;
       }
       const rec: LitPiece = {
-        id: p.id, way: p.way, idx: p.idx, name: p.name, hw: p.hw, len: p.len,
+        id: p.id, way: p.way, idx: p.idx, name: p.name, hw: p.hw, kind: p.kind, len: p.len,
         coords: p.coords, bbox: p.bbox, litAt: now, visits: 1, lastWalk: walkId,
       };
       if (rec.name && !this.streetPieces.has(rec.name)) newStreets.push(rec.name);
@@ -90,12 +114,39 @@ export class Progress {
       changed.push(rec);
     }
     if (changed.length) this.version++;
-    return { newPieces, newStreets, changed };
+    return { newPieces, newStreets, newHouses: [], changed };
+  }
+
+  /** Light every house near a block that just unlocked, once. */
+  applyBlock(block: Block, houses: Iterable<Building>, walkId: string, now: number): LightResult {
+    const res = this.apply(block.pieces, walkId, now);
+    res.newHouses = this.applyHouses(houses, block.way, now);
+    return res;
+  }
+
+  applyHouses(houses: Iterable<Building>, block: number, now: number): LitHouse[] {
+    const lit: LitHouse[] = [];
+    for (const h of houses) {
+      if (this.houses.has(h.id)) continue;
+      const rec: LitHouse = { id: h.id, coords: h.coords, bbox: h.bbox, litAt: now, block };
+      if (this.houses.insert(rec)) {
+        this._housesLit++;
+        lit.push(rec);
+      }
+    }
+    if (lit.length) this.version++;
+    return lit;
   }
 }
 
 /** Strip runtime-only fields before saving a lit piece. */
 export function toStoredLit(p: LitPiece): LitPiece {
   const { merc: _merc, ...rest } = p;
+  return rest;
+}
+
+/** Strip runtime-only fields before saving a lit house. */
+export function toStoredHouse(h: LitHouse): LitHouse {
+  const { merc: _merc, ...rest } = h;
   return rest;
 }

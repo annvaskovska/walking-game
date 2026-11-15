@@ -1,13 +1,14 @@
 import { CONFIG } from '../config';
+import type { Block } from '../core/blocks';
 import { newFilterState, stepFilter, type FilterState } from '../core/gpsFilter';
-import { piecesNearSegment, piecesNearTrack } from '../core/lighting';
-import { Progress, toStoredLit } from '../core/progress';
-import type { Fix, LitPiece, Piece, WalkRecord } from '../core/types';
+import { Progress, toStoredHouse, toStoredLit } from '../core/progress';
+import type { Building, Fix, LitHouse, LitPiece, WalkRecord } from '../core/types';
+import { WalkAlong } from '../core/walkAlong';
+import { BuildingLoader } from '../data/buildingLoader';
 import { StreetLoader, type LoaderStatus } from '../data/streetLoader';
-import { bearingDeg } from '../geo/geo';
-import { GridIndex } from '../geo/spatialIndex';
+import { bearingDeg, expandBBox, polylineDistanceM } from '../geo/geo';
 import type { FogSources } from '../map/fogLayer';
-import { MapView } from '../map/mapView';
+import { MapView, type MapLitData } from '../map/mapView';
 import { createBrowserLocation, type LocationError, type LocationProvider } from '../platform/location';
 import { createSimLocation, simFactor } from '../platform/simLocation';
 import { SIM_ROUTE } from '../platform/simRoute';
@@ -58,14 +59,19 @@ export async function startApp(root: HTMLElement): Promise<void> {
   }
 
   const storage = await openStorage();
-  const [litRecords, walkRecords, lastPos, savedSession] = await Promise.all([
+  const [litRecords, walkRecords, houseRecords, lastPos, savedSession] = await Promise.all([
     storage.getAll<LitPiece>('lit'),
     storage.getAll<WalkRecord>('walks'),
+    storage.getAll<LitHouse>('houses'),
     storage.get<Fix>('meta', 'lastPos'),
     storage.get<ActiveSession>('meta', 'activeSession'),
   ]);
   const progress = new Progress();
   progress.load(litRecords);
+  progress.loadHouses(houseRecords);
+  /** Unlocked blocks by id, with the moment each unlocked (for the cream-to-gold flash). */
+  const litBlocks = new Map<string, number>();
+  let walkAlong: WalkAlong | null = null;
   const walks = walkRecords.sort((a, b) => a.startedAt - b.startedAt);
   let session: ActiveSession | null = savedSession ?? null;
   let here: Fix | null = session?.lastFix ?? lastPos ?? null;
@@ -81,19 +87,26 @@ export async function startApp(root: HTMLElement): Promise<void> {
   const fogSources: FogSources = {
     ghost: (b) => loader.index.query(b).filter((p) => !progress.isLit(p.id)),
     lit: (b) => progress.lit.query(b),
+    houses: (b) => progress.houses.query(b),
     lantern: () => (session && here ? here : null),
     version: () => dataVersion,
   };
   const start: [number, number] = here ? [here.lon, here.lat] : sim ? [SIM_ROUTE[0], SIM_ROUTE[1]] : [10, 35];
   const mapView = new MapView(ui.map, plainTheme, start, here || sim ? 16 : 2, fogSources);
-  mapView.setLit(() => progress.lit.values());
   mapView.onFollowChange = () => renderRecenter();
   mapView.map.on('moveend', () => {
     if (mapView.map.getZoom() >= 13) void loader.loadCachedIn(mapView.bounds());
   });
 
-  const loader = new StreetLoader(storage, { onPieces: onStreetPieces, onStatus: onLoaderStatus });
-  await loader.init();
+  const loader = new StreetLoader(storage, {
+    onPieces: onStreetPieces,
+    onBlocks: onBlocks,
+    onStatus: onLoaderStatus,
+  });
+  const buildings = new BuildingLoader(storage, { onHouses });
+  await Promise.all([loader.init(), buildings.init()]);
+  if (session) walkAlong = makeWalkAlong();
+  mapView.setLit(litData);
 
   const wake = new WakeLockKeeper((s) => {
     if (!session || s === 'on' || s === 'off') return setBanner(ui, 'wake', null);
@@ -126,18 +139,28 @@ export async function startApp(root: HTMLElement): Promise<void> {
   }
 
   const litQueue = new Map<string, LitPiece>();
+  const houseQueue = new Map<string, LitHouse>();
   let litTimer: ReturnType<typeof setTimeout> | null = null;
   function queueLit(recs: LitPiece[]): void {
     for (const r of recs) litQueue.set(r.id, r);
     if (!litTimer) litTimer = setTimeout(() => void flushLit(), 1000);
   }
+  function queueHouses(recs: LitHouse[]): void {
+    for (const r of recs) houseQueue.set(r.id, r);
+    if (!litTimer) litTimer = setTimeout(() => void flushLit(), 1000);
+  }
   async function flushLit(): Promise<void> {
     if (litTimer) clearTimeout(litTimer);
     litTimer = null;
-    if (!litQueue.size) return;
-    const vals = [...litQueue.values()].map(toStoredLit);
+    if (!litQueue.size && !houseQueue.size) return;
+    const litVals = [...litQueue.values()].map(toStoredLit);
+    const houseVals = [...houseQueue.values()].map(toStoredHouse);
     litQueue.clear();
-    await storage.putMany('lit', vals);
+    houseQueue.clear();
+    await Promise.all([
+      litVals.length ? storage.putMany('lit', litVals) : Promise.resolve(),
+      houseVals.length ? storage.putMany('houses', houseVals) : Promise.resolve(),
+    ]);
   }
 
   let lastPosSavedAt = 0;
@@ -157,31 +180,108 @@ export async function startApp(root: HTMLElement): Promise<void> {
   });
 
   // ---- Lighting ----
-  function light(pieces: Piece[]): void {
-    if (!session || !pieces.length) return;
-    const res = progress.apply(pieces, session.id, provider.now());
-    if (!res.changed.length) return;
-    queueLit(res.changed);
-    mapView.setLit(() => progress.lit.values());
-    if (res.newPieces.length) {
-      session.newPieces += res.newPieces.length;
-      session.newLenM += res.newPieces.reduce((s, p) => s + p.len, 0);
-      dataVersion++;
-      mapView.fog.invalidate();
-    }
-    session.newStreets.push(...res.newStreets);
-    persistSession();
+  function makeWalkAlong(): WalkAlong {
+    return new WalkAlong(loader.blocks, loader.index, (b) => litBlocks.has(b.id));
   }
 
-  function onStreetPieces(pieces: Piece[]): void {
+  /** Everything the map draws as lit: street pieces, unlocked blocks and their houses. */
+  function litData(): MapLitData {
+    return {
+      pieces: progress.lit.values(),
+      houses: progress.houses.values(),
+      streets: [...litBlocks].flatMap(([id, litAt]) => {
+        const block = loader.blocks.get(id);
+        return block ? [{ block, litAt }] : [];
+      }),
+    };
+  }
+
+  /** Blocks that became fully lit from walks done before this version (or before a reload). */
+  function onBlocks(blocks: Block[]): void {
+    let changed = false;
+    for (const block of blocks) {
+      if (litBlocks.has(block.id) || !progress.isBlockLit(block)) continue;
+      let litAt = Infinity;
+      for (const p of block.pieces) litAt = Math.min(litAt, progress.lit.get(p.id)?.litAt ?? Date.now());
+      litBlocks.set(block.id, litAt);
+      changed = true;
+    }
+    if (changed) {
+      dataVersion++;
+      mapView.fog.invalidate();
+      mapView.setLit(litData);
+    }
+  }
+
+  function onStreetPieces(): void {
     dataVersion++;
     mapView.fog.invalidate();
-    // Streets that arrive late still light up for the part of the walk already done.
+    // Streets that arrive late still unlock the blocks along the walk already done.
     if (session && session.segs.length) {
-      const fresh = new GridIndex<Piece>();
-      for (const p of pieces) fresh.insert(p);
-      light(piecesNearTrack(fresh, session.segs));
+      walkAlong = makeWalkAlong();
+      const unlocked = walkAlong.replay(session.segs);
+      if (unlocked.length) unlockBlocks(unlocked, Date.now());
     }
+    updateDock();
+  }
+
+  /** A block completed: light all of it, its street name and the houses beside it. */
+  function unlockBlocks(blocks: Block[], now: number): void {
+    if (!session) return;
+    let newPieces = 0;
+    let newLenM = 0;
+    const newStreets: string[] = [];
+    let changed = false;
+    for (const block of blocks) {
+      if (litBlocks.has(block.id)) continue;
+      litBlocks.set(block.id, now);
+      const houses = buildings.buildingsNear(block.coords, CONFIG.houseRadiusM);
+      const res = progress.applyBlock(block, houses, session.id, now);
+      if (!res.changed.length && !res.newHouses.length) continue;
+      changed = true;
+      newPieces += res.newPieces.length;
+      newLenM += res.newPieces.reduce((s, p) => s + p.len, 0);
+      newStreets.push(...res.newStreets);
+      queueLit(res.changed);
+      if (res.newHouses.length) queueHouses(res.newHouses);
+    }
+    if (!changed) return;
+    session.newPieces += newPieces;
+    session.newLenM += newLenM;
+    session.newStreets.push(...newStreets);
+    dataVersion++;
+    mapView.fog.invalidate();
+    mapView.setLit(litData);
+    persistSession();
+    updateDock();
+  }
+
+  /** Building footprints that arrive after their block unlocked switch their windows on. */
+  function onHouses(houses: Building[]): void {
+    dataVersion++;
+    mapView.fog.invalidate();
+    if (!litBlocks.size) return;
+    const fresh: Building[] = [];
+    for (const house of houses) {
+      if (progress.houses.has(house.id)) continue;
+      const near = loader.blocks.index.query(expandBBox(house.bbox, CONFIG.houseRadiusM));
+      for (const block of near) {
+        if (!litBlocks.has(block.id)) continue;
+        if (polylineDistanceM(house.coords, block.coords) <= CONFIG.houseRadiusM) {
+          fresh.push(house);
+          break;
+        }
+      }
+    }
+    if (!fresh.length) return;
+    // Lighting timestamps are wall-clock: the map's cream-to-gold flash compares them with
+    // Date.now(), and the simulator's accelerated clock would keep everything "fresh" forever.
+    const lit = progress.applyHouses(fresh, 0, Date.now());
+    if (!lit.length) return;
+    queueHouses(lit);
+    dataVersion++;
+    mapView.fog.invalidate();
+    mapView.setLit(litData);
     updateDock();
   }
 
@@ -193,6 +293,7 @@ export async function startApp(root: HTMLElement): Promise<void> {
       setBanner(ui, 'gps', null);
     }
     loader.ensureAround(fix.lon, fix.lat);
+    if (session) buildings.ensureAround(fix.lon, fix.lat);
     saveLastPos(fix);
 
     if (session) {
@@ -212,7 +313,9 @@ export async function startApp(root: HTMLElement): Promise<void> {
         session.distanceM += verdict.distM;
         session.segs.push(from.lon, from.lat, to.lon, to.lat, Math.round(verdict.radiusM * 10) / 10);
         lastBearing = bearingDeg(from.lon, from.lat, to.lon, to.lat);
-        light(piecesNearSegment(loader.index, from.lon, from.lat, to.lon, to.lat, verdict.radiusM));
+        walkAlong ??= makeWalkAlong();
+        const unlocked = walkAlong.add(from.lon, from.lat, to.lon, to.lat, verdict.radiusM);
+        if (unlocked.length) unlockBlocks(unlocked, Date.now());
       }
       if (verdict.kind !== 'reject') mapView.follow(fix.lon, fix.lat);
       persistSession();
@@ -271,6 +374,8 @@ export async function startApp(root: HTMLElement): Promise<void> {
       lastFix: null,
       fixes: 0,
     };
+    walkAlong = makeWalkAlong();
+    if (here) buildings.ensureAround(here.lon, here.lat);
     persistSession(true);
     beginTracking();
   }
@@ -299,6 +404,7 @@ export async function startApp(root: HTMLElement): Promise<void> {
   async function cancelSession(): Promise<void> {
     stopTracking();
     session = null;
+    walkAlong = null;
     await storage.delete('meta', 'activeSession');
     renderDock();
   }
@@ -309,6 +415,7 @@ export async function startApp(root: HTMLElement): Promise<void> {
     stopTracking();
     const rec = sessionAsWalk(s, provider.now());
     session = null;
+    walkAlong = null;
     if (sessionTimer) clearTimeout(sessionTimer);
     const saved = rec.distanceM >= CONFIG.minSavedWalkM || rec.newPieces > 0;
     if (saved) {
@@ -347,7 +454,11 @@ export async function startApp(root: HTMLElement): Promise<void> {
 
   function idleHint(): string {
     if (progress.piecesLit === 0) return 'Your city starts dark. Every street you walk lights up, for good.';
-    return `${progress.streetsMet} street${progress.streetsMet === 1 ? '' : 's'} lit so far. Where to next?`;
+    const streets = `${progress.streetsMet} street${progress.streetsMet === 1 ? '' : 's'}`;
+    const houses = progress.housesLit
+      ? ` and ${progress.housesLit} house${progress.housesLit === 1 ? '' : 's'}`
+      : '';
+    return `${streets}${houses} lit so far. Where to next?`;
   }
 
   function renderDock(): void {
@@ -408,10 +519,17 @@ export async function startApp(root: HTMLElement): Promise<void> {
   if (here) mapView.user.update(here.lon, here.lat, here.acc, null);
 
   if (session) {
-    if (here) loader.ensureAround(here.lon, here.lat);
+    if (here) {
+      loader.ensureAround(here.lon, here.lat);
+      buildings.ensureAround(here.lon, here.lat);
+    }
     beginTracking();
   } else {
-    if (here) loader.ensureAround(here.lon, here.lat);
+    if (here) {
+      loader.ensureAround(here.lon, here.lat);
+      // Houses along blocks unlocked before this version light up as their footprints arrive.
+      buildings.ensureAround(here.lon, here.lat);
+    }
     const perm = await provider.permission();
     if (perm === 'granted') {
       provider
@@ -427,12 +545,16 @@ export async function startApp(root: HTMLElement): Promise<void> {
   if (sim) {
     // Hidden test hook for desktop verification (only with ?sim).
     (window as unknown as Record<string, unknown>).__wanderlight = {
-      progress, loader, mapView, walks,
+      progress, loader, buildings, mapView, walks,
       get session() {
         return session;
       },
       summary: () => ({
         piecesLoaded: loader.index.size,
+        blocksLoaded: loader.blocks.size,
+        blocksLit: litBlocks.size,
+        housesLoaded: buildings.index.size,
+        housesLit: progress.housesLit,
         piecesLit: progress.piecesLit,
         streetsMet: progress.streetsMet,
         streets: progress.streetNames(),

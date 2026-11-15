@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   cellKey, distanceM, expandBBox, lonLatToTile, metresPerDegree, parseCellKey, pointSegmentDist2,
-  segmentSegmentDist, segmentToPolylineM, tileToBBox, toMercator,
+  polylineDistanceM, projectOnPolylineM, segmentSegmentDist, segmentToPolylineM, tileToBBox, toMercator,
 } from './geo';
 
 describe('distanceM', () => {
@@ -58,6 +58,55 @@ describe('segmentToPolylineM', () => {
   it('checks every vertex of a bent street', () => {
     const street = [east(100), north(100), east(100), north(8), east(200), north(8)];
     expect(segmentToPolylineM(east(90), north(0), east(150), north(0), street)).toBeCloseTo(8, 1);
+  });
+});
+
+describe('projectOnPolylineM', () => {
+  const lat = 52.37;
+  const m = metresPerDegree(lat);
+  const east = (x: number) => 4.88 + x / m.lon;
+  const north = (y: number) => lat + y / m.lat;
+
+  it('returns the lateral distance and how far along the nearest point is', () => {
+    const street = [east(0), north(0), east(100), north(0)];
+    const p = projectOnPolylineM(east(30), north(7), street);
+    expect(p.distM).toBeCloseTo(7, 1);
+    expect(p.alongM).toBeCloseTo(30, 1);
+  });
+
+  it('clamps to the ends of the line', () => {
+    const street = [east(0), north(0), east(100), north(0)];
+    const before = projectOnPolylineM(east(-10), north(4), street);
+    expect(before.alongM).toBe(0);
+    expect(before.distM).toBeCloseTo(Math.hypot(10, 4), 1);
+    const after = projectOnPolylineM(east(120), north(0), street);
+    expect(after.alongM).toBeCloseTo(100, 1);
+  });
+
+  it('measures along the bends of a polyline', () => {
+    const street = [east(0), north(0), east(10), north(0), east(10), north(10)];
+    const p = projectOnPolylineM(east(15), north(5), street);
+    expect(p.alongM).toBeCloseTo(15, 1);
+    expect(p.distM).toBeCloseTo(5, 1);
+  });
+});
+
+describe('polylineDistanceM', () => {
+  const lat = 52.37;
+  const m = metresPerDegree(lat);
+  const east = (x: number) => 4.88 + x / m.lon;
+  const north = (y: number) => lat + y / m.lat;
+
+  it('is the gap between parallel lines', () => {
+    const a = [east(0), north(0), east(40), north(0)];
+    const b = [east(0), north(15), east(40), north(15)];
+    expect(polylineDistanceM(a, b)).toBeCloseTo(15, 1);
+  });
+
+  it('is zero when the lines cross', () => {
+    const a = [east(0), north(0), east(40), north(0)];
+    const b = [east(20), north(-10), east(20), north(10)];
+    expect(polylineDistanceM(a, b)).toBe(0);
   });
 });
 
