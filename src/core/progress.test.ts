@@ -11,7 +11,7 @@ const m = metresPerDegree(lat0);
 const lon = (x: number) => lon0 + x / m.lon;
 const lat = (y: number) => lat0 + y / m.lat;
 const way = (id: number, name: string | null, pts: [number, number][], kind: WayInput['kind'] = 'road'): WayInput => ({
-  id, name, highway: kind === 'road' ? 'residential' : 'footway', kind,
+  id: `w${id}`, name, highway: kind === 'road' ? 'residential' : 'footway', kind,
   coords: pts.flatMap(([x, y]) => [lon(x), lat(y)]),
 });
 
@@ -67,7 +67,7 @@ describe('Progress', () => {
   it('counts unnamed pieces as paths, not streets', () => {
     const idx = city();
     const prog = new Progress();
-    const path = [...idx.values()].filter((p) => p.way === 4);
+    const path = [...idx.values()].filter((p) => p.way === 'w4');
     const r = prog.apply(path, 'w', 1);
     expect(r.newPieces.length).toBe(path.length);
     expect(r.newStreets).toEqual([]);
@@ -85,7 +85,7 @@ describe('Progress', () => {
     expect(b.streetsMet).toBe(3);
     expect(b.litLenM).toBeCloseTo(a.litLenM, 6);
 
-    const old = [...a.lit.values()].find((r) => r.way === 4)!;
+    const old = [...a.lit.values()].find((r) => r.way === 'w4')!;
     const legacy = { ...old } as Partial<typeof old>;
     delete legacy.kind;
     const c = new Progress();
@@ -107,7 +107,7 @@ describe('Progress', () => {
     expect(r.newStreets).toEqual(['Blockska']);
     expect(r.newHouses.map((h) => h.id)).toEqual(['b1', 'b2']);
     expect(prog.housesLit).toBe(2);
-    expect(prog.isBlockLit(block)).toBe(true);
+    expect(prog.houses.get('b1')?.block).toBe(block.id);
 
     const again = prog.applyBlock(block, houses, 'w', 2000);
     expect(again.newPieces).toHaveLength(0);
@@ -115,15 +115,44 @@ describe('Progress', () => {
     expect(prog.housesLit).toBe(2);
   });
 
-  it('recognises blocks that were already fully lit before they were loaded', () => {
-    const w = way(10, 'Old', [[0, 0], [40, 0]]);
-    const pieces = splitWay(w);
-    const [block] = buildBlocks(w, pieces);
+  it('recognises a block lit under other ids (older map data) by its geometry', () => {
+    // Saved pieces of the street, from another data source: same line, 2 m off, other ids.
+    const old = way(10, 'Old', [[0, 2], [80, 2]]);
     const prog = new Progress();
-    prog.apply(pieces.slice(0, 1), 'w', 1);
-    expect(prog.isBlockLit(block)).toBe(false);
-    prog.apply(pieces.slice(1), 'w', 2);
-    expect(prog.isBlockLit(block)).toBe(true);
+    prog.apply(splitWay(old), 'w', 7);
+    const fresh = way(11, 'Old', [[0, 0], [80, 0]]);
+    const [block] = buildBlocks(fresh, splitWay(fresh));
+    const cov = prog.coverage(block.coords, block.bbox);
+    expect(cov.fraction).toBeGreaterThan(0.95);
+    expect(cov.litAt).toBe(7);
+
+    // Half of it lit: about half covered.
+    const half = new Progress();
+    half.apply(splitWay(way(12, 'Old', [[0, 0], [40, 0]])), 'w', 1);
+    expect(half.coverage(block.coords, block.bbox).fraction).toBeCloseTo(0.5, 1);
+
+    // The street carrying on past a lit one is not lit.
+    const next = way(13, 'Old', [[80, 0], [90, 0]]);
+    const [nb] = buildBlocks(next, splitWay(next));
+    expect(prog.coverage(nb.coords, nb.bbox).fraction).toBeLessThan(0.2);
+  });
+
+  it('does not count a lit cross street as covering a short block', () => {
+    const prog = new Progress();
+    prog.apply(splitWay(way(20, 'Cross', [[0, -40], [0, 40]])), 'w', 1);
+    prog.apply(splitWay(way(21, 'Cross2', [[14, -40], [14, 40]])), 'w', 1);
+    const short = way(22, 'Short', [[0, 0], [14, 0]]);
+    const [block] = buildBlocks(short, splitWay(short));
+    expect(prog.coverage(block.coords, block.bbox).fraction).toBe(0);
+  });
+
+  it('does not light the same footprint twice under a new id', () => {
+    const prog = new Progress();
+    const a: Building = { id: 'b1', coords: ring(0, 0, 8), bbox: [lon(0), lat(0), lon(8), lat(8)] };
+    const b: Building = { id: 'h1.2.3.4', coords: ring(0, 0, 8), bbox: [lon(0), lat(0), lon(8), lat(8)] };
+    expect(prog.applyHouses([a], 'x', 1)).toHaveLength(1);
+    expect(prog.applyHouses([b], 'y', 2)).toHaveLength(0);
+    expect(prog.housesLit).toBe(1);
   });
 
   it('reloads saved houses and strips their drawing cache when saving', () => {

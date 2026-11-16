@@ -1,4 +1,4 @@
-/** Tunable numbers for tracking, lighting, street loading and step estimates. No colours here: see theme.ts. */
+/** Tunable numbers for tracking, lighting, the camera and step estimates. No colours here: see theme.ts. */
 export const CONFIG = {
   /** Target length of one street piece, in metres. */
   pieceLengthM: 20,
@@ -31,12 +31,10 @@ export const CONFIG = {
   /** A block is also cut at least this often (m), so long ways unlock in stages. */
   maxBlockLengthM: 160,
 
-  /** Houses within this distance (m) of an unlocked block light their windows. */
-  houseRadiusM: 30,
-  /** How long a freshly unlocked street or house stays cream before settling to gold (ms). */
-  freshMs: 3000,
-  /** Buildings are fetched and cached by z16 cells, about 0.4 km across. */
-  buildingCellZoom: 16,
+  /** Houses whose outline comes within this distance (m) of an unlocked block light their windows. */
+  houseRadiusM: 20,
+  /** A block loaded from the map counts as lit when this share of it runs along lit streets. */
+  relightFraction: 0.7,
 
   /** Straight-line speed over the speed window above this (m/s) means a vehicle: nothing lights. */
   walkMaxSpeedMps: 4,
@@ -55,14 +53,18 @@ export const CONFIG = {
   minMoveMinM: 3,
   minMoveMaxM: 10,
 
-  /** Slippy-map zoom of the grid cells streets are fetched and cached by. */
-  cellZoom: 15,
-
   /** A walk shorter than this (and lighting nothing) is not saved. */
   minSavedWalkM: 50,
 
   /** Average adult walking step, metres. Steps are estimated as distance / this. */
   stepLengthM: 0.75,
+
+  /** Zoom the camera settles on while walking. */
+  walkZoom: 17,
+  /** After you pan the map away, the camera comes back to you this long after you let go (ms). */
+  followResumeMs: 9000,
+  /** Farther than this (m) from you, the camera flies back instead of sliding. */
+  followFlyM: 600,
 } as const;
 
 export type Config = typeof CONFIG;
