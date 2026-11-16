@@ -3,13 +3,13 @@
  * touches it, so a native store (e.g. under Capacitor) can replace it later.
  */
 
-export type StoreName = 'cells' | 'lit' | 'walks' | 'houses' | 'bldCells' | 'meta';
+export type StoreName = 'lit' | 'walks' | 'houses' | 'meta';
 
 export interface Storage {
   get<T>(store: StoreName, key: string): Promise<T | undefined>;
   getAll<T>(store: StoreName): Promise<T[]>;
   getAllKeys(store: StoreName): Promise<string[]>;
-  /** For stores with a key path ('cells', 'lit', 'walks'). */
+  /** For stores with a key path ('lit', 'walks', 'houses'). */
   putMany(store: StoreName, values: unknown[]): Promise<void>;
   /** For the key/value 'meta' store. */
   set(key: string, value: unknown): Promise<void>;
@@ -18,15 +18,17 @@ export interface Storage {
 }
 
 const DB_NAME = 'wanderlight';
-/** v2 added lit houses and cached building cells. */
-const DB_VERSION = 2;
+/**
+ * v2 added lit houses and cached building cells. v3 reads streets and houses from the map tiles
+ * (which the service worker caches), so the street and building caches of v1-v2 are dropped.
+ */
+const DB_VERSION = 3;
 const KEYED: Record<Exclude<StoreName, 'meta'>, string> = {
-  cells: 'key',
   lit: 'id',
   walks: 'id',
   houses: 'id',
-  bldCells: 'key',
 };
+const DROPPED = ['cells', 'bldCells'];
 
 function req<T>(r: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -105,27 +107,37 @@ export class MemoryStorage implements Storage {
   }
 }
 
-export async function openStorage(): Promise<Storage> {
+/** `name` keeps the demo walk's records apart from your real ones. */
+export async function openStorage(name = DB_NAME): Promise<Storage> {
   if (typeof indexedDB === 'undefined') return new MemoryStorage();
   try {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const r = indexedDB.open(DB_NAME, DB_VERSION);
+      const r = indexedDB.open(name, DB_VERSION);
       r.onupgradeneeded = () => {
         const db = r.result;
         for (const [name, keyPath] of Object.entries(KEYED)) {
           if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath });
         }
         if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta');
+        for (const name of DROPPED) if (db.objectStoreNames.contains(name)) db.deleteObjectStore(name);
       };
       r.onsuccess = () => resolve(r.result);
       r.onerror = () => reject(r.error);
       r.onblocked = () => reject(new Error('IndexedDB blocked'));
     });
-    // Ask the browser not to evict our data under storage pressure ("lit forever").
-    navigator.storage?.persist?.().catch(() => {});
     return new IdbStorage(db);
   } catch (e) {
     console.warn('IndexedDB unavailable, progress will not be saved', e);
     return new MemoryStorage();
   }
+}
+
+/**
+ * Ask the browser not to evict what you lit under storage pressure ("lit forever"). Called once
+ * there is something worth keeping: Firefox asks you about it, so not at the first start.
+ */
+export function persistStorage(): void {
+  navigator.storage?.persisted?.()
+    .then((done) => (done ? undefined : navigator.storage.persist()))
+    .catch(() => {});
 }

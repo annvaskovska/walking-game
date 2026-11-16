@@ -3,18 +3,431 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-    <meta name="theme-color" content="#0e0e10" />
-    <meta name="description" content="Light up your city one street at a time: every street you actually walk glows on your map, forever." />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0b0d12" />
+    <meta name="description" content="Your city starts in fog. Every street you walk lights up, with its houses and its name, for good." />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Wanderlight" />
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
     <title>Wanderlight</title>
+    <script>
+      // Runs before the first paint: picks the screen to show and starts downloading the map tile
+      // you were last in, so it is here before the app is. Keep in step with src/data/tileUrl.ts.
+      (function () {
+        var h = document.documentElement;
+        function get(k) {
+          try { return localStorage.getItem(k); } catch (e) { return null; }
+        }
+        function json(k) {
+          try { return JSON.parse(get(k) || 'null'); } catch (e) { return null; }
+        }
+        var sim = /[?&]sim(=|&|$)/.test(location.search);
+        // The demo walk keeps its own records, apart from your real ones.
+        var sfx = sim ? '-sim' : '';
+        window.__wl = { sim: sim, sfx: sfx, tapped: 0, fix: null, err: null, app: null };
+        // The map's worker comes down alongside the app instead of after it (see vite.config.ts).
+        var wk = '%WL_WORKER%';
+        if (wk) fetch(wk).then(function (r) { return r.arrayBuffer(); }).catch(function () {});
+        if (get('wl-walking' + sfx)) h.classList.add('wl-walking');
+        var pos = json('wl-pos' + sfx);
+        if (!pos || !isFinite(pos.lon) || !isFinite(pos.lat)) return;
+        h.classList.add('wl-has-map');
+        var t = get('wl-tiles');
+        if (!t || !/^https:\/\/tiles\.openfreemap\.org\/[\w./-]+\/\{z\}\/\{x\}\/\{y\}\.pbf$/.test(t)) t = '%WL_TILES%';
+        var z = 14, n = 1 << z, lat = (pos.lat * Math.PI) / 180;
+        var fx = ((pos.lon + 180) / 360) * n, fy = ((1 - Math.log(Math.tan(lat) + 1 / Math.cos(lat)) / Math.PI) / 2) * n;
+        var x = Math.floor(fx), y = Math.floor(fy), edge = 250 / ((40075016.686 * Math.cos(lat)) / n);
+        var pre = (window.__wlPrefetch = {});
+        for (var dx = -1; dx <= 1; dx++) {
+          for (var dy = -1; dy <= 1; dy++) {
+            if ((dx < 0 && fx - x > edge) || (dx > 0 && x + 1 - fx > edge)) continue;
+            if ((dy < 0 && fy - y > edge) || (dy > 0 && y + 1 - fy > edge)) continue;
+            var key = z + '/' + (x + dx) + '/' + (y + dy);
+            pre[key] = fetch(t.replace('{z}', z).replace('{x}', x + dx).replace('{y}', y + dy), { credentials: 'omit' })
+              .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.arrayBuffer();
+              });
+            pre[key].catch(function () {});
+          }
+        }
+      })();
+    </script>
+    <style>
+      :root {
+        --bg: #0b0d12;
+        --ink: #f4ead8;
+        --text: #c3cad8;
+        --muted: #8a94a8;
+        --faint: #5f687b;
+        --gold: #f0c987;
+        --amber: #ffb46b;
+        --serif: ui-serif, 'New York', 'Iowan Old Style', Georgia, 'Noto Serif', serif;
+        --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        --top: env(safe-area-inset-top, 0px);
+        --bottom: env(safe-area-inset-bottom, 0px);
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        overflow: hidden;
+        overscroll-behavior: none;
+        -webkit-text-size-adjust: 100%;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+      a { color: inherit; }
+
+      /* The map, and the bits of MapLibre's stylesheet it needs (the rest is never loaded). */
+      .wl-map { position: fixed; inset: 0; background: var(--bg); }
+      .maplibregl-map { overflow: hidden; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+      .maplibregl-canvas { position: absolute; left: 0; top: 0; outline: none; }
+      .maplibregl-canvas-container.maplibregl-touch-zoom-rotate,
+      .maplibregl-canvas-container.maplibregl-touch-zoom-rotate .maplibregl-canvas { touch-action: pan-x pan-y; }
+      .maplibregl-canvas-container.maplibregl-touch-drag-pan,
+      .maplibregl-canvas-container.maplibregl-touch-drag-pan .maplibregl-canvas { touch-action: pinch-zoom; }
+      .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan,
+      .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan .maplibregl-canvas { touch-action: none; }
+
+      /* ---- Start screen ---- */
+      .wl-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        overflow-y: auto;
+        padding: calc(var(--top) + 24px) 24px calc(var(--bottom) + 22px);
+        transition: opacity 0.5s ease, visibility 0s linear 0.5s;
+      }
+      /* No map yet: a solid night with a warm glow, faded out once the map is drawn behind. */
+      .wl-splash::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        background: radial-gradient(90% 55% at 50% 30%, rgba(255, 180, 107, 0.09), transparent 70%), var(--bg);
+        transition: opacity 0.9s ease;
+      }
+      .wl-has-map .wl-splash::before { opacity: 0; }
+      .wl-walking .wl-splash { opacity: 0; visibility: hidden; pointer-events: none; }
+      .wl-card {
+        position: relative;
+        margin-top: auto;
+        width: 100%;
+        max-width: 380px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        text-wrap: pretty;
+      }
+      /* Over the map, the card sits on night that fades up into it: your streets show above. */
+      .wl-card::before {
+        content: '';
+        position: absolute;
+        z-index: -1;
+        left: 50%;
+        width: 100vw;
+        top: -110px;
+        bottom: calc(-1 * (var(--bottom) + 22px));
+        transform: translateX(-50%);
+        background: linear-gradient(180deg, rgba(11, 13, 18, 0) 0, rgba(11, 13, 18, 0.8) 70px, var(--bg) 118px);
+      }
+      .wl-logo { width: 96px; height: 96px; margin-bottom: 14px; }
+      .wl-title { margin: 0; font: 600 42px/1.05 var(--serif); letter-spacing: -0.01em; color: var(--ink); }
+      .wl-tag { margin: 10px 0 0; font-size: 17px; line-height: 1.4; color: var(--gold); }
+      .wl-how { list-style: none; margin: 30px 0 0; padding: 0; width: 100%; display: grid; gap: 14px; text-align: left; }
+      .wl-how li { display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: center; font-size: 15px; line-height: 1.4; }
+      .wl-how svg { width: 30px; height: 30px; }
+      .wl-how b { color: var(--ink); font-weight: 600; }
+      .wl-sum { display: none; width: 100%; margin-top: 26px; }
+      .wl-summary .wl-how, .wl-summary .wl-logo, .wl-summary .wl-tag { display: none; }
+      .wl-summary .wl-title { font-size: 30px; }
+      .wl-summary .wl-sum { display: block; }
+      .wl-kicker { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--amber); }
+      .wl-sum-grid { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 14px; border: 1px solid rgba(201, 211, 230, 0.1); border-radius: 18px; background: rgba(255, 255, 255, 0.02); }
+      .wl-sum-grid div { padding: 14px 6px; }
+      .wl-sum-grid div + div { border-left: 1px solid rgba(201, 211, 230, 0.1); }
+      .wl-sum-grid b { display: block; font: 600 22px/1.15 var(--serif); color: var(--ink); font-variant-numeric: tabular-nums; }
+      .wl-sum-grid span { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); }
+      .wl-sum-new { margin: 14px 0 0; font-size: 15px; line-height: 1.45; }
+      .wl-sum-new b { color: var(--gold); font-weight: 600; }
+      .wl-stats { margin: 22px 0 0; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+      .wl-stats b { color: var(--text); font-weight: 600; }
+      .wl-msg { margin: 20px 0 0; padding: 12px 14px; width: 100%; border-radius: 14px; background: rgba(255, 140, 90, 0.08); border: 1px solid rgba(255, 150, 100, 0.22); font-size: 14px; line-height: 1.45; text-align: left; color: #f1d6c4; }
+      .wl-msg b { color: var(--ink); }
+      .wl-go {
+        position: relative;
+        margin-top: 26px;
+        width: 100%;
+        height: 58px;
+        border: 0;
+        border-radius: 18px;
+        background: linear-gradient(180deg, #ffdca3 0%, #f4b164 100%);
+        color: #21160a;
+        font-size: 18px;
+        font-weight: 650;
+        letter-spacing: 0.01em;
+        box-shadow: 0 14px 34px -12px rgba(255, 170, 90, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+        transition: transform 0.12s ease, filter 0.2s ease;
+      }
+      .wl-go:active { transform: scale(0.985); filter: brightness(0.96); }
+      .wl-go:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+      .wl-go[aria-busy='true'] { color: transparent; }
+      .wl-go[aria-busy='true']::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 22px;
+        height: 22px;
+        margin: -11px 0 0 -11px;
+        border-radius: 50%;
+        border: 2.5px solid rgba(33, 22, 10, 0.25);
+        border-top-color: #21160a;
+        animation: wl-spin 0.8s linear infinite;
+      }
+      @keyframes wl-spin { to { transform: rotate(360deg); } }
+      .wl-fine { margin: 16px 0 0; font-size: 12px; line-height: 1.55; color: var(--faint); }
+      .wl-fine a { text-decoration: none; white-space: nowrap; }
+      .wl-fine a:hover { text-decoration: underline; }
+      @media (max-height: 660px) {
+        .wl-logo { width: 72px; height: 72px; margin-bottom: 8px; }
+        .wl-title { font-size: 36px; }
+        .wl-how { margin-top: 22px; gap: 10px; }
+        .wl-go { margin-top: 20px; }
+      }
+      /* A phone on its side: the essentials, with Start in view and no scrolling. */
+      @media (max-height: 500px) {
+        .wl-splash { padding-top: calc(var(--top) + 12px); padding-bottom: calc(var(--bottom) + 12px); }
+        .wl-card::before { bottom: calc(-1 * (var(--bottom) + 12px)); }
+        .wl-logo, .wl-how { display: none; }
+        .wl-title { font-size: 34px; }
+        .wl-stats, .wl-sum { margin-top: 14px; }
+        .wl-go { margin-top: 18px; height: 52px; }
+        .wl-fine { margin-top: 10px; }
+      }
+
+      /* ---- Walk view: only the map. A tap shows this, for a few seconds. ---- */
+      .wl-hud {
+        position: fixed;
+        left: 50%;
+        bottom: calc(var(--bottom) + 28px);
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 6px 6px 6px 16px;
+        border-radius: 999px;
+        background: rgba(14, 17, 24, 0.86);
+        border: 1px solid rgba(201, 211, 230, 0.1);
+        box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.7);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+        white-space: nowrap;
+        font-size: 15px;
+        font-variant-numeric: tabular-nums;
+        color: var(--ink);
+        transform: translate(-50%, 0);
+        transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0s;
+      }
+      .wl-hud[hidden] { display: flex; opacity: 0; visibility: hidden; transform: translate(-50%, 16px); transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0.3s; }
+      .wl-hud__dot { width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 4px rgba(255, 180, 107, 0.16); }
+      .wl-hud__sep { width: 1px; height: 14px; margin: 0 10px; background: rgba(201, 211, 230, 0.16); }
+      .wl-hud__end {
+        margin-left: 12px;
+        height: 36px;
+        padding: 0 16px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 600;
+        transition: background 0.2s ease, color 0.2s ease;
+      }
+      .wl-hud__end[data-armed] { background: var(--amber); color: #21160a; }
+      .wl-credit {
+        position: fixed;
+        left: 50%;
+        bottom: calc(var(--bottom) + 7px);
+        z-index: 4;
+        margin: 0;
+        white-space: nowrap;
+        transform: translateX(-50%);
+        font-size: 10px;
+        line-height: 1.3;
+        color: rgba(201, 211, 230, 0.55);
+        transition: opacity 0.4s ease, visibility 0s linear 0s;
+      }
+      .wl-credit a { text-decoration: none; }
+      .wl-credit[hidden] { display: block; opacity: 0; visibility: hidden; transition: opacity 0.4s ease, visibility 0s linear 0.4s; }
+      .wl-toast {
+        position: fixed;
+        left: 50%;
+        top: calc(var(--top) + 14px);
+        z-index: 6;
+        max-width: min(92vw, 420px);
+        padding: 10px 16px;
+        border-radius: 14px;
+        background: rgba(14, 17, 24, 0.9);
+        border: 1px solid rgba(201, 211, 230, 0.1);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+        font-size: 14px;
+        line-height: 1.4;
+        text-align: center;
+        color: var(--ink);
+        transform: translate(-50%, 0);
+        transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0s;
+      }
+      .wl-toast[hidden] { display: block; opacity: 0; visibility: hidden; transform: translate(-50%, -12px); transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0.3s; }
+      .wl-toast[data-kind='warn'] { border-color: rgba(255, 170, 110, 0.35); }
+      @media (prefers-reduced-motion: reduce) {
+        .wl-splash, .wl-splash::before, .wl-hud, .wl-toast, .wl-credit { transition: none; }
+      }
+      .wl-fatal { position: fixed; inset: 0; z-index: 20; display: grid; place-content: center; gap: 12px; padding: 24px; text-align: center; background: var(--bg); }
+      .wl-fatal h2 { margin: 0; font: 600 26px var(--serif); color: var(--ink); }
+      .wl-fatal button { justify-self: center; height: 44px; padding: 0 20px; border: 0; border-radius: 12px; background: var(--amber); color: #21160a; font-weight: 600; }
+    </style>
   </head>
   <body>
-    <div id="app" class="wl-app"></div>
+    <div id="map" class="wl-map"></div>
+
+    <main id="splash" class="wl-splash">
+      <div class="wl-card">
+        <svg class="wl-logo" viewBox="0 0 96 96" aria-hidden="true">
+          <defs>
+            <radialGradient id="wl-glow" cx="41" cy="57" r="38" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#ffc98a" stop-opacity="0.45" />
+              <stop offset="0.45" stop-color="#ffc98a" stop-opacity="0.12" />
+              <stop offset="1" stop-color="#ffc98a" stop-opacity="0" />
+            </radialGradient>
+            <linearGradient id="wl-cone" x1="41" y1="57" x2="50" y2="12" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#ffe3b8" stop-opacity="0.6" />
+              <stop offset="1" stop-color="#ffe3b8" stop-opacity="0" />
+            </linearGradient>
+            <linearGradient id="wl-lit" x1="30" y1="92" x2="56" y2="6" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#f0c987" />
+              <stop offset="0.45" stop-color="#ffd9a0" />
+              <stop offset="1" stop-color="#f0c987" stop-opacity="0.15" />
+            </linearGradient>
+          </defs>
+          <circle cx="41" cy="57" r="38" fill="url(#wl-glow)" />
+          <path d="M6 70 90 38" stroke="#2b3242" stroke-width="5" stroke-linecap="round" />
+          <path d="M30 92 56 6" stroke="url(#wl-lit)" stroke-width="4.5" stroke-linecap="round" />
+          <path d="M41 57 34.7 13.1A44 44 0 0 1 70.2 23.9Z" fill="url(#wl-cone)" />
+          <circle cx="41" cy="57" r="8" fill="#ffb46b" />
+          <circle cx="41" cy="57" r="5" fill="#fff6e6" />
+        </svg>
+        <h1 class="wl-title">Wanderlight</h1>
+        <p class="wl-tag">Walk your city. Light it up.</p>
+
+        <ul class="wl-how">
+          <li>
+            <svg viewBox="0 0 30 30" fill="none" stroke="#8a94a8" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+              <path d="M4 11h13M9 16h17M4 21h11" /><path d="M21 11h5" opacity=".5" /><path d="M19 21h4" opacity=".5" />
+            </svg>
+            <span>Your city starts <b>in fog</b>.</span>
+          </li>
+          <li>
+            <svg viewBox="0 0 30 30" fill="none" stroke-linecap="round" aria-hidden="true">
+              <path d="M4 22 26 8" stroke="#f0c987" stroke-width="2" />
+              <circle cx="11" cy="17.5" r="3.4" fill="#fff6e6" stroke="#ffb46b" stroke-width="1.8" />
+            </svg>
+            <span>Walk a street and it <b>lights up</b>, with its houses and its name.</span>
+          </li>
+          <li>
+            <svg viewBox="0 0 30 30" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 9h20M5 9v14M15 9v14M5 23h20" stroke="#f0c987" stroke-width="1.8" />
+              <path d="M25 9v14" stroke="#8a94a8" stroke-width="1.6" stroke-dasharray="2 3" />
+            </svg>
+            <span>Lit streets <b>stay lit</b>. Fill in your map, walk by walk.</span>
+          </li>
+        </ul>
+
+        <section class="wl-sum" aria-live="polite">
+          <p class="wl-kicker" id="wl-sum-title">Walk complete</p>
+          <div class="wl-sum-grid">
+            <div><b id="wl-sum-dist">0 m</b><span>walked</span></div>
+            <div><b id="wl-sum-time">0:00</b><span>time</span></div>
+            <div><b id="wl-sum-steps">0</b><span>steps (est.)</span></div>
+          </div>
+          <p class="wl-sum-new" id="wl-sum-new"></p>
+        </section>
+
+        <p class="wl-stats" id="wl-stats" hidden></p>
+        <p class="wl-msg" id="wl-msg" role="alert" hidden></p>
+        <button class="wl-go" id="wl-go" type="button">Start the walk</button>
+        <p class="wl-fine">
+          Your location never leaves this device.<br />
+          Map <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>&nbsp;·
+          <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a>&nbsp;·
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>
+        </p>
+      </div>
+    </main>
+
+    <div class="wl-hud" id="wl-hud" hidden>
+      <span class="wl-hud__dot" aria-hidden="true"></span>
+      <span id="wl-hud-time">0:00</span>
+      <span class="wl-hud__sep" aria-hidden="true"></span>
+      <span id="wl-hud-dist">0 m</span>
+      <span class="wl-hud__sep" aria-hidden="true"></span>
+      <span id="wl-hud-steps">0 steps</span>
+      <button class="wl-hud__end" id="wl-end" type="button">End</button>
+    </div>
+    <p class="wl-credit" id="wl-credit" hidden>
+      <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> ·
+      <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> ·
+      <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>
+    </p>
+    <div class="wl-toast" id="wl-toast" role="status" aria-live="polite" hidden></div>
+
+    <script>
+      // A tap on Start before the app has loaded still starts at once: ask for your location in
+      // the same tap (browsers want a gesture for that), and leave the rest to the app.
+      (function () {
+        var B = window.__wl, go = document.getElementById('wl-go');
+        if (B.sim) go.textContent = 'Start the demo walk';
+        try {
+          var s = JSON.parse(localStorage.getItem('wl-stats' + B.sfx) || 'null');
+          if (s && s.streets > 0) {
+            var el = document.getElementById('wl-stats');
+            el.innerHTML = '<b>' + s.streets + '</b> street' + (s.streets === 1 ? '' : 's') + ' lit · <b>' + s.km + '</b> km walked';
+            el.hidden = false;
+          }
+        } catch (e) {}
+        go.addEventListener('click', function () {
+          if (B.app || B.tapped) return;
+          B.tapped = Date.now();
+          go.setAttribute('aria-busy', 'true');
+          if (B.sim || !navigator.geolocation || !window.isSecureContext) return;
+          navigator.geolocation.getCurrentPosition(
+            function (p) {
+              var c = p.coords;
+              B.fix = { lon: c.longitude, lat: c.latitude, acc: c.accuracy, t: p.timestamp || Date.now(), speed: c.speed, heading: c.heading };
+            },
+            function (e) {
+              B.err = { code: e.code, message: e.message };
+            },
+            { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 },
+          );
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

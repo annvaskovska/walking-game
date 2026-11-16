@@ -1,24 +1,30 @@
 import { CONFIG } from '../config';
 import type { Block } from '../core/blocks';
 import { newFilterState, stepFilter, type FilterState } from '../core/gpsFilter';
+import { Motion } from '../core/motion';
 import { Progress, toStoredHouse, toStoredLit } from '../core/progress';
 import type { Building, Fix, LitHouse, LitPiece, WalkRecord } from '../core/types';
 import { WalkAlong } from '../core/walkAlong';
-import { BuildingLoader } from '../data/buildingLoader';
-import { StreetLoader, type LoaderStatus } from '../data/streetLoader';
-import { bearingDeg, expandBBox, polylineDistanceM } from '../geo/geo';
-import type { FogSources } from '../map/fogLayer';
-import { MapView, type MapLitData } from '../map/mapView';
+import { StreetGraph } from '../data/graph';
+import { TileSource, type GraphTile } from '../data/tiles';
+import { POS_KEY, STATS_KEY, WALKING_KEY, refreshTemplate } from '../data/tileUrl';
+import { distanceM, expandBBox, polylineDistanceM, projectOnPolylineM } from '../geo/geo';
+import { pageTime } from '../map/fog/fogLayer';
+import { LONG_AGO } from '../map/fog/geometry';
+import { EARTH_CIRCUMFERENCE_M } from '../map/gl';
+import { MapView } from '../map/mapView';
+import { nameLines } from '../map/names';
 import { createBrowserLocation, type LocationError, type LocationProvider } from '../platform/location';
 import { createSimLocation, simFactor } from '../platform/simLocation';
 import { SIM_ROUTE } from '../platform/simRoute';
-import { openStorage } from '../platform/storage';
+import { openStorage, persistStorage } from '../platform/storage';
 import { WakeLockKeeper } from '../platform/wakeLock';
-import { applyTheme, plainTheme } from '../theme';
-import { buildShell, openSheet, setBanner } from '../ui/shell';
-import { renderIdleDock, renderLiveDock, summaryHtml, updateLiveDock, type LiveView } from '../ui/views';
+import { nightTheme } from '../theme';
+import { Hud } from '../ui/hud';
+import { Splash } from '../ui/splash';
+import { Toasts } from '../ui/toast';
 
-/** The walk in progress. Persisted on every change so a reload mid-walk picks it up again. */
+/** The walk in progress. Saved as it goes, so a reload mid-walk carries on. */
 interface ActiveSession {
   id: string;
   startedAt: number;
@@ -26,12 +32,33 @@ interface ActiveSession {
   newPieces: number;
   newLenM: number;
   newStreets: string[];
-  /** Raw walked segments [aLon, aLat, bLon, bLat, radius, ...], replayed when streets load late. */
+  newHouses?: number;
+  /** Walked steps [aLon, aLat, bLon, bLat, radius, ...], replayed when streets load late. */
   segs: number[];
   filter: FilterState;
   lastFix: Fix | null;
   fixes: number;
 }
+
+/** Left on `window.__wl` by the boot script in index.html. */
+interface Boot {
+  sim: boolean;
+  /** Suffix of the localStorage keys ('-sim' for the demo walk). */
+  sfx: string;
+  /** When Start was tapped before the app had loaded (0: not). */
+  tapped: number;
+  fix: Fix | null;
+  err: { code: number; message: string } | null;
+  app: unknown;
+}
+
+const NO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 };
+
+/** Walks left open longer than this (the phone closed the tab mid-walk) are closed on the next start. */
+const STALE_WALK_MS = 3 * 3600_000;
+/** How long Start waits for your first position before showing the map anyway. */
+const FIRST_FIX_WAIT_MS = 8000;
+const DEG = Math.PI / 180;
 
 function sessionAsWalk(s: ActiveSession, now: number): WalkRecord {
   return {
@@ -46,128 +73,162 @@ function sessionAsWalk(s: ActiveSession, now: number): WalkRecord {
   };
 }
 
-export async function startApp(root: HTMLElement): Promise<void> {
-  applyTheme(plainTheme);
-  const params = new URLSearchParams(location.search);
-  const sim = params.has('sim');
-  const provider: LocationProvider = sim ? createSimLocation(simFactor(params.get('sim'))) : createBrowserLocation();
-
-  const ui = buildShell(root);
-  if (provider.badge) {
-    ui.badge.textContent = provider.badge;
-    ui.badge.hidden = false;
+function readJson<T>(key: string): T | null {
+  try {
+    return JSON.parse(localStorage.getItem(key) ?? 'null') as T | null;
+  } catch {
+    return null;
   }
+}
 
-  const storage = await openStorage();
-  const [litRecords, walkRecords, houseRecords, lastPos, savedSession] = await Promise.all([
-    storage.getAll<LitPiece>('lit'),
-    storage.getAll<WalkRecord>('walks'),
-    storage.getAll<LitHouse>('houses'),
-    storage.get<Fix>('meta', 'lastPos'),
-    storage.get<ActiveSession>('meta', 'activeSession'),
-  ]);
-  const progress = new Progress();
-  progress.load(litRecords);
-  progress.loadHouses(houseRecords);
-  /** Unlocked blocks by id, with the moment each unlocked (for the cream-to-gold flash). */
-  const litBlocks = new Map<string, number>();
-  let walkAlong: WalkAlong | null = null;
-  const walks = walkRecords.sort((a, b) => a.startedAt - b.startedAt);
-  let session: ActiveSession | null = savedSession ?? null;
-  let here: Fix | null = session?.lastFix ?? lastPos ?? null;
-  let dataVersion = 0;
-  let stopWatch: (() => void) | null = null;
-  let locError: LocationError | null = null;
-  let weakSince: number | null = null;
-  let weakAcc = 0;
-  let vehicleUntil = 0;
-  let lastBearing: number | null = null;
+function writeLocal(key: string, value: unknown): void {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+  } catch {
+    /* private mode: the app still works, it just forgets */
+  }
+}
 
-  // ---- Map ----
-  const fogSources: FogSources = {
-    ghost: (b) => loader.index.query(b).filter((p) => !progress.isLit(p.id)),
-    lit: (b) => progress.lit.query(b),
-    houses: (b) => progress.houses.query(b),
-    lantern: () => (session && here ? here : null),
-    version: () => dataVersion,
+function centroid(flat: ArrayLike<number>): [number, number] {
+  let x = 0, y = 0;
+  const n = flat.length / 2;
+  for (let i = 0; i < flat.length; i += 2) {
+    x += flat[i];
+    y += flat[i + 1];
+  }
+  return [x / n, y / n];
+}
+
+function locationHelp(e: LocationError): string {
+  if (e.kind === 'denied') {
+    return (
+      '<b>Location is off for Wanderlight.</b> It lights up the streets you walk, so it needs to know where you are; that never leaves this device.<br>' +
+      '<b>iPhone:</b> Settings → Privacy &amp; Security → Location Services → Safari Websites → While Using.<br>' +
+      '<b>Android:</b> tap the icon left of the address, then Permissions → Location → Allow.'
+    );
+  }
+  if (e.kind === 'insecure') return '<b>Location needs a secure page.</b> Open the https:// address of Wanderlight.';
+  return '<b>This browser can’t share your location.</b> Try Safari on iPhone or Chrome on Android.';
+}
+
+function bootLocationError(err: { code: number; message: string }): LocationError {
+  return { kind: err.code === 1 ? 'denied' : err.code === 2 ? 'unavailable' : 'timeout', message: err.message };
+}
+
+export async function startApp(): Promise<void> {
+  const params = new URLSearchParams(location.search);
+  const boot: Boot = (window as unknown as { __wl?: Boot }).__wl ?? {
+    sim: params.has('sim'), sfx: params.has('sim') ? '-sim' : '', tapped: 0, fix: null, err: null, app: null,
   };
-  const start: [number, number] = here ? [here.lon, here.lat] : sim ? [SIM_ROUTE[0], SIM_ROUTE[1]] : [10, 35];
-  const mapView = new MapView(ui.map, plainTheme, start, here || sim ? 16 : 2, fogSources);
-  mapView.onFollowChange = () => renderRecenter();
-  mapView.map.on('moveend', () => {
-    if (mapView.map.getZoom() >= 13) void loader.loadCachedIn(mapView.bounds());
-  });
+  const sim = boot.sim;
+  const key = (k: string) => k + boot.sfx;
+  const provider: LocationProvider = sim ? createSimLocation(simFactor(params.get('sim'))) : createBrowserLocation();
+  const theme = nightTheme;
 
-  const loader = new StreetLoader(storage, {
-    onPieces: onStreetPieces,
-    onBlocks: onBlocks,
-    onStatus: onLoaderStatus,
+  const splash = new Splash(sim);
+  const hud = new Hud(() => void endWalk());
+  const toasts = new Toasts();
+
+  // ---- State ----
+  const progress = new Progress();
+  const graph = new StreetGraph();
+  const motion = new Motion();
+  /** Unlocked blocks of the loaded tiles, with when they were lit. */
+  const litBlocks = new Map<string, number>();
+  /** Blocks unlocked on this walk: houses beside them that load later still light up. */
+  const walkBlocks = new Set<string>();
+  let walks: WalkRecord[] = [];
+  let session: ActiveSession | null = null;
+  let walkAlong: WalkAlong | null = null;
+  let here: Fix | null = null;
+  let stopWatch: (() => void) | null = null;
+  let ready = false;
+  let weakSince = 0;
+  let revealTimer = 0;
+  let sessionTimer = 0;
+  let litTimer = 0;
+  let namesTimer = 0;
+  let posSavedAt = 0;
+
+  const lastPos = readJson<{ lon: number; lat: number }>(key(POS_KEY));
+  const known = lastPos && Number.isFinite(lastPos.lon) && Number.isFinite(lastPos.lat) ? lastPos : null;
+  // The demo always starts on its route, so its tiles load behind the start screen.
+  const start = known ?? (sim ? { lon: SIM_ROUTE[0], lat: SIM_ROUTE[1] } : null);
+
+  const tiles = new TileSource({
+    onTile: (t) => onTile(t),
+    onDrop: (k) => graph.removeTile(k),
+    onWaiting: (w) => onWaiting(w),
   });
-  const buildings = new BuildingLoader(storage, { onHouses });
-  await Promise.all([loader.init(), buildings.init()]);
-  if (session) walkAlong = makeWalkAlong();
-  mapView.setLit(litData);
+  const view = new MapView(document.getElementById('map')!, theme, tiles, start && { ...start, zoom: 15.5 });
+  // Once the streets around are drawn, show them behind the start screen.
+  if (start) view.map.once('idle', () => splash.overMap(true));
+  hud.source(() => ({
+    elapsedMs: session ? provider.now() - session.startedAt : 0,
+    distanceM: session?.distanceM ?? 0,
+  }));
 
   const wake = new WakeLockKeeper((s) => {
-    if (!session || s === 'on' || s === 'off') return setBanner(ui, 'wake', null);
-    if (s === 'failed') {
-      setBanner(ui, 'wake', {
-        kind: 'warn',
-        text: 'The screen may switch off and pause your walk.',
-        action: { label: 'Keep on', run: () => void wake.enable() },
-      });
-    } else {
-      setBanner(ui, 'wake', { kind: 'info', text: 'Keep Wanderlight open while you walk: this browser can’t hold the screen on.' });
+    // Without a wake lock the phone may lock and stop the walk; the demo walk doesn't care.
+    if (session && !sim && (s === 'failed' || s === 'unsupported')) {
+      toasts.show('wake', 'Keep the screen on to keep recording.', 'info', 6000);
     }
   });
 
+  // ---- What you lit so far ----
+  const storage = await openStorage(sim ? 'wanderlight-sim' : undefined);
+  const [litRecords, walkRecords, houseRecords, saved] = await Promise.all([
+    storage.getAll<LitPiece>('lit'),
+    storage.getAll<WalkRecord>('walks'),
+    storage.getAll<LitHouse>('houses'),
+    storage.get<ActiveSession>('meta', 'activeSession'),
+  ]);
+  progress.load(litRecords);
+  progress.loadHouses(houseRecords);
+  walks = walkRecords.sort((a, b) => a.startedAt - b.startedAt);
+  for (const p of progress.lit.values()) view.fog.addPiece(p.coords, p.kind);
+  for (const h of progress.houses.values()) view.fog.addHouse(h, LONG_AGO);
+  refreshNames(true);
+  writeLifetime();
+  ready = true;
+  // Tiles that arrived while the records loaded.
+  relight([...graph.blocks.values()]);
+  if (start) tiles.ensureAround(start.lon, start.lat);
+
   // ---- Saving ----
-  let sessionTimer: ReturnType<typeof setTimeout> | null = null;
   /**
-   * Saves the walk in progress at most every 2 s. A throttle, not a debounce: GPS fixes arrive
-   * about once a second, so a debounce would keep postponing the write until the page closes,
-   * and a phone that kills the tab mid-walk would lose everything since the start.
+   * Saves the walk in progress at most every 2 s: a throttle, not a debounce, since fixes come
+   * every second and a debounce would put the write off until the page closes.
    */
   function persistSession(immediately = false): void {
     const write = () => {
-      if (sessionTimer) clearTimeout(sessionTimer);
-      sessionTimer = null;
+      clearTimeout(sessionTimer);
+      sessionTimer = 0;
       if (session) void storage.set('activeSession', session);
     };
     if (immediately) write();
-    else if (!sessionTimer) sessionTimer = setTimeout(write, 2000);
+    else if (!sessionTimer) sessionTimer = window.setTimeout(write, 2000);
   }
 
   const litQueue = new Map<string, LitPiece>();
   const houseQueue = new Map<string, LitHouse>();
-  let litTimer: ReturnType<typeof setTimeout> | null = null;
-  function queueLit(recs: LitPiece[]): void {
-    for (const r of recs) litQueue.set(r.id, r);
-    if (!litTimer) litTimer = setTimeout(() => void flushLit(), 1000);
-  }
-  function queueHouses(recs: LitHouse[]): void {
-    for (const r of recs) houseQueue.set(r.id, r);
-    if (!litTimer) litTimer = setTimeout(() => void flushLit(), 1000);
+  function queue(lit: LitPiece[], houses: LitHouse[]): void {
+    for (const r of lit) litQueue.set(r.id, r);
+    for (const r of houses) houseQueue.set(r.id, r);
+    if (!litTimer && (litQueue.size || houseQueue.size)) litTimer = window.setTimeout(() => void flushLit(), 1000);
   }
   async function flushLit(): Promise<void> {
-    if (litTimer) clearTimeout(litTimer);
-    litTimer = null;
-    if (!litQueue.size && !houseQueue.size) return;
-    const litVals = [...litQueue.values()].map(toStoredLit);
-    const houseVals = [...houseQueue.values()].map(toStoredHouse);
+    clearTimeout(litTimer);
+    litTimer = 0;
+    const lit = [...litQueue.values()].map(toStoredLit);
+    const houses = [...houseQueue.values()].map(toStoredHouse);
     litQueue.clear();
     houseQueue.clear();
     await Promise.all([
-      litVals.length ? storage.putMany('lit', litVals) : Promise.resolve(),
-      houseVals.length ? storage.putMany('houses', houseVals) : Promise.resolve(),
+      lit.length ? storage.putMany('lit', lit) : null,
+      houses.length ? storage.putMany('houses', houses) : null,
     ]);
-  }
-
-  let lastPosSavedAt = 0;
-  function saveLastPos(f: Fix): void {
-    if (Date.now() - lastPosSavedAt < 10_000) return;
-    lastPosSavedAt = Date.now();
-    void storage.set('lastPos', f);
   }
 
   const saveNow = () => {
@@ -176,191 +237,239 @@ export async function startApp(root: HTMLElement): Promise<void> {
   };
   window.addEventListener('pagehide', saveNow);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') saveNow();
+    if (document.visibilityState === 'hidden') return saveNow();
+    // Back from the background: put the walker where you are, no slide across town.
+    motion.snap();
+    view.repaint();
   });
 
-  // ---- Lighting ----
-  function makeWalkAlong(): WalkAlong {
-    return new WalkAlong(loader.blocks, loader.index, (b) => litBlocks.has(b.id));
+  function savePos(f: Fix): void {
+    if (Date.now() - posSavedAt < 10_000) return;
+    posSavedAt = Date.now();
+    writeLocal(key(POS_KEY), { lon: Math.round(f.lon * 1e5) / 1e5, lat: Math.round(f.lat * 1e5) / 1e5 });
   }
 
-  /** Everything the map draws as lit: street pieces, unlocked blocks and their houses. */
-  function litData(): MapLitData {
-    return {
-      pieces: progress.lit.values(),
-      houses: progress.houses.values(),
-      streets: [...litBlocks].flatMap(([id, litAt]) => {
-        const block = loader.blocks.get(id);
-        return block ? [{ block, litAt }] : [];
-      }),
-    };
+  function writeLifetime(): void {
+    const km = walks.reduce((s, w) => s + w.distanceM, 0) / 1000;
+    const l = { streets: progress.streetsMet, km: km < 10 ? km.toFixed(1) : String(Math.round(km)) };
+    writeLocal(key(STATS_KEY), l);
+    splash.setLifetime(l);
   }
 
-  /** Blocks that became fully lit from walks done before this version (or before a reload). */
-  function onBlocks(blocks: Block[]): void {
-    let changed = false;
-    for (const block of blocks) {
-      if (litBlocks.has(block.id) || !progress.isBlockLit(block)) continue;
-      let litAt = Infinity;
-      for (const p of block.pieces) litAt = Math.min(litAt, progress.lit.get(p.id)?.litAt ?? Date.now());
-      litBlocks.set(block.id, litAt);
-      changed = true;
+  /** Gold names follow the lit streets; rebuilt at most about once a second. */
+  function refreshNames(now = false): void {
+    if (!now) {
+      if (!namesTimer) namesTimer = window.setTimeout(() => refreshNames(true), 700);
+      return;
     }
-    if (changed) {
-      dataVersion++;
-      mapView.fog.invalidate();
-      mapView.setLit(litData);
-    }
+    clearTimeout(namesTimer);
+    namesTimer = 0;
+    view.setNames(nameLines(progress.lit.values()));
   }
 
-  function onStreetPieces(): void {
-    dataVersion++;
-    mapView.fog.invalidate();
-    // Streets that arrive late still unlock the blocks along the walk already done.
-    if (session && session.segs.length) {
-      walkAlong = makeWalkAlong();
-      const unlocked = walkAlong.replay(session.segs);
-      if (unlocked.length) unlockBlocks(unlocked, Date.now());
-    }
-    updateDock();
-  }
+  // ---- Streets and houses arriving ----
+  const newWalkAlong = () => new WalkAlong(graph.blocks, graph.pieces, (b) => litBlocks.has(b.id));
 
-  /** A block completed: light all of it, its street name and the houses beside it. */
-  function unlockBlocks(blocks: Block[], now: number): void {
+  function onTile(t: GraphTile): void {
+    const added = graph.addTile(t.key, t.blocks, t.houses);
+    if (!ready) return;
+    relight(added);
     if (!session) return;
-    let newPieces = 0;
-    let newLenM = 0;
-    const newStreets: string[] = [];
+    // The walk so far, over streets that just arrived.
+    walkAlong = newWalkAlong();
+    const done = walkAlong.replay(session.segs);
+    if (done.length) unlockBlocks(done);
+    lightLateHouses(t.houses);
+  }
+
+  /**
+   * Blocks lit before (on an earlier walk, or with older map data under other ids) are known by
+   * their geometry: most of their length runs along lit pieces.
+   */
+  function relight(blocks: Block[]): void {
+    for (const b of blocks) {
+      if (litBlocks.has(b.id)) continue;
+      let litAt = Infinity;
+      let all = true;
+      for (const p of b.pieces) {
+        const r = progress.lit.get(p.id);
+        if (!r) {
+          all = false;
+          break;
+        }
+        litAt = Math.min(litAt, r.litAt);
+      }
+      if (all) {
+        litBlocks.set(b.id, litAt);
+        continue;
+      }
+      const cov = progress.coverage(b.coords, b.bbox);
+      if (cov.fraction >= CONFIG.relightFraction) litBlocks.set(b.id, cov.litAt);
+    }
+  }
+
+  /** Houses in a tile that loaded after the block beside them unlocked on this walk. */
+  function lightLateHouses(houses: Building[]): void {
+    if (!walkBlocks.size) return;
+    const byBlock = new Map<string, Building[]>();
+    for (const h of houses) {
+      if (progress.houses.has(h.id)) continue;
+      for (const b of graph.blocks.index.query(expandBBox(h.bbox, CONFIG.houseRadiusM))) {
+        if (!walkBlocks.has(b.id) || polylineDistanceM(h.coords, b.coords) > CONFIG.houseRadiusM) continue;
+        const list = byBlock.get(b.id);
+        if (list) list.push(h);
+        else byBlock.set(b.id, [h]);
+        break;
+      }
+    }
+    const t0 = pageTime();
+    for (const [id, hs] of byBlock) {
+      const lit = progress.applyHouses(hs, id, Date.now());
+      for (const h of lit) view.fog.addHouse(h, t0 + Math.random() * 0.8);
+      queue([], lit);
+      if (session) session.newHouses = (session.newHouses ?? 0) + lit.length;
+    }
+  }
+
+  function onWaiting(waiting: boolean): void {
+    if (!waiting) return toasts.clear('net');
+    if (!session) return;
+    toasts.show(
+      'net',
+      navigator.onLine ? 'Can’t load the streets here yet. Your walk is still recorded.' : 'You’re offline. Your walk is still recorded.',
+      'warn',
+    );
+  }
+
+  /**
+   * Blocks completed: each lights up as a wave running out from where you are along it, its
+   * houses switch on as the wave passes them, and its name is written in gold.
+   */
+  function unlockBlocks(blocks: Block[]): void {
+    if (!session) return;
+    const now = Date.now();
+    const t0 = pageTime();
+    const pos = motion.position ?? here;
+    const speed = theme.fog.sweepMps;
     let changed = false;
     for (const block of blocks) {
       if (litBlocks.has(block.id)) continue;
       litBlocks.set(block.id, now);
-      const houses = buildings.buildingsNear(block.coords, CONFIG.houseRadiusM);
+      walkBlocks.add(block.id);
+      const houses = graph.housesNear(block.coords, block.bbox, CONFIG.houseRadiusM);
       const res = progress.applyBlock(block, houses, session.id, now);
-      if (!res.changed.length && !res.newHouses.length) continue;
+      queue(res.changed, res.newHouses);
+      if (!res.newPieces.length && !res.newHouses.length) continue;
       changed = true;
-      newPieces += res.newPieces.length;
-      newLenM += res.newPieces.reduce((s, p) => s + p.len, 0);
-      newStreets.push(...res.newStreets);
-      queueLit(res.changed);
-      if (res.newHouses.length) queueHouses(res.newHouses);
+      const fromM = pos ? projectOnPolylineM(pos.lon, pos.lat, block.coords).alongM : 0;
+      const fresh = new Set(res.newPieces.map((p) => p.id));
+      let offsetM = 0;
+      for (const p of block.pieces) {
+        if (fresh.has(p.id)) view.fog.addPiece(p.coords, p.kind, { offsetM, fromM, t0 });
+        offsetM += p.len;
+      }
+      for (const h of res.newHouses) {
+        const [cx, cy] = centroid(h.coords);
+        const along = projectOnPolylineM(cx, cy, block.coords).alongM;
+        view.fog.addHouse(h, t0 + Math.abs(along - fromM) / speed + 0.15);
+      }
+      session.newPieces += res.newPieces.length;
+      session.newLenM += res.newPieces.reduce((s, p) => s + p.len, 0);
+      session.newStreets.push(...res.newStreets);
+      session.newHouses = (session.newHouses ?? 0) + res.newHouses.length;
     }
     if (!changed) return;
-    session.newPieces += newPieces;
-    session.newLenM += newLenM;
-    session.newStreets.push(...newStreets);
-    dataVersion++;
-    mapView.fog.invalidate();
-    mapView.setLit(litData);
+    refreshNames();
     persistSession();
-    updateDock();
-  }
-
-  /** Building footprints that arrive after their block unlocked switch their windows on. */
-  function onHouses(houses: Building[]): void {
-    dataVersion++;
-    mapView.fog.invalidate();
-    if (!litBlocks.size) return;
-    const fresh: Building[] = [];
-    for (const house of houses) {
-      if (progress.houses.has(house.id)) continue;
-      const near = loader.blocks.index.query(expandBBox(house.bbox, CONFIG.houseRadiusM));
-      for (const block of near) {
-        if (!litBlocks.has(block.id)) continue;
-        if (polylineDistanceM(house.coords, block.coords) <= CONFIG.houseRadiusM) {
-          fresh.push(house);
-          break;
-        }
-      }
-    }
-    if (!fresh.length) return;
-    // Lighting timestamps are wall-clock: the map's cream-to-gold flash compares them with
-    // Date.now(), and the simulator's accelerated clock would keep everything "fresh" forever.
-    const lit = progress.applyHouses(fresh, 0, Date.now());
-    if (!lit.length) return;
-    queueHouses(lit);
-    dataVersion++;
-    mapView.fog.invalidate();
-    mapView.setLit(litData);
-    updateDock();
   }
 
   // ---- Location ----
   function onFix(fix: Fix): void {
     here = fix;
-    if (locError) {
-      locError = null;
-      setBanner(ui, 'gps', null);
-    }
-    loader.ensureAround(fix.lon, fix.lat);
-    if (session) buildings.ensureAround(fix.lon, fix.lat);
-    saveLastPos(fix);
+    toasts.clear('gps');
+    if (!view.isArmed) view.arm();
+    tiles.ensureAround(fix.lon, fix.lat);
+    savePos(fix);
+    if (!session) return;
 
-    if (session) {
-      session.fixes++;
-      const { state, verdict } = stepFilter(session.filter, fix);
-      session.filter = state;
-      session.lastFix = fix;
-      if (verdict.kind === 'reject' && verdict.reason === 'accuracy') {
-        weakSince ??= Date.now();
-        weakAcc = fix.acc;
-      } else if (verdict.kind !== 'reject') {
-        weakSince = null;
-      }
-      if (verdict.kind === 'vehicle') vehicleUntil = Date.now() + 15_000;
-      if (verdict.kind === 'walk') {
-        const { from, to } = verdict;
-        session.distanceM += verdict.distM;
-        session.segs.push(from.lon, from.lat, to.lon, to.lat, Math.round(verdict.radiusM * 10) / 10);
-        lastBearing = bearingDeg(from.lon, from.lat, to.lon, to.lat);
-        walkAlong ??= makeWalkAlong();
-        const unlocked = walkAlong.add(from.lon, from.lat, to.lon, to.lat, verdict.radiusM);
-        if (unlocked.length) unlockBlocks(unlocked, Date.now());
-      }
-      if (verdict.kind !== 'reject') mapView.follow(fix.lon, fix.lat);
-      persistSession();
-    }
+    const first = !motion.hasFix;
+    motion.push(fix, performance.now());
+    if (first && motion.hasFix) onFirstFix(fix);
 
-    const moving = fix.speed != null && fix.speed > 0.3;
-    const heading = moving && fix.heading != null && !Number.isNaN(fix.heading) ? fix.heading : session ? lastBearing : null;
-    mapView.user.update(fix.lon, fix.lat, fix.acc, heading);
-    mapView.fog.invalidate();
-    updateDock();
+    session.fixes++;
+    session.lastFix = fix;
+    const { state, verdict } = stepFilter(session.filter, fix);
+    session.filter = state;
+    if (verdict.kind === 'reject' && verdict.reason === 'accuracy') {
+      weakSince ||= Date.now();
+      if (Date.now() - weakSince > 8000) {
+        toasts.show('weak', `Weak GPS (±${Math.round(fix.acc)} m). Streets light up again once it sharpens.`, 'warn');
+      }
+    } else if (verdict.kind !== 'reject') {
+      weakSince = 0;
+      toasts.clear('weak');
+    }
+    if (verdict.kind === 'vehicle') toasts.show('fast', 'Moving fast. Lighting pauses while you ride.', 'info', 8000);
+    if (verdict.kind === 'walk') {
+      const { from, to } = verdict;
+      session.distanceM += verdict.distM;
+      session.segs.push(from.lon, from.lat, to.lon, to.lat, Math.round(verdict.radiusM * 10) / 10);
+      walkAlong ??= newWalkAlong();
+      const done = walkAlong.add(from.lon, from.lat, to.lon, to.lat, verdict.radiusM);
+      if (done.length) unlockBlocks(done);
+    }
+    persistSession();
+  }
+
+  function onFirstFix(fix: Fix): void {
+    const c = view.map.getCenter();
+    // From across town (or the open sea), jump; nearby, the camera slides over by itself.
+    if (view.map.getZoom() < 14 || distanceM(c.lng, c.lat, fix.lon, fix.lat) > CONFIG.followFlyM) {
+      view.map.jumpTo({ center: [fix.lon, fix.lat], zoom: CONFIG.walkZoom });
+    }
+    reveal();
   }
 
   function onLocError(e: LocationError): void {
-    locError = e;
     if (e.kind === 'denied' || e.kind === 'insecure' || e.kind === 'unsupported') {
-      if (session && session.fixes === 0) void cancelSession();
-      showLocationHelp(e);
-    } else if (e.kind === 'unavailable') {
-      setBanner(ui, 'gps', { kind: 'warn', text: 'No GPS signal yet. Check that Location is on; open sky helps.' });
-    } else if (session) {
-      setBanner(ui, 'gps', { kind: 'info', text: 'Still looking for GPS…' });
+      void abandonWalk(e);
+      return;
     }
-    updateDock();
+    if (!session) return;
+    if (e.kind === 'unavailable') toasts.show('gps', 'No GPS signal yet. Check that Location is on.', 'warn');
+    else toasts.show('gps', motion.hasFix ? 'GPS signal lost. Looking for it…' : 'Finding you…');
   }
 
-  function showLocationHelp(e: LocationError): void {
-    const body =
-      e.kind === 'denied'
-        ? `<p>Wanderlight lights up the streets you walk, so it needs your location. It never leaves this phone.</p>
-           <ul class="wl-help">
-             <li><b>iPhone:</b> Settings → Privacy &amp; Security → Location Services → Safari Websites → <i>While Using</i>. Then reload.</li>
-             <li><b>Android:</b> tap the icon left of the address bar → Permissions → Location → <i>Allow</i>.</li>
-           </ul>`
-        : e.kind === 'insecure'
-          ? '<p>Browsers only share location over a secure <b>https://</b> connection. Open the https address of Wanderlight.</p>'
-          : '<p>This browser can’t share your location. Try Safari on iPhone or Chrome on Android.</p>';
-    openSheet(ui, `
-      <div class="wl-sheet-head"><div class="wl-kicker">Location needed</div><h2>${e.kind === 'denied' ? 'Location is off for Wanderlight' : 'Can’t use location here'}</h2></div>
-      ${body}
-      <button class="wl-primary" data-close>Got it</button>`);
+  // ---- Walk ----
+  function beginTracking(): void {
+    stopWatch?.();
+    stopWatch = provider.watch(onFix, onLocError);
+    void wake.enable();
+    view.camera.start(CONFIG.walkZoom);
   }
 
-  // ---- Walk lifecycle ----
-  async function startWalk(): Promise<void> {
-    if (session) return;
+  function stopTracking(): void {
+    stopWatch?.();
+    stopWatch = null;
+    void wake.disable();
+    view.camera.stop();
+    clearTimeout(revealTimer);
+    toasts.clear();
+    weakSince = 0;
+    motion.reset();
+    view.puck.set(null);
+    view.fog.setLantern(null);
+  }
+
+  function startWalk(): void {
+    if (session || !ready) return;
+    // Tells the service worker (main.ts) that from now on a new version waits for a quiet moment.
+    boot.tapped ||= Date.now();
+    splash.message(null);
+    if (!sim && (!window.isSecureContext || !('geolocation' in navigator))) {
+      return showLocationHelp({ kind: window.isSecureContext ? 'unsupported' : 'insecure', message: '' });
+    }
+    splash.busy(true);
     const t = provider.now();
     session = {
       id: `w${t.toString(36)}${Math.random().toString(36).slice(2, 6)}`,
@@ -369,205 +478,245 @@ export async function startApp(root: HTMLElement): Promise<void> {
       newPieces: 0,
       newLenM: 0,
       newStreets: [],
+      newHouses: 0,
       segs: [],
       filter: newFilterState(),
       lastFix: null,
       fixes: 0,
     };
-    walkAlong = makeWalkAlong();
-    if (here) buildings.ensureAround(here.lon, here.lat);
+    walkBlocks.clear();
+    walkAlong = newWalkAlong();
+    motion.reset();
     persistSession(true);
+    writeLocal(key(WALKING_KEY), '1');
     beginTracking();
+    // A position taken in the tap that started this, before the app had loaded.
+    if (boot.fix && Math.abs(Date.now() - boot.fix.t) < 60_000) onFix(boot.fix);
+    boot.fix = null;
+    clearTimeout(revealTimer);
+    revealTimer = window.setTimeout(reveal, motion.hasFix ? 0 : FIRST_FIX_WAIT_MS);
   }
 
-  function beginTracking(): void {
-    stopWatch?.();
-    stopWatch = provider.watch(onFix, onLocError);
-    void wake.enable();
-    mapView.user.setWalking(true);
-    mapView.setFollow(true);
-    if (here) mapView.follow(here.lon, here.lat);
-    renderDock();
+  /** While the start screen is up over the map, the map centres in the space above its card. */
+  function splashPadding() {
+    const h = view.map.getContainer().clientHeight;
+    const top = document.querySelector('.wl-card')?.getBoundingClientRect().top ?? h / 2;
+    return { top: 24, bottom: Math.max(0, Math.round(h - top + 24)), left: 0, right: 0 };
   }
 
-  function stopTracking(): void {
-    stopWatch?.();
-    stopWatch = null;
-    void wake.disable();
-    mapView.user.setWalking(false);
-    setBanner(ui, 'gps', null);
-    setBanner(ui, 'wake', null);
-    weakSince = null;
-    vehicleUntil = 0;
+  /** From the start screen to the map: the screen fades as the map slides you to its middle. */
+  function reveal(): void {
+    clearTimeout(revealTimer);
+    if (!session || !splash.visible) return;
+    splash.hide();
+    const pos = motion.hasFix ? motion.position : null;
+    view.camera.hold(750);
+    view.map.easeTo({
+      padding: NO_PADDING,
+      zoom: CONFIG.walkZoom,
+      ...(pos && { center: [pos.lon, pos.lat] as [number, number] }),
+      duration: 700,
+      essential: true,
+    });
+    hud.show(4500);
+    if (!motion.hasFix) toasts.show('gps', 'Finding you…');
   }
 
-  async function cancelSession(): Promise<void> {
-    stopTracking();
-    session = null;
-    walkAlong = null;
-    await storage.delete('meta', 'activeSession');
-    renderDock();
-  }
-
-  async function endWalk(): Promise<void> {
+  async function endWalk(showSummary = true): Promise<void> {
     if (!session) return;
     const s = session;
-    stopTracking();
-    const rec = sessionAsWalk(s, provider.now());
     session = null;
     walkAlong = null;
-    if (sessionTimer) clearTimeout(sessionTimer);
-    const saved = rec.distanceM >= CONFIG.minSavedWalkM || rec.newPieces > 0;
-    if (saved) {
+    stopTracking();
+    writeLocal(key(WALKING_KEY), null);
+    clearTimeout(sessionTimer);
+    sessionTimer = 0;
+    s.newStreets = streetsByLength(s);
+    const rec = sessionAsWalk(s, provider.now());
+    const kept = rec.distanceM >= CONFIG.minSavedWalkM || rec.newPieces > 0;
+    if (kept) {
       walks.push(rec);
       await storage.putMany('walks', [rec]);
+      persistStorage();
     }
     await flushLit();
     await storage.delete('meta', 'activeSession');
     provider.reset?.();
-    dataVersion++;
-    mapView.fog.invalidate();
-    renderDock();
-    openSheet(ui, summaryHtml(rec, saved));
+    writeLifetime();
+    hud.hideAll();
+    if (showSummary) splash.summary({ walk: rec, newHouses: s.newHouses ?? 0 });
+    else splash.intro();
+    splash.overMap(view.isArmed);
+    splash.show();
+    if (showSummary) frameWalk(s);
   }
 
-  // ---- Dock and banners ----
-  function gpsState(): LiveView['gps'] {
-    if (locError && locError.kind !== 'timeout') return { kind: 'error', text: 'Location unavailable' };
-    if (!session?.lastFix) return { kind: 'searching', text: 'Finding you…' };
-    if (weakSince !== null && Date.now() - weakSince > 2000) {
-      return { kind: 'weak', text: `Weak GPS (±${Math.round(weakAcc)} m) · lights up when it sharpens` };
+  /** Longest first: the streets you really walked lead the summary, not a 20 m alley. */
+  function streetsByLength(s: ActiveSession): string[] {
+    const len = new Map<string, number>();
+    for (const p of progress.lit.values()) {
+      if (p.name && p.lastWalk === s.id) len.set(p.name, (len.get(p.name) ?? 0) + p.len);
     }
-    if (Date.now() < vehicleUntil) return { kind: 'vehicle', text: 'Moving fast · riding? Lighting paused' };
-    const loading = loader.status.hereLoaded ? '' : ' · loading streets…';
-    return { kind: 'ok', text: `GPS ±${Math.round(session.lastFix.acc)} m${loading}` };
+    return [...new Set(s.newStreets)].sort((a, b) => (len.get(b) ?? 0) - (len.get(a) ?? 0));
   }
 
-  function updateDock(): void {
+  /** Not a walk after all (no location): forget it. */
+  async function cancelWalk(): Promise<void> {
     if (!session) return;
-    updateLiveDock(ui.dock, {
-      elapsedMs: provider.now() - session.startedAt,
-      distanceM: session.distanceM,
-      gps: gpsState(),
+    session = null;
+    walkAlong = null;
+    stopTracking();
+    writeLocal(key(WALKING_KEY), null);
+    clearTimeout(sessionTimer);
+    sessionTimer = 0;
+    await storage.delete('meta', 'activeSession');
+    hud.hideAll();
+    splash.intro();
+    splash.show();
+  }
+
+  async function abandonWalk(e: LocationError): Promise<void> {
+    if (session && session.distanceM > 0) await endWalk(false);
+    else await cancelWalk();
+    showLocationHelp(e);
+  }
+
+  function showLocationHelp(e: LocationError): void {
+    splash.busy(false);
+    splash.message(locationHelp(e));
+  }
+
+  /** Behind the summary, pull back to show the streets this walk went along. */
+  function frameWalk(s: ActiveSession): void {
+    const g = s.segs;
+    if (g.length < 5) return;
+    let w = Infinity, so = Infinity, e = -Infinity, n = -Infinity;
+    for (let i = 0; i < g.length; i += 5) {
+      w = Math.min(w, g[i], g[i + 2]);
+      e = Math.max(e, g[i], g[i + 2]);
+      so = Math.min(so, g[i + 1], g[i + 3]);
+      n = Math.max(n, g[i + 1], g[i + 3]);
+    }
+    // Into the space above the summary card.
+    const h = view.map.getContainer().clientHeight;
+    const cardTop = document.querySelector('.wl-card')?.getBoundingClientRect().top ?? h * 0.45;
+    view.map.fitBounds([[w, so], [e, n]], {
+      padding: { top: 56, bottom: Math.max(40, Math.round(h - cardTop + 40)), left: 36, right: 36 },
+      maxZoom: 16.5,
+      duration: 1400,
+      essential: true,
     });
   }
 
-  function idleHint(): string {
-    if (progress.piecesLit === 0) return 'Your city starts dark. Every street you walk lights up, for good.';
-    const streets = `${progress.streetsMet} street${progress.streetsMet === 1 ? '' : 's'}`;
-    const houses = progress.housesLit
-      ? ` and ${progress.housesLit} house${progress.housesLit === 1 ? '' : 's'}`
-      : '';
-    return `${streets}${houses} lit so far. Where to next?`;
-  }
-
-  function renderDock(): void {
-    if (session) {
-      renderLiveDock(ui.dock, () => void endWalk());
-      updateDock();
+  // ---- Drawing ----
+  let lastDraw = 0;
+  let fast = true;
+  let moving = false;
+  let prev: { lon: number; lat: number } | null = null;
+  /**
+   * One loop draws the walker, the lantern and the camera in step with the map. Fast things (an
+   * unlock wave, the camera sliding back) draw every frame; a walk at walking pace at 30 fps,
+   * which still moves less than a pixel a frame; standing still at 15 fps, enough for the mist
+   * and your glow to breathe.
+   */
+  const frame = (now: number) => {
+    requestAnimationFrame(frame);
+    const interval = fast ? 0 : moving ? 1000 / 30 : 1000 / 15;
+    if (now - lastDraw < interval - 3) return;
+    const dt = Math.max(1e-3, (now - lastDraw) / 1000);
+    lastDraw = now;
+    fast = view.fog.animating(now / 1000);
+    moving = false;
+    const f = session && motion.hasFix ? motion.frame(now) : null;
+    if (f) {
+      view.camera.update(f.lon, f.lat, now);
+      fast ||= view.camera.settling;
+      const lamp = { lon: f.lon, lat: f.lat, heading: f.heading, cone: f.cone };
+      view.puck.set(lamp);
+      view.fog.setLantern(lamp);
+      moving = f.moving;
+      if (moving && prev) {
+        const mpp = (EARTH_CIRCUMFERENCE_M * Math.cos(f.lat * DEG)) / (512 * 2 ** view.map.getZoom());
+        if (distanceM(prev.lon, prev.lat, f.lon, f.lat) / mpp / dt > 24) fast = true;
+      }
+      prev = { lon: f.lon, lat: f.lat };
     } else {
-      renderIdleDock(ui.dock, idleHint(), () => void startWalk());
+      prev = null;
+      // Nothing to show under a start screen with no map behind it.
+      if (splash.visible && !document.documentElement.classList.contains('wl-has-map') && !fast) return;
     }
-    renderRecenter();
-  }
+    view.repaint();
+  };
+  requestAnimationFrame(frame);
 
-  function renderRecenter(): void {
-    ui.recenter.hidden = !!session && mapView.isFollowing;
-  }
-
-  ui.recenter.addEventListener('click', async () => {
-    if (session) mapView.setFollow(true);
-    if (here) {
-      mapView.centerOn(here.lon, here.lat);
-      return;
-    }
-    try {
-      const f = await provider.current();
-      onFix(f);
-      mapView.centerOn(f.lon, f.lat, 16);
-    } catch (e) {
-      onLocError(e as LocationError);
-    }
+  view.map.on('click', () => {
+    if (session && !splash.visible) hud.show();
   });
 
-  function onLoaderStatus(s: LoaderStatus): void {
-    if (s.state === 'retrying' || s.state === 'offline') {
-      const secs = s.nextRetryAt ? Math.max(1, Math.round((s.nextRetryAt - Date.now()) / 1000)) : null;
-      const tail = session ? ' Your walk is still being recorded.' : '';
-      setBanner(ui, 'streets', {
-        kind: 'warn',
-        text:
-          s.state === 'offline'
-            ? `You’re offline, so new streets can’t load yet.${tail}`
-            : `The street map is busy. Retrying${secs ? ` in ${secs}s` : ''}…${tail}`,
-        action: { label: 'Retry', run: () => loader.retryNow() },
-      });
-    } else if (s.state === 'loading' && !s.hereLoaded) {
-      setBanner(ui, 'streets', { kind: 'info', text: 'Finding the streets around you…' });
-    } else {
-      setBanner(ui, 'streets', null);
-    }
-  }
+  // ---- Start ----
+  splash.onStart(() => startWalk());
+  boot.app = { start: startWalk };
 
-  setInterval(() => {
-    updateDock();
-    if (loader.status.state === 'retrying') onLoaderStatus(loader.status);
-  }, 1000);
-
-  // ---- Boot ----
-  renderDock();
-  if (here) mapView.user.update(here.lon, here.lat, here.acc, null);
-
-  if (session) {
-    if (here) {
-      loader.ensureAround(here.lon, here.lat);
-      buildings.ensureAround(here.lon, here.lat);
-    }
+  if (saved && saved.lastFix && provider.now() - saved.lastFix.t > STALE_WALK_MS) {
+    session = saved;
+    await endWalk(false);
+  } else if (saved) {
+    // Carry on with the walk the page was closed in.
+    session = saved;
+    session.newHouses ??= 0;
+    walkAlong = newWalkAlong();
+    writeLocal(key(WALKING_KEY), '1');
+    splash.hide();
     beginTracking();
+    const f = session.lastFix;
+    if (f) {
+      view.arm();
+      view.map.jumpTo({ center: [f.lon, f.lat], zoom: CONFIG.walkZoom });
+      motion.push(f, performance.now());
+      tiles.ensureAround(f.lon, f.lat);
+    } else {
+      revealTimer = window.setTimeout(reveal, 0);
+    }
+    hud.show(3000);
   } else {
-    if (here) {
-      loader.ensureAround(here.lon, here.lat);
-      // Houses along blocks unlocked before this version light up as their footprints arrive.
-      buildings.ensureAround(here.lon, here.lat);
-    }
-    const perm = await provider.permission();
-    if (perm === 'granted') {
-      provider
-        .current()
-        .then((f) => {
-          onFix(f);
-          if (!session) mapView.centerOn(f.lon, f.lat, 16);
-        })
-        .catch(() => {});
-    }
+    writeLocal(key(WALKING_KEY), null);
+    splash.show();
+    if (start) view.map.setPadding(splashPadding());
+    // Start was tapped while the app loaded: carry on, unless location was refused right away.
+    if (boot.err?.code === 1) showLocationHelp(bootLocationError(boot.err));
+    else if (boot.tapped) startWalk();
   }
+  if (!session) hud.hideAll();
+
+  // A newer map build, if there is one, is used from the next start on.
+  window.setTimeout(() => void refreshTemplate(), 5000);
 
   if (sim) {
-    // Hidden test hook for desktop verification (only with ?sim).
+    // Test hook for the demo walk only.
     (window as unknown as Record<string, unknown>).__wanderlight = {
-      progress, loader, buildings, mapView, walks,
+      view, tiles, graph, progress, motion, walks,
       get session() {
         return session;
       },
       summary: () => ({
-        piecesLoaded: loader.index.size,
-        blocksLoaded: loader.blocks.size,
+        tiles: graph.tileCount,
+        blocks: graph.blocks.size,
         blocksLit: litBlocks.size,
-        housesLoaded: buildings.index.size,
+        walkBlocks: walkBlocks.size,
+        houses: graph.houses.size,
         housesLit: progress.housesLit,
         piecesLit: progress.piecesLit,
-        streetsMet: progress.streetsMet,
         streets: progress.streetNames(),
-        litLenM: Math.round(progress.litLenM),
-        loader: loader.status,
-        fog: mapView.fog.stats,
+        fog: view.fog.stats,
+        net: tiles.stats,
         session: session && {
-          distanceM: Math.round(session.distanceM), newPieces: session.newPieces,
-          newStreets: session.newStreets, segs: session.segs.length / 5, fixes: session.fixes,
+          distanceM: Math.round(session.distanceM),
+          newPieces: session.newPieces,
+          newStreets: session.newStreets,
+          segs: session.segs.length / 5,
+          fixes: session.fixes,
         },
-        walks: walks.length,
       }),
     };
   }
-
 }

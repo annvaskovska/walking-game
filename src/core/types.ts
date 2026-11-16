@@ -8,17 +8,16 @@ import type { BBox } from '../geo/geo';
  */
 export type PieceKind = 'road' | 'path' | 'side';
 
-/** One OSM way as fetched from Overpass, reduced to what the app needs. */
+/**
+ * One walkable street edge: a stretch of street between two junctions (or a junction and a dead
+ * end), cut out of a map tile by `parseTile`. Its id is a hash of its tile and geometry, so the
+ * same street gets the same id every time the tile loads.
+ */
 export interface WayInput {
-  id: number;
+  id: string;
   name: string | null;
   highway: string;
   kind: PieceKind;
-  /**
-   * Distances in metres from the start of the way to nodes shared with another way, i.e. where
-   * one city block ends and the next begins. Missing when Overpass sent no node ids.
-   */
-  junctionsM?: number[];
   /** Flat [lon, lat, lon, lat, ...]. */
   coords: number[];
 }
@@ -26,7 +25,8 @@ export interface WayInput {
 /** A ~20 m slice of a way. Its id `wayId:index` is stable for a given way geometry. */
 export interface Piece {
   id: string;
-  way: number;
+  /** Id of the way it was cut from (a number for pieces saved by older versions). */
+  way: string | number;
   idx: number;
   name: string | null;
   hw: string;
@@ -47,12 +47,14 @@ export interface LitPiece extends Piece {
   lastWalk: string;
 }
 
-/** One OSM building footprint, kept so a lit house can be drawn without the map data. */
+/** One building footprint, kept so a lit house can be drawn without the map data. */
 export interface Building {
-  /** `b<wayId>`; stable for the OSM building. */
+  /** `h<tile>.<centroid>` (or `b<osmId>` for houses saved by older versions). */
   id: string;
-  /** Flat closed ring [lon, lat, ...]. */
+  /** Flat closed outer ring [lon, lat, ...]. */
   coords: number[];
+  /** Courtyards: flat closed rings, when the footprint has any. */
+  holes?: number[][];
   bbox: BBox;
   /** Cached Web-Mercator coordinates for fast drawing (filled lazily, never stored). */
   merc?: Float64Array;
@@ -61,8 +63,8 @@ export interface Building {
 /** A house that lit up because a block beside it was unlocked. */
 export interface LitHouse extends Building {
   litAt: number;
-  /** OSM id of the street way whose unlock switched it on (0 when it arrived late). */
-  block: number;
+  /** Id of the block whose unlock switched it on ('' when it arrived late; a number in old saves). */
+  block: string | number;
 }
 
 /** A position fix from a location provider. */

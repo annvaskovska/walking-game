@@ -10,7 +10,7 @@ const pt = (x: number, y: number) => [lon0 + x / m.lon, lat0 + y / m.lat];
 
 function way(lengthM: number, extra: Partial<WayInput> = {}): WayInput {
   return {
-    id: 1,
+    id: 'w1',
     name: 'Amstel',
     highway: 'secondary',
     kind: 'road',
@@ -24,24 +24,11 @@ describe('buildBlocks', () => {
     const w = way(100);
     const blocks = buildBlocks(w, splitWay(w));
     expect(blocks).toHaveLength(1);
-    expect(blocks[0].id).toBe('1:0-4');
+    expect(blocks[0].id).toBe('w1:0-4');
     expect(blocks[0].lenM).toBeCloseTo(100, 1);
     expect(blocks[0].name).toBe('Amstel');
     expect(blocks[0].kind).toBe('road');
     expect(blocks[0].coords.length).toBeGreaterThanOrEqual(4);
-  });
-
-  it('cuts at junctions, between pieces', () => {
-    const w = way(200, { junctionsM: [40, 100] });
-    const blocks = buildBlocks(w, splitWay(w));
-    expect(blocks.map((b) => b.id)).toEqual(['1:0-1', '1:2-4', '1:5-9']);
-    expect(blocks.map((b) => Math.round(b.lenM))).toEqual([40, 60, 100]);
-  });
-
-  it('snaps a junction inside a piece to the nearest piece boundary', () => {
-    const w = way(100, { junctionsM: [39] });
-    const blocks = buildBlocks(w, splitWay(w));
-    expect(blocks.map((b) => b.id)).toEqual(['1:0-1', '1:2-4']);
   });
 
   it('caps a long junction-free stretch so it unlocks in stages', () => {
@@ -64,16 +51,28 @@ describe('buildBlocks', () => {
 
 describe('Blocks', () => {
   it('indexes blocks by id and by piece, and adds each way once', () => {
-    const w = way(200, { junctionsM: [40, 100] });
+    const w = way(400);
     const pieces = splitWay(w);
     const blocks = new Blocks();
-    const added = blocks.add(w, pieces);
+    const added = blocks.add(w, pieces, { maxBlockLengthM: 160 });
     expect(added).toHaveLength(3);
     expect(blocks.size).toBe(3);
     expect(blocks.get(added[1].id)).toBe(added[1]);
-    expect(blocks.blockOf(pieces[7].id)?.id).toBe('1:5-9');
-    expect(blocks.add(w, pieces)).toEqual([]);
+    expect(blocks.blockOf(pieces[19].id)?.id).toBe(added[2].id);
+    expect(blocks.add(w, pieces, { maxBlockLengthM: 160 })).toEqual([]);
     expect(blocks.size).toBe(3);
     expect([...blocks.values()]).toHaveLength(3);
+  });
+
+  it('removes a block and forgets its pieces', () => {
+    const w = way(100);
+    const pieces = splitWay(w);
+    const blocks = new Blocks();
+    const [b] = blocks.add(w, pieces);
+    expect(blocks.remove(b.id)).toBe(b);
+    expect(blocks.size).toBe(0);
+    expect(blocks.blockOf(pieces[0].id)).toBeUndefined();
+    expect(blocks.addBlock(b)).toBe(true);
+    expect(blocks.addBlock(b)).toBe(false);
   });
 });
