@@ -78,7 +78,7 @@ export function isStreet(p: { name: string | null }): p is { name: string } {
 
 /**
  * Fallback kind for records saved before kinds existed: walkway classes become paths, everything
- * else a road. New data gets a precise kind from its OSM tags in `parseOverpass`.
+ * else a road. New data gets its kind from the tile attributes in `parseTile`.
  */
 export function kindFromHighway(hw: string): PieceKind {
   return hw === 'footway' || hw === 'path' || hw === 'cycleway' || hw === 'steps' || hw === 'bridleway'

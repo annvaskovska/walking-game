@@ -19,16 +19,14 @@ interface WaySpec {
   highway?: string;
   from: [number, number];
   to: [number, number];
-  junctionsM?: number[];
 }
 
 function way(spec: WaySpec): WayInput {
   return {
-    id: spec.id,
+    id: `w${spec.id}`,
     name: spec.name === undefined ? 'Main' : spec.name,
     highway: spec.highway ?? 'residential',
     kind: spec.kind ?? 'road',
-    junctionsM: spec.junctionsM,
     coords: [...p(...spec.from), ...p(...spec.to)],
   };
 }
