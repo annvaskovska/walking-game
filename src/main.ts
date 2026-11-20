@@ -1,5 +1,6 @@
 import { registerSW } from 'virtual:pwa-register';
 import { startApp } from './app/app';
+import { isNativeApp } from './platform/native';
 
 startApp().catch((err: unknown) => {
   console.error(err);
@@ -40,5 +41,8 @@ function register(): void {
     });
   }, 3000);
 }
-if (document.readyState === 'complete') register();
-else window.addEventListener('load', register, { once: true });
+// The iPhone app carries its files inside it, so it needs no service worker to keep them.
+if (!isNativeApp()) {
+  if (document.readyState === 'complete') register();
+  else window.addEventListener('load', register, { once: true });
+}

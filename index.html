@@ -398,9 +398,11 @@
 
     <script>
       // A tap on Start before the app has loaded still starts at once: ask for your location in
-      // the same tap (browsers want a gesture for that), and leave the rest to the app.
+      // the same tap (browsers want a gesture for that), and leave the rest to the app. The iPhone
+      // app asks through its native GPS instead, once the app is up.
       (function () {
         var B = window.__wl, go = document.getElementById('wl-go');
+        var cap = window.Capacitor, native = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
         if (B.sim) go.textContent = 'Start the demo walk';
         try {
           var s = JSON.parse(localStorage.getItem('wl-stats' + B.sfx) || 'null');
@@ -414,7 +416,7 @@
           if (B.app || B.tapped) return;
           B.tapped = Date.now();
           go.setAttribute('aria-busy', 'true');
-          if (B.sim || !navigator.geolocation || !window.isSecureContext) return;
+          if (B.sim || native || !navigator.geolocation || !window.isSecureContext) return;
           navigator.geolocation.getCurrentPosition(
             function (p) {
               var c = p.coords;

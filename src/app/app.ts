@@ -15,6 +15,7 @@ import { EARTH_CIRCUMFERENCE_M } from '../map/gl';
 import { MapView } from '../map/mapView';
 import { nameLines } from '../map/names';
 import { createBrowserLocation, type LocationError, type LocationProvider } from '../platform/location';
+import { isNativeApp } from '../platform/native';
 import { createSimLocation, simFactor } from '../platform/simLocation';
 import { SIM_ROUTE } from '../platform/simRoute';
 import { openStorage, persistStorage } from '../platform/storage';
@@ -100,7 +101,13 @@ function centroid(flat: ArrayLike<number>): [number, number] {
   return [x / n, y / n];
 }
 
-function locationHelp(e: LocationError): string {
+function locationHelp(e: LocationError, native: boolean): string {
+  if (e.kind === 'denied' && native) {
+    return (
+      '<b>Location is off for Wanderlight.</b> It lights up the streets you walk, so it needs to know where you are; that never leaves this iPhone.<br>' +
+      '<a href="app-settings:"><b>Open Settings</b></a> → Location → <b>While Using the App</b>, and keep Precise Location on.'
+    );
+  }
   if (e.kind === 'denied') {
     return (
       '<b>Location is off for Wanderlight.</b> It lights up the streets you walk, so it needs to know where you are; that never leaves this device.<br>' +
@@ -123,7 +130,13 @@ export async function startApp(): Promise<void> {
   };
   const sim = boot.sim;
   const key = (k: string) => k + boot.sfx;
-  const provider: LocationProvider = sim ? createSimLocation(simFactor(params.get('sim'))) : createBrowserLocation();
+  // The iPhone app records with native GPS, which goes on with the screen locked.
+  const native = !sim && isNativeApp();
+  const provider: LocationProvider = sim
+    ? createSimLocation(simFactor(params.get('sim')))
+    : native
+      ? (await import('../platform/nativeLocation')).createNativeLocation()
+      : createBrowserLocation();
   const theme = nightTheme;
 
   const splash = new Splash(sim);
@@ -169,12 +182,16 @@ export async function startApp(): Promise<void> {
     distanceM: session?.distanceM ?? 0,
   }));
 
-  const wake = new WakeLockKeeper((s) => {
-    // Without a wake lock the phone may lock and stop the walk; the demo walk doesn't care.
-    if (session && !sim && (s === 'failed' || s === 'unsupported')) {
-      toasts.show('wake', 'Keep the screen on to keep recording.', 'info', 6000);
-    }
-  });
+  // In a browser the walk stops when the phone locks, so the screen is kept on. The iPhone app
+  // records with the screen locked, so it lets the phone lock as usual.
+  const wake = native
+    ? null
+    : new WakeLockKeeper((s) => {
+        // Without a wake lock the phone may lock and stop the walk; the demo walk doesn't care.
+        if (session && !sim && (s === 'failed' || s === 'unsupported')) {
+          toasts.show('wake', 'Keep the screen on to keep recording.', 'info', 6000);
+        }
+      });
 
   // ---- What you lit so far ----
   const storage = await openStorage(sim ? 'wanderlight-sim' : undefined);
@@ -440,18 +457,29 @@ export async function startApp(): Promise<void> {
     else toasts.show('gps', motion.hasFix ? 'GPS signal lost. Looking for it…' : 'Finding you…');
   }
 
+  /**
+   * Fixes recorded while the screen was locked arrive together: the walker jumps to where you are
+   * now (no slide across town), the streets lit meanwhile light up in front of you, and the walk's
+   * numbers show for a moment.
+   */
+  function onCatchUp(): void {
+    motion.snap();
+    view.repaint();
+    if (session && !splash.visible) hud.show(3000);
+  }
+
   // ---- Walk ----
-  function beginTracking(): void {
+  function beginTracking(s: ActiveSession): void {
     stopWatch?.();
-    stopWatch = provider.watch(onFix, onLocError);
-    void wake.enable();
+    stopWatch = provider.watch(onFix, onLocError, { walk: s.id, since: s.lastFix?.t, onCatchUp });
+    void wake?.enable();
     view.camera.start(CONFIG.walkZoom);
   }
 
   function stopTracking(): void {
     stopWatch?.();
     stopWatch = null;
-    void wake.disable();
+    void wake?.disable();
     view.camera.stop();
     clearTimeout(revealTimer);
     toasts.clear();
@@ -466,9 +494,8 @@ export async function startApp(): Promise<void> {
     // Tells the service worker (main.ts) that from now on a new version waits for a quiet moment.
     boot.tapped ||= Date.now();
     splash.message(null);
-    if (!sim && (!window.isSecureContext || !('geolocation' in navigator))) {
-      return showLocationHelp({ kind: window.isSecureContext ? 'unsupported' : 'insecure', message: '' });
-    }
+    const unavailable = provider.unavailable?.();
+    if (unavailable) return showLocationHelp(unavailable);
     splash.busy(true);
     const t = provider.now();
     session = {
@@ -489,7 +516,7 @@ export async function startApp(): Promise<void> {
     motion.reset();
     persistSession(true);
     writeLocal(key(WALKING_KEY), '1');
-    beginTracking();
+    beginTracking(session);
     // A position taken in the tap that started this, before the app had loaded.
     if (boot.fix && Math.abs(Date.now() - boot.fix.t) < 60_000) onFix(boot.fix);
     boot.fix = null;
@@ -583,7 +610,7 @@ export async function startApp(): Promise<void> {
 
   function showLocationHelp(e: LocationError): void {
     splash.busy(false);
-    splash.message(locationHelp(e));
+    splash.message(locationHelp(e, native));
   }
 
   /** Behind the summary, pull back to show the streets this walk went along. */
@@ -657,7 +684,9 @@ export async function startApp(): Promise<void> {
   splash.onStart(() => startWalk());
   boot.app = { start: startWalk };
 
-  if (saved && saved.lastFix && provider.now() - saved.lastFix.t > STALE_WALK_MS) {
+  // The iPhone app may have recorded more of the walk than the page saved (screen locked).
+  const lastFixT = saved ? Math.max(saved.lastFix?.t ?? 0, (await provider.lastFixTime?.(saved.id)) ?? 0) : 0;
+  if (saved && lastFixT && provider.now() - lastFixT > STALE_WALK_MS) {
     session = saved;
     await endWalk(false);
   } else if (saved) {
@@ -667,7 +696,7 @@ export async function startApp(): Promise<void> {
     walkAlong = newWalkAlong();
     writeLocal(key(WALKING_KEY), '1');
     splash.hide();
-    beginTracking();
+    beginTracking(session);
     const f = session.lastFix;
     if (f) {
       view.arm();

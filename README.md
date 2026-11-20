@@ -49,17 +49,48 @@ This builds the app and serves it over HTTPS with a self-signed certificate (geo
 HTTPS). Open the `https://<your-laptop-ip>:4173/` address it prints on your phone and accept the
 certificate warning.
 
-## The honest limitation
+## The iPhone app: walk with the screen locked
 
-A web app can only track you **while it is open with the screen on**. Wanderlight keeps the
-screen awake during a walk (Wake Lock API) and re-acquires it when you come back to the app, but
-if you lock your phone or switch apps, the browser stops sending GPS and that stretch of the walk
-is not lit. (On iPhone, keeping the screen awake needs iOS 16.4 or later and is most reliable in
-recent versions.)
+The web app can only track you **while it is open with the screen on**. It keeps the screen awake
+during a walk (Wake Lock API), but if you lock your phone or switch apps, the browser stops sending
+GPS and that stretch of the walk is not lit.
 
-The next step is wrapping the app with **Capacitor** to get native background location. The
-platform calls (geolocation, wake lock, storage) already live behind small modules in
-`src/platform/` so they can be swapped for Capacitor plugins without touching the rest.
+The iPhone app has no such gap. It is the same web app (same start screen, map, fog and
+gestures) in a native [Capacitor](https://capacitorjs.com) shell, with native GPS that keeps
+recording in the background. Lock the phone, put it in your pocket, and when you look again the
+streets you walked light up at once.
+
+**Run it on your iPhone** (needs a Mac with Xcode, free Apple ID is enough):
+
+```sh
+npm install
+npm run ios        # builds the web app, copies it into ios/, opens Xcode
+```
+
+The first time:
+
+1. In Xcode, *Settings → Apple Accounts → +*, sign in with your Apple ID.
+2. Select the **App** target → *Signing & Capabilities* → pick your **Team** (your Apple ID).
+3. Plug in your iPhone, unlock it and tap *Trust*. Choose it in the device menu at the top and
+   press **Run**. iPhone asks for **Developer Mode**: *Settings → Privacy & Security → Developer
+   Mode → On*, restart, and press Run again.
+4. With a free Apple ID, iPhone refuses to open the app the first time: *Settings → General → VPN &
+   Device Management → Apple Development → Trust*, then open Wanderlight.
+
+On the first walk, allow location **While Using the App** and keep *Precise Location* on. During a walk iOS shows a blue
+location pill in the status bar; that is the walk being recorded. (An app signed with a free
+Apple ID stops opening after 7 days; press Run again. Your streets stay on the phone.)
+
+After changing the web code, run `npm run ios:sync` (build + copy) before running from Xcode
+again. CI builds the iOS app on every pull request (`.github/workflows/ios.yml`).
+
+How the lock screen works: `ios/App/App/WalkTracker.swift` runs `CLLocationManager` with the
+background *location* mode, so iOS keeps delivering fixes while the screen is locked. It writes
+every fix of the walk, numbered, to a small journal file on the phone. While the web view runs it
+gets each fix live; when it missed some (screen locked, web view paused or reloaded by iOS, app
+killed) it reads them back from where it left off, in order, so the walk lights exactly as if it
+had seen them live (`src/platform/nativeLocation.ts`). The app asks only for *While Using*
+permission: a walk you started counts as using the app.
 
 ## How it works
 
@@ -97,8 +128,9 @@ platform calls (geolocation, wake lock, storage) already live behind small modul
 
 Code map: `src/core` (pure logic: GPS filter, motion, walked-along rule, blocks, progress, walk
 stats), `src/geo` (geometry, pieces, spatial index), `src/data` (tile decoder and parser, tile
-source, street graph), `src/platform` (location, wake lock, storage, demo walk), `src/map` (style,
-GPU fog, walker, follow camera, gold names), `src/ui` (start screen, walk stats, notices),
-`src/app` (the controller). `scripts/make-icons.mjs` draws the app icons.
+source, street graph), `src/platform` (location in the browser and in the iPhone app, wake lock,
+storage, demo walk), `src/map` (style, GPU fog, walker, follow camera, gold names), `src/ui`
+(start screen, walk stats, notices), `src/app` (the controller), `ios/` (the iPhone app: Xcode
+project, native GPS plugin). `scripts/make-icons.mjs` draws the app icons, the iPhone one too.
 
 Map data © OpenStreetMap contributors · Tiles: OpenFreeMap / OpenMapTiles.
