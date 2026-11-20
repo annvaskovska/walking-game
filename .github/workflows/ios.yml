@@ -1,0 +1,36 @@
+name: iPhone app
+
+# Builds the iPhone app (ios/) for the simulator, unsigned, so a change that breaks the native
+# side shows up on the pull request. Running it on a phone still needs Xcode and a signing team.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      # The web app, copied into ios/App/App/public with the Capacitor config.
+      - run: npm run ios:sync
+      - name: Build for the iOS simulator
+        working-directory: ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
