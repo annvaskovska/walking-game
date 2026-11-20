@@ -67,9 +67,17 @@ npm install
 npm run ios        # builds the web app, copies it into ios/, opens Xcode
 ```
 
-In Xcode, select the **App** target → *Signing & Capabilities* → pick your **Team** (your Apple
-ID). Plug in your iPhone, choose it at the top, and press **Run**. On the first walk, allow
-location **While Using the App** and keep *Precise Location* on. During a walk iOS shows a blue
+The first time:
+
+1. In Xcode, *Settings → Apple Accounts → +*, sign in with your Apple ID.
+2. Select the **App** target → *Signing & Capabilities* → pick your **Team** (your Apple ID).
+3. Plug in your iPhone, unlock it and tap *Trust*. Choose it in the device menu at the top and
+   press **Run**. iPhone asks for **Developer Mode**: *Settings → Privacy & Security → Developer
+   Mode → On*, restart, and press Run again.
+4. With a free Apple ID, iPhone refuses to open the app the first time: *Settings → General → VPN &
+   Device Management → Apple Development → Trust*, then open Wanderlight.
+
+On the first walk, allow location **While Using the App** and keep *Precise Location* on. During a walk iOS shows a blue
 location pill in the status bar; that is the walk being recorded. (An app signed with a free
 Apple ID stops opening after 7 days; press Run again. Your streets stay on the phone.)
 
