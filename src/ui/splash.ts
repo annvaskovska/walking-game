@@ -1,11 +1,9 @@
-import { estimateSteps, formatDistance, formatDuration, formatSteps } from '../core/stats';
+import { distanceParts, estimateSteps, formatDurationWords, formatSteps } from '../core/stats';
 import type { WalkRecord } from '../core/types';
+import { newOnMap } from './summaryText';
 
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const html = document.documentElement;
-
-const esc = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 export interface Lifetime {
   streets: number;
@@ -19,15 +17,16 @@ export interface WalkSummary {
 }
 
 /**
- * The one screen besides the map: logo, what Wanderlight is, and Start. Its markup lives in
- * index.html so it paints before any script loads; this drives it once the app is up. After a
- * walk it shows what the walk lit, over the map.
+ * The one screen besides the map: logo, one line on what Wanderlight is, and Start. Its markup
+ * lives in index.html so it paints before any script loads; this drives it once the app is up.
+ * After a walk it shows, over the map, how far you went and what the walk lit.
  */
 export class Splash {
   private go = byId<HTMLButtonElement>('wl-go');
   private msg = byId('wl-msg');
   private stats = byId('wl-stats');
   private card = document.querySelector('.wl-card') as HTMLElement;
+  private sum = document.querySelector('.wl-sum') as HTMLElement;
 
   constructor(private sim: boolean) {}
 
@@ -77,28 +76,27 @@ export class Splash {
   /** Back to the first screen. */
   intro(): void {
     this.card.classList.remove('wl-summary');
-    this.go.textContent = this.sim ? 'Start the demo walk' : 'Start the walk';
+    this.go.textContent = this.sim ? 'Start the demo walk' : 'Start walking';
   }
 
-  /** What the walk that just ended lit up. */
+  /** How far the walk that just ended went, and what it lit. */
   summary({ walk, newHouses }: WalkSummary): void {
-    byId('wl-sum-title').textContent = walk.newPieces > 0 ? 'Walk complete' : 'Walk ended';
-    byId('wl-sum-dist').textContent = formatDistance(walk.distanceM);
-    byId('wl-sum-time').textContent = formatDuration(walk.durationMs);
-    byId('wl-sum-steps').textContent = formatSteps(estimateSteps(walk.distanceM));
-    const streets = walk.newStreets;
-    let line: string;
-    if (streets.length) {
-      const shown = streets.slice(0, 3).map((s) => `<b>${esc(s)}</b>`);
-      const more = streets.length > 3 ? ` and ${streets.length - 3} more` : '';
-      const houses = newHouses ? `, and ${newHouses} house${newHouses === 1 ? '' : 's'}` : '';
-      line = `New: ${shown.join(', ')}${more}${houses}.`;
-    } else if (walk.newPieces > 0) {
-      line = `You lit new stretches${newHouses ? ` and ${newHouses} house${newHouses === 1 ? '' : 's'}` : ''}.`;
-    } else {
-      line = 'Walk along a street to light it.';
-    }
-    byId('wl-sum-new').innerHTML = line;
+    const d = distanceParts(walk.distanceM);
+    byId('wl-sum-dist').textContent = d.value;
+    byId('wl-sum-unit').textContent = d.unit;
+    const steps = estimateSteps(walk.distanceM);
+    byId('wl-sum-sub').textContent =
+      `${formatDurationWords(walk.durationMs)} · ${formatSteps(steps)} step${steps === 1 ? '' : 's'}`;
+    const lit = newOnMap(walk, newHouses);
+    const names = byId('wl-sum-names');
+    names.textContent = lit.names ?? '';
+    names.hidden = !lit.names;
+    names.toggleAttribute('data-long', lit.long);
+    const more = byId('wl-sum-more');
+    more.textContent = lit.more;
+    more.hidden = !lit.more;
+    byId('wl-sum-label').hidden = lit.empty;
+    this.sum.toggleAttribute('data-empty', lit.empty);
     this.card.classList.add('wl-summary');
     this.go.textContent = 'Walk again';
   }
