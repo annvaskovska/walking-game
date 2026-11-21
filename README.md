@@ -89,6 +89,23 @@ Apple ID stops opening after 7 days; press Run again. Your streets stay on the p
 After changing the web code, run `npm run ios:sync` (build + copy) before running from Xcode
 again. CI builds the iOS app on every pull request (`.github/workflows/ios.yml`).
 
+**Put it on TestFlight** (needs a paid Apple Developer Program membership). The first time, on the web:
+
+1. In *Certificates, Identifiers & Profiles → Identifiers → +* on developer.apple.com, register the App ID `io.github.annvaskovska.wanderlight`.
+2. In App Store Connect, *Apps → + → New App*: iOS, the name Wanderlight, that bundle ID, any SKU.
+3. In App Store Connect, *Users and Access → Integrations → App Store Connect API → Team Keys → +*, make a key with the **Admin** role and download its `.p8` file.
+
+Then, with `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY` (the text of the `.p8` file) set in the environment:
+
+```sh
+npm run ios:testflight
+```
+
+It runs the tests, builds the app, signs it and uploads it (`scripts/testflight.sh`).
+Xcode makes the certificate and profile from the key, and gives each upload the next build number.
+The script publishes from the team in its `TEAM_ID`; the Xcode project keeps its own team for running on your phone.
+Once App Store Connect has processed the build, add yourself to an internal testing group in *TestFlight* and install it from the TestFlight app.
+
 How the lock screen works: `ios/App/App/WalkTracker.swift` runs `CLLocationManager` with the
 background *location* mode, so iOS keeps delivering fixes while the screen is locked. It writes
 every fix of the walk, numbered, to a small journal file on the phone. While the web view runs it

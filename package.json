@@ -11,6 +11,7 @@
     "phone": "vite build && vite preview --host --mode phone",
     "ios:sync": "npm run build && cap sync ios",
     "ios": "npm run ios:sync && cap open ios",
+    "ios:testflight": "sh scripts/testflight.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
