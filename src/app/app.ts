@@ -3,8 +3,8 @@ import type { Block } from '../core/blocks';
 import { newFilterState, stepFilter, type FilterState } from '../core/gpsFilter';
 import { Motion } from '../core/motion';
 import { Progress, toStoredHouse, toStoredLit } from '../core/progress';
-import type { Building, Fix, LitHouse, LitPiece, WalkRecord } from '../core/types';
-import { WalkAlong } from '../core/walkAlong';
+import type { Building, Fix, LitHouse, LitPiece, Piece, WalkRecord } from '../core/types';
+import { WalkAlong, type Walked } from '../core/walkAlong';
 import { StreetGraph } from '../data/graph';
 import { TileSource, type GraphTile } from '../data/tiles';
 import { POS_KEY, STATS_KEY, WALKING_KEY, refreshTemplate } from '../data/tileUrl';
@@ -285,7 +285,7 @@ export async function startApp(): Promise<void> {
   }
 
   // ---- Streets and houses arriving ----
-  const newWalkAlong = () => new WalkAlong(graph.blocks, graph.pieces, (b) => litBlocks.has(b.id));
+  const newWalkAlong = () => new WalkAlong(graph.blocks, (b) => litBlocks.has(b.id));
 
   function onTile(t: GraphTile): void {
     const added = graph.addTile(t.key, t.blocks, t.houses);
@@ -294,8 +294,7 @@ export async function startApp(): Promise<void> {
     if (!session) return;
     // The walk so far, over streets that just arrived.
     walkAlong = newWalkAlong();
-    const done = walkAlong.replay(session.segs);
-    if (done.length) unlockBlocks(done);
+    light(walkAlong.replay(session.segs));
     lightLateHouses(t.houses);
   }
 
@@ -356,6 +355,45 @@ export async function startApp(): Promise<void> {
       navigator.onLine ? 'Can’t load the streets here yet. Your walk is still recorded.' : 'You’re offline. Your walk is still recorded.',
       'warn',
     );
+  }
+
+  /** What a walked step (or the walk so far, replayed) lit. */
+  function light(walked: Walked): void {
+    if (walked.pieces.length) lightPieces(walked.pieces);
+    if (walked.blocks.length) unlockBlocks(walked.blocks);
+  }
+
+  /**
+   * Stretches walked in a block that is not complete yet: each ~20 m piece lights where you
+   * walked it, with the houses beside it, so nothing you walked stays dark.
+   */
+  function lightPieces(pieces: Piece[]): void {
+    if (!session) return;
+    const now = Date.now();
+    const t0 = pageTime();
+    const pos = motion.position ?? here;
+    let changed = false;
+    for (const piece of pieces) {
+      if (progress.isLit(piece.id)) continue;
+      const res = progress.apply([piece], session.id, now);
+      const blockId = graph.blocks.blockOf(piece.id)?.id ?? '';
+      res.newHouses = progress.applyHouses(
+        graph.housesNear(piece.coords, piece.bbox, CONFIG.houseRadiusM), blockId, now,
+      );
+      queue(res.changed, res.newHouses);
+      if (!res.newPieces.length && !res.newHouses.length) continue;
+      changed = true;
+      const fromM = pos ? projectOnPolylineM(pos.lon, pos.lat, piece.coords).alongM : 0;
+      if (res.newPieces.length) view.fog.addPiece(piece.coords, piece.kind, { offsetM: 0, fromM, t0 });
+      for (const h of res.newHouses) view.fog.addHouse(h, t0 + 0.15 + Math.random() * 0.4);
+      session.newPieces += res.newPieces.length;
+      session.newLenM += res.newPieces.reduce((s, p) => s + p.len, 0);
+      session.newStreets.push(...res.newStreets);
+      session.newHouses = (session.newHouses ?? 0) + res.newHouses.length;
+    }
+    if (!changed) return;
+    refreshNames();
+    persistSession();
   }
 
   /**
@@ -432,8 +470,7 @@ export async function startApp(): Promise<void> {
       session.distanceM += verdict.distM;
       session.segs.push(from.lon, from.lat, to.lon, to.lat, Math.round(verdict.radiusM * 10) / 10);
       walkAlong ??= newWalkAlong();
-      const done = walkAlong.add(from.lon, from.lat, to.lon, to.lat, verdict.radiusM);
-      if (done.length) unlockBlocks(done);
+      light(walkAlong.add(from.lon, from.lat, to.lon, to.lat, verdict.radiusM));
     }
     persistSession();
   }

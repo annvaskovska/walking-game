@@ -1,6 +1,5 @@
 import { CONFIG } from '../config';
 import { clamp, distanceM, expandBBox, projectOnPolylineM } from '../geo/geo';
-import type { GridIndex } from '../geo/spatialIndex';
 import type { Block, Blocks } from './blocks';
 import type { Piece } from './types';
 
@@ -10,72 +9,84 @@ export const SEG_STRIDE = 5;
 type WalkCfg = Pick<
   typeof CONFIG,
   | 'walkAlongRadiusM' | 'walkAlongFactor' | 'walkAlongMinM' | 'parallelTieM'
-  | 'sideNearRoadM' | 'blockUnlockFraction' | 'blockMinCoverM'
+  | 'sideNearRoadM' | 'blockUnlockFraction' | 'blockMinCoverM' | 'pieceLightFraction' | 'pieceMinCoverM'
 >;
 
 interface Candidate {
-  piece: Piece;
+  block: Block;
   /** Worst lateral distance of the step's two ends (metres). */
   distM: number;
+  /** The stretch of the block the step advanced along, in metres from the block's start. */
   fromM: number;
   toM: number;
 }
 
-interface PieceCoverage {
-  /** Covered intervals along the piece, sorted and merged, in metres from its start. */
-  intervals: [number, number][];
-  lenM: number;
+/** What a walked step lit. */
+export interface Walked {
+  /** Blocks it completed: all their pieces light, with their houses and name. */
+  blocks: Block[];
+  /** Pieces it lit on their own, in blocks that are not complete yet. */
+  pieces: Piece[];
 }
 
 /**
  * The "walked along it" rule. Each good GPS step is matched to the street it follows — close,
- * parallel, and advancing along it — rather than to everything within a radius. The covered
- * length of each block accumulates; at about half its length the whole block unlocks.
+ * parallel, and advancing along it — rather than to everything within a radius.
  *
- * A walk replayed after a reload, or after streets arrive late, produces the same blocks:
- * `add` only depends on the segments and the loaded pieces, never on call order.
+ * What you walk lights as you walk it: the walked length is kept per block, measured along the
+ * whole block so no step is lost where two pieces meet, and every ~20 m piece lights once a good
+ * part of it is walked. At about half a block's length the rest of the block lights too.
+ *
+ * A walk replayed after a reload, or after streets arrive late, lights the same streets:
+ * `add` only depends on the segments and the loaded blocks, never on call order.
  */
 export class WalkAlong {
-  private coverage = new Map<string, PieceCoverage>();
+  /** Per block: walked intervals along it, sorted and merged, in metres from its start. */
+  private coverage = new Map<string, [number, number][]>();
   private unlocked = new Set<string>();
+  /** Pieces already reported on their own. */
+  private litPieces = new Set<string>();
 
   constructor(
     private blocks: Blocks,
-    private pieces: GridIndex<Piece>,
     private isUnlocked: (block: Block) => boolean = () => false,
     private cfg: WalkCfg = CONFIG,
   ) {}
 
   /**
-   * Add one walked step a→b. Returns the blocks it completed, each once, with all their pieces.
+   * Add one walked step a→b and return what it lit, each block and piece once.
    * `radiusM` is the GPS-derived search radius; the rule never matches farther than
    * `walkAlongRadiusM`.
    */
-  add(aLon: number, aLat: number, bLon: number, bLat: number, radiusM: number): Block[] {
+  add(aLon: number, aLat: number, bLon: number, bLat: number, radiusM: number): Walked {
+    const out: Walked = { blocks: [], pieces: [] };
     const stepM = distanceM(aLon, aLat, bLon, bLat);
-    if (stepM < 0.05) return [];
+    if (stepM < 0.05) return out;
     const radius = Math.min(radiusM, this.cfg.walkAlongRadiusM);
     const box = expandBBox(
       [Math.min(aLon, bLon), Math.min(aLat, bLat), Math.max(aLon, bLon), Math.max(aLat, bLat)],
       radius,
     );
     const minAlongM = Math.max(this.cfg.walkAlongMinM, this.cfg.walkAlongFactor * stepM);
+    // Where a block doubles back on itself, the two ends of a step can land on different arms.
+    const maxAlongM = stepM * 1.5 + 2;
 
     const passing: Candidate[] = [];
-    for (const piece of this.pieces.query(box)) {
-      if (piece.kind === 'side') continue;
-      const from = projectOnPolylineM(aLon, aLat, piece.coords);
-      const to = projectOnPolylineM(bLon, bLat, piece.coords);
+    for (const block of this.blocks.index.query(box)) {
+      if (block.kind === 'side') continue;
+      const from = projectOnPolylineM(aLon, aLat, block.coords);
+      const to = projectOnPolylineM(bLon, bLat, block.coords);
       if (from.distM > radius || to.distM > radius) continue;
-      if (Math.abs(to.alongM - from.alongM) < minAlongM) continue;
+      const alongM = Math.abs(to.alongM - from.alongM);
+      if (alongM < minAlongM || alongM > maxAlongM) continue;
       passing.push({
-        piece,
+        block,
         distM: Math.max(from.distM, to.distM),
         fromM: Math.min(from.alongM, to.alongM),
         toM: Math.max(from.alongM, to.alongM),
       });
     }
-    if (!passing.length) return [];
+    if (!passing.length) return out;
 
     // Only the street you are actually on: a parallel street a few metres farther was not walked.
     let nearest = Infinity;
@@ -84,39 +95,55 @@ export class WalkAlong {
 
     // A footway running right beside a road you are also following is that road's sidewalk,
     // even when OSM did not tag it as one. Named paths and cycleways stay in their own right.
-    const roads = kept.filter((c) => c.piece.kind === 'road');
+    const roads = kept.filter((c) => c.block.kind === 'road');
     const walked = kept.filter((c) => {
-      if (c.piece.kind !== 'path' || c.piece.name) return true;
-      if (c.piece.hw !== 'footway' && c.piece.hw !== 'path' && c.piece.hw !== 'steps') return true;
+      const b = c.block;
+      if (b.kind !== 'path' || b.name) return true;
+      if (b.hw !== 'footway' && b.hw !== 'path' && b.hw !== 'steps') return true;
       return !roads.some((r) => Math.abs(r.distM - c.distM) <= this.cfg.sideNearRoadM);
     });
 
-    const out: Block[] = [];
     for (const c of walked) {
-      const block = this.blocks.blockOf(c.piece.id);
-      if (!block) continue;
+      const block = c.block;
       if (this.unlocked.has(block.id) || this.isUnlocked(block)) {
         this.unlocked.add(block.id);
         continue;
       }
-      this.addCoverage(c.piece, c.fromM, c.toM);
-      if (this.coveredM(block) >= this.neededM(block)) {
+      const intervals = this.addCoverage(block, c.fromM, c.toM);
+      let coveredM = 0;
+      const fresh: Piece[] = [];
+      let startM = 0;
+      for (const p of block.pieces) {
+        const walkedM = overlapM(intervals, startM, startM + p.len);
+        coveredM += walkedM;
+        if (walkedM >= this.pieceNeededM(p) && !this.litPieces.has(p.id)) fresh.push(p);
+        startM += p.len;
+      }
+      if (coveredM >= this.neededM(block)) {
         this.unlocked.add(block.id);
-        out.push(block);
+        out.blocks.push(block);
+        continue;
+      }
+      for (const p of fresh) {
+        this.litPieces.add(p.id);
+        out.pieces.push(p);
       }
     }
     return out;
   }
 
   /** Replay saved segments (reload mid-walk, or streets that arrived late). */
-  replay(segs: ArrayLike<number>): Block[] {
-    const out = new Map<string, Block>();
+  replay(segs: ArrayLike<number>): Walked {
+    const blocks = new Map<string, Block>();
+    const pieces = new Map<string, Piece>();
     for (let i = 0; i + SEG_STRIDE <= segs.length; i += SEG_STRIDE) {
-      for (const b of this.add(segs[i], segs[i + 1], segs[i + 2], segs[i + 3], segs[i + 4])) {
-        out.set(b.id, b);
-      }
+      const w = this.add(segs[i], segs[i + 1], segs[i + 2], segs[i + 3], segs[i + 4]);
+      for (const b of w.blocks) blocks.set(b.id, b);
+      for (const p of w.pieces) pieces.set(p.id, p);
     }
-    return [...out.values()];
+    // A piece of a block that completed later comes with the block.
+    for (const b of blocks.values()) for (const p of b.pieces) pieces.delete(p.id);
+    return { blocks: [...blocks.values()], pieces: [...pieces.values()] };
   }
 
   private neededM(block: Block): number {
@@ -126,33 +153,44 @@ export class WalkAlong {
     );
   }
 
-  private coveredM(block: Block): number {
-    let sum = 0;
-    for (const p of block.pieces) sum += this.coverage.get(p.id)?.lenM ?? 0;
-    return sum;
+  private pieceNeededM(piece: Piece): number {
+    return Math.max(
+      piece.len * this.cfg.pieceLightFraction,
+      Math.min(piece.len, this.cfg.pieceMinCoverM),
+    );
   }
 
-  /** Add a walked interval to a piece, keeping the union so backtracking never double-counts. */
-  private addCoverage(piece: Piece, a: number, b: number): void {
-    const lo = clamp(Math.min(a, b), 0, piece.len);
-    const hi = clamp(Math.max(a, b), 0, piece.len);
-    if (hi - lo < 0.05) return;
-    let cov = this.coverage.get(piece.id);
-    if (!cov) {
-      cov = { intervals: [[lo, hi]], lenM: hi - lo };
-      this.coverage.set(piece.id, cov);
-      return;
+  /** Add a walked interval to a block, keeping the union so backtracking never double-counts. */
+  private addCoverage(block: Block, a: number, b: number): [number, number][] {
+    const lo = clamp(Math.min(a, b), 0, block.lenM);
+    const hi = clamp(Math.max(a, b), 0, block.lenM);
+    let intervals = this.coverage.get(block.id);
+    if (!intervals) {
+      intervals = [];
+      this.coverage.set(block.id, intervals);
     }
+    if (hi - lo < 0.05) return intervals;
     let i = 0;
-    while (i < cov.intervals.length && cov.intervals[i][0] < lo) i++;
-    cov.intervals.splice(i, 0, [lo, hi]);
+    while (i < intervals.length && intervals[i][0] < lo) i++;
+    intervals.splice(i, 0, [lo, hi]);
     const merged: [number, number][] = [];
-    for (const it of cov.intervals) {
+    for (const it of intervals) {
       const last = merged[merged.length - 1];
       if (last && it[0] <= last[1] + 1e-6) last[1] = Math.max(last[1], it[1]);
       else merged.push([it[0], it[1]]);
     }
-    cov.intervals = merged;
-    cov.lenM = merged.reduce((s, it) => s + it[1] - it[0], 0);
+    this.coverage.set(block.id, merged);
+    return merged;
   }
+}
+
+/** Length of [lo, hi] covered by sorted, merged intervals. */
+function overlapM(intervals: [number, number][], lo: number, hi: number): number {
+  let sum = 0;
+  for (const [a, b] of intervals) {
+    if (b <= lo) continue;
+    if (a >= hi) break;
+    sum += Math.min(b, hi) - Math.max(a, lo);
+  }
+  return sum;
 }
