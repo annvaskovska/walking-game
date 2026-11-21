@@ -31,6 +31,11 @@ export interface Theme {
     placeHalo: string;
     name: string;
     nameHalo: string;
+    /** Street names you have seen but not walked: under the fog, in moonlight. */
+    moonName: string;
+    /** Shops, cafés and other landmarks you have seen, labelled over the fog. */
+    landmark: string;
+    landmarkHalo: string;
   };
   fog: {
     color: string;
@@ -55,9 +60,38 @@ export interface Theme {
     /** Your lantern: a clear disc around you, and a cone of sight ahead while you move. */
     lanternM: number;
     coneM: number;
+    /** Outer half-angle of the cone (where it has faded out) and inner one (full strength). */
     coneHalfDeg: number;
+    coneInnerDeg: number;
+    /**
+     * Light stops at walls. Size of the lantern as a light source (m): the bigger, the softer the
+     * edge of a shadow, which widens with distance behind the wall.
+     */
+    lampRadiusM: number;
     /** Speed of the unlock wave along a street, m/s. */
     sweepMps: number;
+  };
+  /** What you have seen but not walked: it stays moonlit for good. */
+  seen: {
+    /** Cool light laid over the seen part of the map. */
+    moon: string;
+    /** Share of the fog a fully seen spot clears, 0..1 (walked streets clear all of it). */
+    clear: number;
+    /** Strength of the moonlight added over a seen spot. */
+    tint: number;
+    /** A house you have seen: dim blue roof and a moonlit outline. */
+    fill: string;
+    edge: string;
+    fillOpacity: number;
+    edgeOpacity: number;
+    /** Warm light on the walls that face your lantern right now. */
+    facade: string;
+    /**
+     * How far sight is remembered (m): in the beam ahead of you, and all around you. Houses and
+     * landmarks hit by your sight within this reach become seen.
+     */
+    beamM: number;
+    aroundM: number;
   };
   house: {
     fill: string;
@@ -92,12 +126,16 @@ export const nightTheme: Theme = {
     path: '#232833',
     rail: '#1f232c',
     ghost: '#c9d3e6',
-    ghostRoadOpacity: 0.14,
-    ghostPathOpacity: 0.08,
+    // Fainter than before line of sight: what you have seen now shows the streets for real.
+    ghostRoadOpacity: 0.08,
+    ghostPathOpacity: 0.045,
     place: '#8a94a8',
     placeHalo: '#0b0d12',
     name: '#f0c987',
     nameHalo: '#120d06',
+    moonName: '#b4c3e0',
+    landmark: '#d9c7a6',
+    landmarkHalo: '#0b0d12',
   },
   fog: {
     color: '#0b0d12',
@@ -111,10 +149,24 @@ export const nightTheme: Theme = {
     roadM: 17,
     pathM: 11,
     houseM: 7,
-    lanternM: 38,
-    coneM: 85,
-    coneHalfDeg: 30,
+    lanternM: 40,
+    coneM: 110,
+    coneHalfDeg: 38,
+    coneInnerDeg: 19,
+    lampRadiusM: 1.5,
     sweepMps: 50,
+  },
+  seen: {
+    moon: '#9db4e0',
+    clear: 0.58,
+    tint: 0.09,
+    fill: '#1c2230',
+    edge: '#4e5b76',
+    fillOpacity: 0.92,
+    edgeOpacity: 0.85,
+    facade: '#ffc98e',
+    beamM: 88,
+    aroundM: 37,
   },
   house: {
     fill: '#2b2117',

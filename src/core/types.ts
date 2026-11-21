@@ -67,6 +67,32 @@ export interface LitHouse extends Building {
   block: string | number;
 }
 
+/**
+ * A landmark from the map tiles: a shop, café, church, school… (OpenMapTiles `poi` layer). Its id
+ * comes from its name and position, so it stays the same across map updates.
+ */
+export interface Place {
+  id: string;
+  name: string;
+  /** OpenMapTiles poi class, e.g. `shop`, `cafe`, `place_of_worship`. */
+  cls: string;
+  /** OpenMapTiles poi rank: lower is more important. */
+  rank: number;
+  lon: number;
+  lat: number;
+  bbox: BBox;
+}
+
+/** A house you have seen (but maybe not walked past). Kept with its outline, so it draws anywhere. */
+export interface SeenHouse extends Building {
+  seenAt: number;
+}
+
+/** A landmark you have seen; its label stays on your map. */
+export interface SeenPlace extends Place {
+  seenAt: number;
+}
+
 /** A position fix from a location provider. */
 export interface Fix {
   lon: number;

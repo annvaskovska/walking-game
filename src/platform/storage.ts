@@ -3,7 +3,13 @@
  * touches it, so a native store (e.g. under Capacitor) can replace it later.
  */
 
-export type StoreName = 'lit' | 'walks' | 'houses' | 'meta';
+/**
+ * - `lit`, `houses`: streets and houses you walked (gold);
+ * - `seen`: the seen memory, one z17 raster tile per record (`{ key, data: Uint8Array }`);
+ * - `seenHouses`, `places`: houses and landmarks you have seen (moonlit, labelled);
+ * - `walks`, `meta`: walk records and the walk in progress.
+ */
+export type StoreName = 'lit' | 'walks' | 'houses' | 'seen' | 'seenHouses' | 'places' | 'meta';
 
 export interface Storage {
   get<T>(store: StoreName, key: string): Promise<T | undefined>;
@@ -21,12 +27,16 @@ const DB_NAME = 'wanderlight';
 /**
  * v2 added lit houses and cached building cells. v3 reads streets and houses from the map tiles
  * (which the service worker caches), so the street and building caches of v1-v2 are dropped.
+ * v4 adds what you have seen: the seen memory, seen houses and landmarks.
  */
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const KEYED: Record<Exclude<StoreName, 'meta'>, string> = {
   lit: 'id',
   walks: 'id',
   houses: 'id',
+  seen: 'key',
+  seenHouses: 'id',
+  places: 'id',
 };
 const DROPPED = ['cells', 'bldCells'];
 
@@ -121,9 +131,15 @@ export async function openStorage(name = DB_NAME): Promise<Storage> {
         if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta');
         for (const name of DROPPED) if (db.objectStoreNames.contains(name)) db.deleteObjectStore(name);
       };
-      r.onsuccess = () => resolve(r.result);
+      r.onsuccess = () => {
+        const db = r.result;
+        // A newer version opened in another tab: let it upgrade (this tab saves no more).
+        db.onversionchange = () => db.close();
+        resolve(db);
+      };
       r.onerror = () => reject(r.error);
-      r.onblocked = () => reject(new Error('IndexedDB blocked'));
+      // An older tab still has it open: it usually lets go in a moment; else start without it.
+      r.onblocked = () => setTimeout(() => reject(new Error('IndexedDB blocked')), 3000);
     });
     return new IdbStorage(db);
   } catch (e) {

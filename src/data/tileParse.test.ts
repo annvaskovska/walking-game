@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { tileToBBox } from '../geo/geo';
-import type { Building, WayInput } from '../core/types';
+import type { Building, Place, WayInput } from '../core/types';
 import { decodeTile, encodeTile } from './mvt';
 import type { MvtFeatureInput } from './mvt';
-import { TILE_LAYERS, classify, clipLine, clipRing, parseTile } from './tileParse';
+import { TILE_LAYERS, classify, clipLine, clipRing, isLandmark, parseTile } from './tileParse';
 
 // A z14 tile over the Jordaan in Amsterdam. One tile unit is about 0.36 m there.
 const Z = 14, X = 8414, Y = 5383, EXT = 4096;
@@ -22,11 +22,18 @@ const outer = (x0: number, y0: number, x1: number, y1: number) => [x0, y0, x1, y
 /** Hole: the same box the other way round. */
 const hole = (x0: number, y0: number, x1: number, y1: number) => [x0, y0, x0, y1, x1, y1, x1, y0, x0, y0];
 const building = (rings: number[][], props: Props = {}): MvtFeatureInput => ({ type: 3, props, parts: rings });
+/** A named poi point (or multipoint: one [u, v] pair per point). */
+const poi = (cls: string, subclass: string, name: string, at: number[], props: Props = {}): MvtFeatureInput => {
+  const parts: number[][] = [];
+  for (let i = 0; i < at.length; i += 2) parts.push([at[i], at[i + 1]]);
+  return { type: 1, props: { class: cls, subclass, name, rank: 10, ...props }, parts };
+};
 
 interface Scene {
   roads?: MvtFeatureInput[];
   names?: MvtFeatureInput[];
   buildings?: MvtFeatureInput[];
+  pois?: MvtFeatureInput[];
   extent?: number;
 }
 
@@ -37,9 +44,10 @@ function tileOf(s: Scene): Uint8Array {
     { name: 'transportation', extent, features: s.roads ?? [] },
     { name: 'transportation_name', extent, features: s.names ?? [] },
     { name: 'building', extent, features: s.buildings ?? [] },
+    { name: 'poi', extent, features: s.pois ?? [] },
   ]);
 }
-const parse = (s: Scene) => parseTile(decodeTile(tileOf(s), TILE_LAYERS), Z, X, Y);
+const parse = (s: Scene, x = X, y = Y) => parseTile(decodeTile(tileOf(s), TILE_LAYERS), Z, x, y);
 
 /** A lon/lat point back in tile units, to one decimal. */
 function unit(lon: number, lat: number, extent = EXT): [number, number] {
@@ -119,6 +127,73 @@ describe('classify', () => {
       {},
     ];
     for (const p of dropped) expect(classify(p), JSON.stringify(p)).toBeNull();
+  });
+});
+
+describe('isLandmark', () => {
+  it('keeps shops, food and drink, street-side services and public buildings', () => {
+    const kept: Props[] = [
+      { class: 'shop', subclass: 'convenience' },
+      { class: 'shop', subclass: 'mall' },
+      { class: 'clothing_store', subclass: 'clothes' },
+      { class: 'grocery', subclass: 'supermarket' },
+      { class: 'bakery', subclass: 'bakery' },
+      { class: 'library', subclass: 'books' },
+      { class: 'cafe', subclass: 'cafe' },
+      { class: 'restaurant', subclass: 'restaurant' },
+      { class: 'beer', subclass: 'pub' },
+      { class: 'pharmacy', subclass: 'pharmacy' },
+      { class: 'bank', subclass: 'bank' },
+      { class: 'post', subclass: 'post_office' },
+      { class: 'fuel', subclass: 'fuel' },
+      { class: 'lodging', subclass: 'hotel' },
+      { class: 'school', subclass: 'school' },
+      { class: 'school', subclass: 'kindergarten' },
+      { class: 'place_of_worship', subclass: 'christian' },
+      { class: 'place_of_worship' },
+      { class: 'museum', subclass: 'museum' },
+      { class: 'cinema', subclass: 'cinema' },
+      { class: 'theatre', subclass: 'theatre' },
+      { class: 'town_hall', subclass: 'community_centre' },
+      { class: 'hospital', subclass: 'hospital' },
+      { class: 'park', subclass: 'park' },
+      { class: 'railway', subclass: 'station' },
+      { class: 'railway', subclass: 'subway' },
+      { class: 'bus', subclass: 'bus_station' },
+      { class: 'shop', subclass: 'florist', level: 0 },
+    ];
+    for (const p of kept) expect(isLandmark(p), JSON.stringify(p)).toBe(true);
+  });
+
+  it('drops stops, street furniture, offices and what you go to by appointment', () => {
+    const dropped: Props[] = [
+      { class: 'bus', subclass: 'bus_stop' },
+      { class: 'railway', subclass: 'tram_stop' },
+      { class: 'entrance', subclass: 'subway_entrance' },
+      { class: 'parking', subclass: 'parking' },
+      { class: 'bicycle_parking', subclass: 'bicycle_parking' },
+      { class: 'bicycle_rental', subclass: 'bicycle_rental' },
+      { class: 'information', subclass: 'board' },
+      { class: 'toilets', subclass: 'toilets' },
+      { class: 'drinking_water', subclass: 'drinking_water' },
+      { class: 'atm', subclass: 'atm' },
+      { class: 'post', subclass: 'parcel_locker' },
+      { class: 'post', subclass: 'post_box' },
+      { class: 'fuel', subclass: 'charging_station' },
+      { class: 'office', subclass: 'company' },
+      { class: 'doctors', subclass: 'doctors' },
+      { class: 'dentist', subclass: 'dentist' },
+      { class: 'hairdresser', subclass: 'hairdresser' },
+      { class: 'shop', subclass: 'beauty' },
+      { class: 'shop', subclass: 'massage' },
+      { class: 'car', subclass: 'car_repair' },
+      { class: 'playground', subclass: 'playground' },
+      // Inside a mall or a station: not seen from the street.
+      { class: 'shop', subclass: 'newsagent', indoor: 1 },
+      { class: 'shop', subclass: 'kiosk', indoor: true },
+      {},
+    ];
+    for (const p of dropped) expect(isLandmark(p), JSON.stringify(p)).toBe(false);
   });
 });
 
@@ -623,5 +698,101 @@ describe('parseTile coordinates', () => {
     });
     expect(a.ways).toHaveLength(7);
     expect(strip(b)).toEqual(strip(a));
+  });
+});
+
+describe('parseTile places', () => {
+  const street: Scene = {
+    pois: [
+      poi('cafe', 'cafe', 'Cafe Walvis', [1000, 1000]),
+      poi('shop', 'convenience', 'Spar', [1200, 1000], { rank: 3 }),
+      poi('place_of_worship', 'christian', 'Noorderkerk', [2000, 1500], { rank: 1, 'name:latin': 'Noorderkerk', 'name:en': 'North Church' }),
+      poi('shop', 'gift', 'Магазин', [2100, 1500], { 'name:latin': 'Magazin' }),
+      // Not landmarks, unnamed, or not a point.
+      poi('bus', 'bus_stop', 'Westermarkt', [1100, 1000]),
+      poi('shop', 'beauty', 'Nails', [1300, 1000]),
+      poi('cafe', 'cafe', '', [1400, 1000]),
+      poi('cafe', 'cafe', '   ', [1450, 1000]),
+      { type: 1, props: { class: 'cafe', subclass: 'cafe', rank: 1 }, parts: [[1500, 1000]] },
+      { type: 2, props: { class: 'park', subclass: 'park', name: 'A line' }, parts: [[100, 100, 900, 100]] },
+      { type: 3, props: { class: 'park', subclass: 'park', name: 'A polygon' }, parts: [outer(100, 200, 900, 900)] },
+    ],
+  };
+  const byName = (ps: Place[]) => [...ps].sort((a, b) => a.name.localeCompare(b.name));
+
+  it('keeps named landmark points with their class and rank, at their spot', () => {
+    const { places } = parse(street);
+    expect(byName(places).map((p) => [p.name, p.cls, p.rank])).toEqual([
+      ['Cafe Walvis', 'cafe', 10],
+      ['Magazin', 'shop', 10],
+      ['Noorderkerk', 'place_of_worship', 1],
+      ['Spar', 'shop', 3],
+    ]);
+    const walvis = places.find((p) => p.name === 'Cafe Walvis')!;
+    expect(unit(walvis.lon, walvis.lat)).toEqual([1000, 1000]);
+    expect(walvis.bbox).toEqual([walvis.lon, walvis.lat, walvis.lon, walvis.lat]);
+    const [w, s, e, n] = tileToBBox(X, Y, Z);
+    for (const p of places) {
+      expect(p.lon).toBeGreaterThan(w);
+      expect(p.lon).toBeLessThan(e);
+      expect(p.lat).toBeGreaterThan(s);
+      expect(p.lat).toBeLessThan(n);
+    }
+  });
+
+  it('makes ids from class, name and spot to about a metre, the same in every tile and extent', () => {
+    const { places } = parse(street);
+    for (const p of places) {
+      expect(p.id).toBe(`p:${p.cls}:${p.name}:${Math.round(p.lon * 1e5)}:${Math.round(p.lat * 1e5)}`);
+    }
+    const double = (f: MvtFeatureInput): MvtFeatureInput => ({ ...f, parts: f.parts.map((q) => q.map((v) => v * 2)) });
+    const again = parse({ pois: street.pois!.map(double), extent: 2 * EXT });
+    expect(again.places.map((p) => p.id)).toEqual(places.map((p) => p.id));
+    // Other features coming and going leave them alone.
+    const more = parse({ ...town, pois: [poi('bakery', 'bakery', 'Bbrood', [3000, 3000]), ...street.pois!] });
+    expect(more.places.map((p) => p.id)).toEqual([expect.stringMatching(/^p:bakery:Bbrood:/), ...places.map((p) => p.id)]);
+  });
+
+  it('takes every point of a multipoint and drops repeats of the same place', () => {
+    const { places } = parse({
+      pois: [
+        poi('fast_food', 'fast_food', 'Putka', [500, 500, 3500, 3500]),
+        poi('fast_food', 'fast_food', 'Putka', [500, 500]),
+        poi('bakery', 'bakery', 'Putka', [500, 500]),
+      ],
+    });
+    expect(places.map((p) => [p.cls, unit(p.lon, p.lat)])).toEqual([
+      ['fast_food', [500, 500]],
+      ['fast_food', [3500, 3500]],
+      ['bakery', [500, 500]],
+    ]);
+    expect(new Set(places.map((p) => p.id)).size).toBe(3);
+  });
+
+  it('leaves the points in the buffer to the neighbouring tile, so each place is in one tile', () => {
+    const edge: Scene = {
+      pois: [
+        poi('cafe', 'cafe', 'West', [-10, 2000]),
+        poi('cafe', 'cafe', 'North', [2000, -1]),
+        poi('cafe', 'cafe', 'Corner', [0, 0]),
+        poi('cafe', 'cafe', 'East edge', [EXT, 2000]),
+        poi('cafe', 'cafe', 'South edge', [2000, EXT]),
+        poi('cafe', 'cafe', 'Far', [EXT + 60, EXT + 60]),
+      ],
+    };
+    expect(parse(edge).places.map((p) => p.name)).toEqual(['Corner']);
+    // The tile to the east has the point on the shared edge, under the same id as anywhere.
+    const east = parse({ pois: [poi('cafe', 'cafe', 'East edge', [0, 2000])] }, X + 1, Y).places;
+    expect(east).toHaveLength(1);
+    expect(east[0].lon).toBeCloseTo(tileToBBox(X, Y, Z)[2], 6);
+    expect(east[0].id).toBe(`p:cafe:East edge:${Math.round(east[0].lon * 1e5)}:${Math.round(east[0].lat * 1e5)}`);
+  });
+
+  it('returns no places for a tile without a poi layer', () => {
+    const layers = decodeTile(tileOf(town), TILE_LAYERS);
+    layers.delete('poi');
+    const r = parseTile(layers, Z, X, Y);
+    expect(r.places).toEqual([]);
+    expect(r.ways.length).toBeGreaterThan(8);
   });
 });

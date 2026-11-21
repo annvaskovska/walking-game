@@ -5,6 +5,7 @@ import { Motion } from '../core/motion';
 import { Progress, toStoredHouse, toStoredLit } from '../core/progress';
 import type { Building, Fix, LitHouse, LitPiece, Piece, WalkRecord } from '../core/types';
 import { WalkAlong, type Walked } from '../core/walkAlong';
+import { SightController } from './sightController';
 import { StreetGraph } from '../data/graph';
 import { TileSource, type GraphTile } from '../data/tiles';
 import { POS_KEY, STATS_KEY, WALKING_KEY, refreshTemplate } from '../data/tileUrl';
@@ -17,7 +18,7 @@ import { nameLines } from '../map/names';
 import { createBrowserLocation, type LocationError, type LocationProvider } from '../platform/location';
 import { isNativeApp } from '../platform/native';
 import { createSimLocation, simFactor } from '../platform/simLocation';
-import { SIM_ROUTE } from '../platform/simRoute';
+import { simRoute } from '../platform/simRoute';
 import { openStorage, persistStorage } from '../platform/storage';
 import { WakeLockKeeper } from '../platform/wakeLock';
 import { nightTheme } from '../theme';
@@ -50,6 +51,8 @@ interface Boot {
   tapped: number;
   fix: Fix | null;
   err: { code: number; message: string } | null;
+  /** Motion access asked for in the Start tap (iPhone), for the compass. */
+  orient?: 'granted' | 'denied';
   app: unknown;
 }
 
@@ -132,8 +135,9 @@ export async function startApp(): Promise<void> {
   const key = (k: string) => k + boot.sfx;
   // The iPhone app records with native GPS, which goes on with the screen locked.
   const native = !sim && isNativeApp();
+  const demo = simRoute(params.get('walk'));
   const provider: LocationProvider = sim
-    ? createSimLocation(simFactor(params.get('sim')))
+    ? createSimLocation(simFactor(params.get('sim')), demo.route, demo.name)
     : native
       ? (await import('../platform/nativeLocation')).createNativeLocation()
       : createBrowserLocation();
@@ -162,12 +166,13 @@ export async function startApp(): Promise<void> {
   let sessionTimer = 0;
   let litTimer = 0;
   let namesTimer = 0;
+  let seenTimer = 0;
   let posSavedAt = 0;
 
   const lastPos = readJson<{ lon: number; lat: number }>(key(POS_KEY));
   const known = lastPos && Number.isFinite(lastPos.lon) && Number.isFinite(lastPos.lat) ? lastPos : null;
   // The demo always starts on its route, so its tiles load behind the start screen.
-  const start = known ?? (sim ? { lon: SIM_ROUTE[0], lat: SIM_ROUTE[1] } : null);
+  const start = known ?? (sim ? { lon: demo.route[0], lat: demo.route[1] } : null);
 
   const tiles = new TileSource({
     onTile: (t) => onTile(t),
@@ -206,6 +211,9 @@ export async function startApp(): Promise<void> {
   walks = walkRecords.sort((a, b) => a.startedAt - b.startedAt);
   for (const p of progress.lit.values()) view.fog.addPiece(p.coords, p.kind);
   for (const h of progress.houses.values()) view.fog.addHouse(h, LONG_AGO);
+  // What you have seen from the streets you walked, moonlit.
+  const sight = new SightController(theme, view, graph, tiles, (id) => progress.houses.has(id));
+  await sight.load(storage);
   refreshNames(true);
   writeLifetime();
   ready = true;
@@ -248,8 +256,31 @@ export async function startApp(): Promise<void> {
     ]);
   }
 
+  /** The seen memory changes with every look: saved every few seconds, not every look. */
+  function queueSeen(): void {
+    if (!seenTimer && sight.hasSaves) seenTimer = window.setTimeout(() => void flushSeen(), 5000);
+  }
+  async function flushSeen(): Promise<void> {
+    clearTimeout(seenTimer);
+    seenTimer = 0;
+    const saves = sight.takeSaves();
+    const { tiles: t, houses, places } = saves;
+    try {
+      await Promise.all([
+        t.length ? storage.putMany('seen', t) : null,
+        houses.length ? storage.putMany('seenHouses', houses) : null,
+        places.length ? storage.putMany('places', places) : null,
+      ]);
+    } catch (e) {
+      // Kept for the next save; what you saw is never worth losing the walk over.
+      console.warn('Could not save what you saw', e);
+      sight.giveBack(saves);
+    }
+  }
+
   const saveNow = () => {
     void flushLit();
+    void flushSeen();
     persistSession(true);
   };
   window.addEventListener('pagehide', saveNow);
@@ -282,15 +313,19 @@ export async function startApp(): Promise<void> {
     clearTimeout(namesTimer);
     namesTimer = 0;
     view.setNames(nameLines(progress.lit.values()));
+    // Moonlit names under the fog, except where the gold one is.
+    view.setLitStreetNames(progress.streetNames());
   }
 
   // ---- Streets and houses arriving ----
   const newWalkAlong = () => new WalkAlong(graph.blocks, (b) => litBlocks.has(b.id));
 
   function onTile(t: GraphTile): void {
-    const added = graph.addTile(t.key, t.blocks, t.houses);
+    const added = graph.addTile(t.key, t.blocks, t.houses, t.places);
     if (!ready) return;
     relight(added);
+    sight.tileArrived();
+    queueSeen();
     if (!session) return;
     // The walk so far, over streets that just arrived.
     walkAlong = newWalkAlong();
@@ -342,6 +377,7 @@ export async function startApp(): Promise<void> {
     for (const [id, hs] of byBlock) {
       const lit = progress.applyHouses(hs, id, Date.now());
       for (const h of lit) view.fog.addHouse(h, t0 + Math.random() * 0.8);
+      sight.housesLit(lit);
       queue([], lit);
       if (session) session.newHouses = (session.newHouses ?? 0) + lit.length;
     }
@@ -386,6 +422,7 @@ export async function startApp(): Promise<void> {
       const fromM = pos ? projectOnPolylineM(pos.lon, pos.lat, piece.coords).alongM : 0;
       if (res.newPieces.length) view.fog.addPiece(piece.coords, piece.kind, { offsetM: 0, fromM, t0 });
       for (const h of res.newHouses) view.fog.addHouse(h, t0 + 0.15 + Math.random() * 0.4);
+      sight.housesLit(res.newHouses);
       session.newPieces += res.newPieces.length;
       session.newLenM += res.newPieces.reduce((s, p) => s + p.len, 0);
       session.newStreets.push(...res.newStreets);
@@ -428,6 +465,7 @@ export async function startApp(): Promise<void> {
         const along = projectOnPolylineM(cx, cy, block.coords).alongM;
         view.fog.addHouse(h, t0 + Math.abs(along - fromM) / speed + 0.15);
       }
+      sight.housesLit(res.newHouses);
       session.newPieces += res.newPieces.length;
       session.newLenM += res.newPieces.reduce((s, p) => s + p.len, 0);
       session.newStreets.push(...res.newStreets);
@@ -471,7 +509,10 @@ export async function startApp(): Promise<void> {
       session.segs.push(from.lon, from.lat, to.lon, to.lat, Math.round(verdict.radiusM * 10) / 10);
       walkAlong ??= newWalkAlong();
       light(walkAlong.add(from.lon, from.lat, to.lon, to.lat, verdict.radiusM));
+      // Recorded while the screen was off: what you saw meanwhile, looking the way you walked.
+      sight.fix(to, from, provider.now());
     }
+    queueSeen();
     persistSession();
   }
 
@@ -511,6 +552,7 @@ export async function startApp(): Promise<void> {
     stopWatch = provider.watch(onFix, onLocError, { walk: s.id, since: s.lastFix?.t, onCatchUp });
     void wake?.enable();
     view.camera.start(CONFIG.walkZoom);
+    sight.start();
   }
 
   function stopTracking(): void {
@@ -524,6 +566,7 @@ export async function startApp(): Promise<void> {
     motion.reset();
     view.puck.set(null);
     view.fog.setLantern(null);
+    sight.stop();
   }
 
   function startWalk(): void {
@@ -603,7 +646,7 @@ export async function startApp(): Promise<void> {
       await storage.putMany('walks', [rec]);
       persistStorage();
     }
-    await flushLit();
+    await Promise.all([flushLit(), flushSeen()]);
     await storage.delete('meta', 'activeSession');
     provider.reset?.();
     writeLifetime();
@@ -677,6 +720,7 @@ export async function startApp(): Promise<void> {
   let fast = true;
   let moving = false;
   let prev: { lon: number; lat: number } | null = null;
+  let prevHeading: number | null = null;
   /**
    * One loop draws the walker, the lantern and the camera in step with the map. Fast things (an
    * unlock wave, the camera sliding back) draw every frame; a walk at walking pace at 30 fps,
@@ -691,21 +735,29 @@ export async function startApp(): Promise<void> {
     lastDraw = now;
     fast = view.fog.animating(now / 1000);
     moving = false;
-    const f = session && motion.hasFix ? motion.frame(now) : null;
+    // A map pixel in metres: standing still, the walker (and the camera on it) holds within one.
+    const mpp = (EARTH_CIRCUMFERENCE_M * Math.cos((prev?.lat ?? 0) * DEG)) / (512 * 2 ** view.map.getZoom());
+    const f = session && motion.hasFix ? motion.frame(now, prev ? mpp : 0) : null;
     if (f) {
       view.camera.update(f.lon, f.lat, now);
       fast ||= view.camera.settling;
-      const lamp = { lon: f.lon, lat: f.lat, heading: f.heading, cone: f.cone };
-      view.puck.set(lamp);
-      view.fog.setLantern(lamp);
-      moving = f.moving;
-      if (moving && prev) {
-        const mpp = (EARTH_CIRCUMFERENCE_M * Math.cos(f.lat * DEG)) / (512 * 2 ** view.map.getZoom());
-        if (distanceM(prev.lon, prev.lat, f.lon, f.lat) / mpp / dt > 24) fast = true;
+      // The light comes from you and points where you look (compass), else where you walk.
+      const light = sight.frame(now, f);
+      view.puck.set({ lon: f.lon, lat: f.lat, heading: light.heading, cone: light.cone });
+      view.fog.setLantern(light);
+      moving = f.moving || light.settling;
+      // Turning to look around: the beam and its shadows follow at full speed.
+      if (light.heading !== null && prevHeading !== null) {
+        const turn = Math.abs(((light.heading - prevHeading + 540) % 360) - 180);
+        if (turn / dt > 20) moving = true;
       }
+      prevHeading = light.heading;
+      queueSeen();
+      if (moving && prev && distanceM(prev.lon, prev.lat, f.lon, f.lat) / mpp / dt > 24) fast = true;
       prev = { lon: f.lon, lat: f.lat };
     } else {
       prev = null;
+      prevHeading = null;
       // Nothing to show under a start screen with no map behind it.
       if (splash.visible && !document.documentElement.classList.contains('wl-has-map') && !fast) return;
     }
@@ -734,6 +786,7 @@ export async function startApp(): Promise<void> {
     writeLocal(key(WALKING_KEY), '1');
     splash.hide();
     beginTracking(session);
+    sight.askOnNextTap();
     const f = session.lastFix;
     if (f) {
       view.arm();
@@ -760,9 +813,13 @@ export async function startApp(): Promise<void> {
   if (sim) {
     // Test hook for the demo walk only.
     (window as unknown as Record<string, unknown>).__wanderlight = {
-      view, tiles, graph, progress, motion, walks,
+      view, tiles, graph, progress, motion, walks, sight,
       get session() {
         return session;
+      },
+      /** Look this way (degrees, null: the way you walk), as a phone with a compass would. */
+      look: (deg: number | null) => {
+        sight.simLook = deg;
       },
       summary: () => ({
         tiles: graph.tileCount,
@@ -774,6 +831,11 @@ export async function startApp(): Promise<void> {
         piecesLit: progress.piecesLit,
         streets: progress.streetNames(),
         fog: view.fog.stats,
+        seen: {
+          tiles: sight.memory.grid.tiles.size,
+          houses: sight.memory.houses.size,
+          places: [...sight.memory.places.values()].map((p) => p.name),
+        },
         net: tiles.stats,
         session: session && {
           distanceM: Math.round(session.distanceM),

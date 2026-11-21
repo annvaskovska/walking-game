@@ -1,10 +1,10 @@
 import type { Block } from '../core/blocks';
-import type { Building } from '../core/types';
+import type { Building, Place } from '../core/types';
 import { lonLatToTile, metresPerDegree } from '../geo/geo';
 import type { TileJob, TileResult } from './tileWorker';
 import { tileTemplate, tileUrl } from './tileUrl';
 
-/** Streets and houses are read from this zoom: the most detailed level of the basemap. */
+/** Streets, houses and landmarks are read from this zoom: the most detailed level of the basemap. */
 export const GRAPH_Z = 14;
 /** Graph tiles kept beyond the ones around you, so walking back and forth over a tile edge is free. */
 const SPARE_TILES = 4;
@@ -15,10 +15,12 @@ export interface GraphTile {
   key: string;
   blocks: Block[];
   houses: Building[];
+  /** Landmarks in this tile (each belongs to exactly one tile). */
+  places: Place[];
 }
 
 export interface TileHooks {
-  /** A tile's streets and houses are ready. */
+  /** A tile's streets, houses and landmarks are ready. */
   onTile(t: GraphTile): void;
   /** A tile far behind you was dropped from memory. */
   onDrop(key: string): void;
@@ -57,7 +59,7 @@ function takePrefetch(key: string): Promise<ArrayBuffer> | undefined {
 /**
  * The one place tiles are downloaded. The map asks for them through a custom protocol, and the
  * street graph asks for the z14 tiles around you; both share a single download per tile. Each
- * graph tile is parsed in a worker into street blocks and houses.
+ * graph tile is parsed in a worker into street blocks, houses and landmarks.
  */
 export class TileSource {
   readonly template = tileTemplate();
@@ -206,7 +208,7 @@ export class TileSource {
         this.stats.parseMs += res.ms;
         this.loaded.push(key);
         this.retryMs = 1000;
-        this.hooks.onTile({ key, blocks: res.blocks, houses: res.houses });
+        this.hooks.onTile({ key, blocks: res.blocks, houses: res.houses, places: res.places });
         this.evict();
         this.updateWaiting();
       })

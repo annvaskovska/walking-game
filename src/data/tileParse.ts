@@ -13,20 +13,23 @@
  *    most of its length, or a short one across a road, is dropped: walking it lights the road.
  *  - Lines and buildings are clipped exactly to the tile square, so neighbouring tiles join without
  *    overlaps and each piece of street belongs to exactly one tile.
+ *  - Landmarks come from the `poi` layer: the named shops, cafés, churches, schools… a walker would
+ *    recognise a street by. Points in the tile's buffer are left to the tile they are in.
  */
 import { bboxOfCoords } from '../geo/geo';
-import type { Building, PieceKind, WayInput } from '../core/types';
+import type { Building, PieceKind, Place, WayInput } from '../core/types';
 import type { MvtLayer, MvtValue } from './mvt';
 
 export interface ParsedTile {
   ways: WayInput[];
   houses: Building[];
+  places: Place[];
 }
 
 type Props = Record<string, MvtValue>;
 
 /** Layers parseTile reads; pass to decodeTile so the rest of the tile is skipped. */
-export const TILE_LAYERS: ReadonlySet<string> = new Set(['transportation', 'transportation_name', 'building']);
+export const TILE_LAYERS: ReadonlySet<string> = new Set(['transportation', 'transportation_name', 'building', 'poi']);
 
 const ROAD_CLASSES = new Set(['trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service', 'track']);
 const PATH_SUBCLASSES = new Set(['footway', 'path', 'cycleway', 'steps', 'bridleway', 'pedestrian']);
@@ -53,6 +56,46 @@ export function classify(p: Props): { kind: PieceKind; hw: string } | null {
   if (cls === 'trunk' && (truthy(p.expressway) || truthy(p.ramp))) return null;
   if (cls === 'service' && (p.service === 'parking_aisle' || p.service === 'driveway')) return null;
   return { kind: 'road', hw: cls };
+}
+
+/**
+ * Landmarks are what you would name when giving the way: past the bakery, left at the church, the
+ * street with the Spar. So shops, food and drink, services with a shop window, and public
+ * buildings. Not stops, boards, parking, ATMs, parcel lockers, charging points and bike docks, nor
+ * what you go to by appointment, often upstairs (offices, doctors, dentists, hairdressers, beauty
+ * salons): on real tiles those were half of the named points, and hardly any of them shape a street.
+ */
+const LANDMARK_CLASSES = new Set([
+  // Shops
+  'shop', 'clothing_store', 'grocery', 'alcohol_shop', 'bakery', 'butcher', 'bicycle', 'music', 'library',
+  // Food and drink
+  'restaurant', 'cafe', 'fast_food', 'bar', 'beer', 'ice_cream',
+  // Services you see from the street
+  'pharmacy', 'bank', 'post', 'fuel', 'lodging',
+  // Public buildings and places
+  'school', 'college', 'place_of_worship', 'museum', 'theatre', 'cinema', 'art_gallery', 'attraction',
+  'monument', 'castle', 'zoo', 'town_hall', 'police', 'hospital', 'stadium', 'sports_centre',
+  'park', 'garden', 'cemetery',
+  // Stations, not stops
+  'railway', 'bus', 'ferry_terminal',
+]);
+/** Classes that mix landmarks with street furniture: only these subclasses count. */
+const LANDMARK_ONLY: Readonly<Record<string, ReadonlySet<string>>> = {
+  post: new Set(['post_office']),
+  fuel: new Set(['fuel']),
+  railway: new Set(['station', 'subway', 'halt']),
+  bus: new Set(['bus_station']),
+};
+/** Shops you go to by appointment. */
+const NOT_LANDMARK_SUBCLASSES = new Set(['beauty', 'massage', 'tattoo']);
+
+/** Is this `poi` feature a landmark (whatever its name)? */
+export function isLandmark(p: Props): boolean {
+  const cls = String(p.class ?? '');
+  if (!LANDMARK_CLASSES.has(cls) || truthy(p.indoor)) return false;
+  const sub = p.subclass == null ? '' : String(p.subclass);
+  const only = LANDMARK_ONLY[cls];
+  return only ? only.has(sub) : !NOT_LANDMARK_SUBCLASSES.has(sub);
 }
 
 // ---- Small geometry kit, in tile units ----
@@ -314,18 +357,19 @@ function fnv(s: string): string {
 }
 
 const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
+const text = (v: MvtValue | undefined) => (v == null ? '' : String(v).trim());
 
 /**
- * Parse the street graph and houses out of a decoded z14 tile.
+ * Parse the street graph, houses and landmarks out of a decoded z14 tile.
  * Coordinates come back as lon/lat; ids are stable for the same geometry.
  */
 export function parseTile(layers: Map<string, MvtLayer>, z: number, x: number, y: number): ParsedTile {
   const tr = layers.get('transportation');
   const extent = tr?.extent ?? layers.get('building')?.extent ?? 4096;
   const n = 2 ** z;
-  const lonOf = (u: number) => round6(((x + u / extent) / n) * 360 - 180);
-  const latOf = (v: number) =>
-    round6((Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + v / extent)) / n))) * 180) / Math.PI);
+  const lonOf = (u: number, ext = extent) => round6(((x + u / ext) / n) * 360 - 180);
+  const latOf = (v: number, ext = extent) =>
+    round6((Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + v / ext)) / n))) * 180) / Math.PI);
   const latC = (Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + 0.5)) / n))) * 180) / Math.PI;
   /** Metres per tile unit at this tile's latitude. */
   const mpu = (40_075_016.686 * Math.cos((latC * Math.PI) / 180)) / (n * extent);
@@ -608,7 +652,33 @@ export function parseTile(layers: Map<string, MvtLayer>, z: number, x: number, y
     flush();
   }
 
-  return { ways, houses };
+  // ---- 7. Landmarks ----
+  const places: Place[] = [];
+  const placeIds = new Set<string>();
+  const poi = layers.get('poi');
+  const pext = poi?.extent ?? extent;
+  for (const f of poi?.features ?? []) {
+    if (f.type !== 1 || !isLandmark(f.props)) continue;
+    // The label name the map style uses.
+    const name = text(f.props['name:latin']) || text(f.props.name);
+    if (!name) continue;
+    const cls = String(f.props.class);
+    const r = Number(f.props.rank);
+    const rank = Number.isFinite(r) ? r : 999;
+    // One part per point: a multipoint is several landmarks of the same name.
+    for (const [u, v] of f.parts) {
+      // The buffer repeats the neighbours' points; the edge itself goes with the tile east or south.
+      if (!(u >= 0 && u < pext && v >= 0 && v < pext)) continue;
+      const lon = lonOf(u, pext), lat = latOf(v, pext);
+      // From what it is and where (to about a metre), so no tile or map build changes it.
+      const id = `p:${cls}:${name}:${Math.round(lon * 1e5)}:${Math.round(lat * 1e5)}`;
+      if (placeIds.has(id)) continue;
+      placeIds.add(id);
+      places.push({ id, name, cls, rank, lon, lat, bbox: [lon, lat, lon, lat] });
+    }
+  }
+
+  return { ways, houses, places };
 }
 
 function orient(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number {
