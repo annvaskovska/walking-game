@@ -6,10 +6,6 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0b0d12" />
     <meta name="description" content="Your city starts in fog. Every street you walk lights up, with its houses and its name, for good." />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Mr Sparkles" />
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
@@ -27,10 +23,12 @@
         function json(k) {
           try { return JSON.parse(get(k) || 'null'); } catch (e) { return null; }
         }
-        var sim = /[?&]sim(=|&|$)/.test(location.search);
-        // The demo walk keeps its own records, apart from your real ones.
+        // Only the iPhone app walks for real; a browser walks the demo (ADR 0013). Capacitor puts
+        // window.Capacitor on the page before any script runs.
+        var cap = window.Capacitor, sim = !(cap && cap.isNativePlatform && cap.isNativePlatform());
+        // The demo walk keeps its own records, apart from real ones.
         var sfx = sim ? '-sim' : '';
-        window.__wl = { sim: sim, sfx: sfx, tapped: 0, fix: null, err: null, app: null };
+        window.__wl = { sim: sim, sfx: sfx, tapped: 0, app: null };
         // The map's worker comes down alongside the app instead of after it (see vite.config.ts).
         var wk = '%WL_WORKER%';
         if (wk) fetch(wk).then(function (r) { return r.arrayBuffer(); }).catch(function () {});
@@ -486,13 +484,14 @@
     <div class="wl-toast" id="wl-toast" role="status" aria-live="polite" hidden></div>
 
     <script>
-      // A tap on Start before the app has loaded still starts at once: ask for your location in
-      // the same tap (browsers want a gesture for that), and leave the rest to the app. The iPhone
-      // app asks through its native GPS instead, once the app is up.
+      // A tap on Start before the app has loaded still starts at once: the app starts the walk as
+      // soon as it is up. The iPhone app asks for location through its native GPS then.
       (function () {
         var B = window.__wl, go = document.getElementById('wl-go');
-        var cap = window.Capacitor, native = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
-        if (B.sim) go.textContent = 'Start the demo walk';
+        if (B.sim) {
+          go.textContent = 'Start the demo walk';
+          document.querySelector('.wl-fine__privacy').textContent = 'A walk through Amsterdam, no location needed.';
+        }
         try {
           var s = JSON.parse(localStorage.getItem('wl-stats' + B.sfx) || 'null');
           if (s && s.streets > 0) {
@@ -504,7 +503,7 @@
         go.addEventListener('click', function () {
           // Turn the phone to look around: on iPhone the compass needs permission, which a page
           // may only ask for in a tap, so it asks on every Start tap until it has it (the iPhone
-          // app grants it without asking). It never holds up the GPS below. Its answer: B.orient.
+          // app grants it without asking). The demo's beam follows it too. Its answer: B.orient.
           var DOE = window.DeviceOrientationEvent;
           if (B.orient !== 'granted' && DOE && typeof DOE.requestPermission === 'function') {
             try {
@@ -523,17 +522,6 @@
           if (B.app || B.tapped) return;
           B.tapped = Date.now();
           go.setAttribute('aria-busy', 'true');
-          if (B.sim || native || !navigator.geolocation || !window.isSecureContext) return;
-          navigator.geolocation.getCurrentPosition(
-            function (p) {
-              var c = p.coords;
-              B.fix = { lon: c.longitude, lat: c.latitude, acc: c.accuracy, t: p.timestamp || Date.now(), speed: c.speed, heading: c.heading };
-            },
-            function (e) {
-              B.err = { code: e.code, message: e.message };
-            },
-            { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 },
-          );
         });
       })();
     </script>
