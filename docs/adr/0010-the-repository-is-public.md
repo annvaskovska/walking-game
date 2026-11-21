@@ -14,7 +14,7 @@ Shipping to TestFlight adds account details, such as team IDs and API keys, that
 - Nothing that lands in git names a person, an account, a machine or a place tied to a person: code, comments, docs, ADRs, images, commit messages, branch names, and pull request titles and bodies.
   `AGENTS.md` lists what that covers.
 - A script that needs an account detail reads it from the environment and names the variable, never the value, as `scripts/testflight.sh` does (ADR 0009).
-- Demo walks and test fixtures use public places, never a track from a real walk.
+- Demo walks, test fixtures, comments and examples use the demo city, Amsterdam, never a track from a real walk or the city a contributor lives in.
 - `.gitignore` keeps out `.context/`, where real GPS traces for local benchmarks live, and signing files: `*.p8`, `*.p12`, `*.mobileprovision`.
 - The Xcode project in git holds no signing team: `DEVELOPMENT_TEAM` is empty there.
 - `scripts/check-public.sh` fails on a signing team in the Xcode project, a path on a machine, an email address, a private key, a key, env or GPS track file, and a commit whose author or committer address is not a GitHub no-reply one.

@@ -14,8 +14,8 @@ Before you write any of them, keep out:
 - **Secrets:** keys, tokens, passwords, certificates, `.p8` files, provisioning profiles, `.env` files.
 - **Account details:** Apple team IDs, App Store Connect key and issuer IDs, Apple Accounts, any account or customer number.
 - **People:** names, email addresses, phone numbers, and who works on what.
-- **Places tied to a person:** a home, a workplace, a regular route, or a GPS track from a real walk.
-  Demo walks and test fixtures use public places.
+- **Places tied to a person:** a home, a home city or country, a workplace, a regular route, or a GPS track from a real walk.
+  Demo walks, test fixtures, comments and examples use the demo city, Amsterdam.
 - **Machines:** local paths such as `/Users/<name>`, device names, serial numbers, IP addresses, private URLs.
 - **Media** that shows any of the above, or carries location metadata.
 
