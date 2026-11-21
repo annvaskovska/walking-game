@@ -96,7 +96,7 @@ export class Splash {
     } else if (walk.newPieces > 0) {
       line = `You lit new stretches${newHouses ? ` and ${newHouses} house${newHouses === 1 ? '' : 's'}` : ''}.`;
     } else {
-      line = 'Walk along a street, past about half of a block, to light it.';
+      line = 'Walk along a street to light it.';
     }
     byId('wl-sum-new').innerHTML = line;
     this.card.classList.add('wl-summary');
