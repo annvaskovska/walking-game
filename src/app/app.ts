@@ -742,7 +742,7 @@ export async function startApp(): Promise<void> {
       fast ||= view.camera.settling;
       // The light comes from you and points where you look (compass), else where you walk.
       const light = sight.frame(now, f);
-      view.puck.set({ lon: f.lon, lat: f.lat, heading: light.heading, cone: light.cone });
+      view.puck.set({ lon: f.lon, lat: f.lat });
       view.fog.setLantern(light);
       moving = f.moving || light.settling;
       // Turning to look around: the beam and its shadows follow at full speed.

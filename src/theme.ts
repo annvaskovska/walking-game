@@ -106,9 +106,11 @@ export interface Theme {
     windowWarm: string;
     windowPale: string;
   };
+  /** Mr Sparkles on the map: his orb from the middle to the edge, his tight shine and his wide glow. */
   puck: {
     core: string;
-    ring: string;
+    edge: string;
+    shine: string;
     glow: string;
   };
 }
@@ -182,8 +184,9 @@ export const nightTheme: Theme = {
     windowPale: '#ffeacc',
   },
   puck: {
-    core: '#fff6e6',
-    ring: '#ffb46b',
-    glow: '#ffcf8a',
+    core: '#fffdf6',
+    edge: '#ffd596',
+    shine: '#fff1d6',
+    glow: '#ffbd7c',
   },
 };

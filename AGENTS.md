@@ -69,7 +69,7 @@ Every change keeps these invariants:
 - `src/map/`: style, GPU fog, shadows, seen memory, walker, follow camera, gold names.
 - `src/ui/`: start screen, walk stats, notices.
 - `src/app/`: the controller.
-- `index.html`: the start screen, its CSS and the boot script, inline.
+- `index.html`: the start screen with Mr Sparkles in the fog, its CSS and its scripts, inline.
 - `ios/`: the Xcode project and the native GPS plugin.
 - `scripts/make-icons.mjs` draws the app icons, the iPhone one too; `scripts/testflight.sh` uploads to TestFlight.
 - `docs/guide.md`: how to run, install and ship it, and how it works under the hood. `docs/adr/`: why.

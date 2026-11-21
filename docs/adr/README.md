@@ -17,3 +17,4 @@ An accepted record is never rewritten, only superseded.
 | [0009](0009-testflight-uploads-from-a-mac-with-an-api-key.md) | `npm run ios:testflight` signs with an App Store Connect API key from the environment and uploads from a Mac |
 | [0010](0010-the-repository-is-public.md) | Nothing in git names a person, an account, a machine or a place tied to a person; account details come from the environment, and `scripts/check-public.sh` checks every test run and commit |
 | [0011](0011-the-app-is-called-mr-sparkles.md) | The app is Mr Sparkles with the bundle ID `io.github.annvaskovska.mrsparkles`; names that find stored data stay `wanderlight` |
+| [0012](0012-mr-sparkles-is-a-firefly-you-meet-on-the-first-screen.md) | Mr Sparkles is one flickering round light, on the map and on the start screen, where a first-time walker drags him over a fogged picture of the demo city; Nunito is the interface's type |

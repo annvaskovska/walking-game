@@ -28,7 +28,8 @@ Mr Sparkles is a small walking motivator.
 Your city starts in fog, and every street you walk lights up with its houses and its name.
 The light stays, so each walk shows you where you have not been yet.
 
-Open it and you get one start screen: what it is, your streets so far, and **Start walking**.
+Open it and you get one start screen: a question, your streets so far, and **Start walking**.
+The first time, Mr Sparkles waits there in the fog: drag him around and the streets he passes light up.
 After that it is just the map: you, a beam of light ahead of you, and the fog.
 
 ---

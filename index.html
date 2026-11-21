@@ -13,11 +13,8 @@
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
-    <!-- The start screen's type, shipped with the app (OFL, see public/fonts/). Some
-         accented letters come from the latin-ext files, loaded only when a name needs them. -->
-    <link rel="preload" href="/fonts/instrument-serif-latin.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/fonts/instrument-serif-italic-latin.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/fonts/instrument-sans-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <!-- The start screen's type, shipped with the app (OFL, see public/fonts/). -->
+    <link rel="preload" href="/fonts/nunito-latin.woff2" as="font" type="font/woff2" crossorigin />
     <title>Mr Sparkles</title>
     <script>
       // Runs before the first paint: picks the screen to show and starts downloading the map tile
@@ -63,9 +60,10 @@
       })();
     </script>
     <style>
-      /* Instrument Serif, slim and sharp, set large for the name and the numbers; Instrument Sans
-         for everything else. The map's labels use the same files (src/map/style.ts). The serif
-         waits for its file rather than flashing in a stand-in; the sans swaps in. */
+      /* Nunito, round and soft, for everything you read and tap; Instrument Serif, slim and
+         sharp, set large for the summary's numbers. The map's labels use the serif and Instrument
+         Sans from the same folder (src/map/style.ts). The serif waits for its file rather than
+         flashing in a stand-in; Nunito swaps in. */
       @font-face {
         font-family: 'Instrument Serif';
         font-style: normal;
@@ -98,21 +96,13 @@
         src: url(/fonts/instrument-serif-italic-latin-ext.woff2) format('woff2');
         unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
       }
+      /* Latin only: other letters come from the phone's own rounded or system face. */
       @font-face {
-        font-family: 'Instrument Sans';
+        font-family: 'Nunito';
         font-style: normal;
-        font-weight: 400 700;
+        font-weight: 400 800;
         font-display: swap;
-        src: url(/fonts/instrument-sans-latin.woff2) format('woff2');
-        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-      }
-      @font-face {
-        font-family: 'Instrument Sans';
-        font-style: normal;
-        font-weight: 400 700;
-        font-display: swap;
-        src: url(/fonts/instrument-sans-latin-ext.woff2) format('woff2');
-        unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+        src: url(/fonts/nunito-latin.woff2) format('woff2');
       }
       :root {
         --bg: #0b0d12;
@@ -123,7 +113,7 @@
         --gold: #f0c987;
         --amber: #ffb46b;
         --serif: 'Instrument Serif', ui-serif, 'New York', Georgia, serif;
-        --sans: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        --sans: 'Nunito', ui-rounded, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
         --top: env(safe-area-inset-top, 0px);
         --bottom: env(safe-area-inset-bottom, 0px);
       }
@@ -188,11 +178,9 @@
         max-width: 380px;
         display: flex;
         flex-direction: column;
-        align-items: center;
-        text-align: center;
         text-wrap: pretty;
       }
-      /* Over the map, the card sits on night that fades up into it: your streets show above. */
+      /* The card sits on night that fades up into the map or the fog: your streets show above. */
       .wl-card::before {
         content: '';
         position: absolute;
@@ -205,18 +193,59 @@
         background: linear-gradient(180deg, rgba(11, 13, 18, 0) 0, rgba(11, 13, 18, 0.8) 70px, var(--bg) 118px);
         transition: opacity 0.9s ease;
       }
-      /* First open, nothing behind yet: the name in the middle of the night, Start at the bottom. */
-      html:not(.wl-has-map) .wl-card::before { opacity: 0; }
-      html:not(.wl-has-map) .wl-card:not(.wl-summary) { flex: 1 0 auto; margin-top: 0; }
-      html:not(.wl-has-map) .wl-card:not(.wl-summary) .wl-head { margin-block: auto; }
-      .wl-head { display: flex; flex-direction: column; align-items: center; }
-      .wl-logo { width: 104px; height: 104px; }
-      .wl-title { margin: 10px 0 0; font: 400 64px/0.95 var(--serif); letter-spacing: -0.02em; color: var(--ink); }
-      .wl-title i { color: var(--gold); }
-      .wl-lead { margin: 16px 0 0; max-width: 270px; font-size: 16px; line-height: 1.5; color: var(--muted); }
+      .wl-title { margin: 0; font-size: 22px; font-weight: 700; line-height: 1.25; color: var(--ink); text-wrap: balance; }
+      .wl-lead { margin: 6px 0 0; font-size: 15px; font-weight: 500; line-height: 1.45; color: var(--muted); }
+
+      /* ---- First open, no map behind yet: Mr Sparkles in the fog (ADR 0012) ----
+         He wanders over a fogged picture of the demo city, a drag moves him, and where he has been
+         stays lit. The script at the end of the body brings it to life; before it runs he glows and
+         pulses in the night. */
+      .wl-scene { position: fixed; inset: 0; z-index: -1; overflow: hidden; touch-action: none; cursor: grab; }
+      .wl-scene:active { cursor: grabbing; }
+      .wl-has-map .wl-scene { display: none; }
+      /* At two thirds of the capture's pixels the blocks read as blocks; --cx/--cy is where he wanders. */
+      .wl-scene[data-live] { background: #0f1218 url(/welcome.jpg) no-repeat calc(var(--cx) - 260px) calc(var(--cy) - 380px) / 520px auto; }
+      .wl-scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+      .wl-scene__warm { mix-blend-mode: soft-light; opacity: 0.55; }
+      .wl-scene__fog { opacity: 0.96; }
+      .wl-spk { position: absolute; left: 50%; top: 38%; width: 0; height: 0; pointer-events: none; }
+      .wl-spk svg { position: absolute; left: -75px; top: -75px; width: 150px; height: 150px; overflow: visible; }
+      .wl-spk svg * { transform-box: fill-box; transform-origin: center; }
+      .wl-spk__body { filter: drop-shadow(0 0 4px #ffbe6e); }
+      .wl-spk__pulse { fill: none; stroke: #ffdca6; stroke-width: 0.9; opacity: 0; }
+      /* His flashlight: a warm cone that points where he goes. */
+      .wl-spk__beam {
+        position: absolute;
+        left: -107px;
+        top: -107px;
+        width: 214px;
+        height: 214px;
+        border-radius: 50%;
+        mix-blend-mode: screen;
+        transform: rotate(var(--a, 0deg));
+        background: conic-gradient(from -38deg, rgba(255, 201, 142, 0) 0deg, rgba(255, 201, 142, 0.5) 19deg, rgba(255, 201, 142, 0.5) 57deg, rgba(255, 201, 142, 0) 76deg);
+        -webkit-mask: radial-gradient(circle, #000 4%, rgba(0, 0, 0, 0.55) 34%, transparent 68%);
+        mask: radial-gradient(circle, #000 4%, rgba(0, 0, 0, 0.55) 34%, transparent 68%);
+      }
+      .wl-hint { position: absolute; left: 50%; top: calc(38% + 34px); margin: 0; transform: translateX(-50%); white-space: nowrap; font-size: 12.5px; font-weight: 600; color: rgba(244, 234, 216, 0.6); pointer-events: none; transition: opacity 0.6s ease; }
+      /* He flickers like a candle and never hangs quite still; untouched, he swells and two soft
+         rings leave him, to say he can be moved. */
+      @media (prefers-reduced-motion: no-preference) {
+        .wl-spk__halo { animation: wl-flick 3.1s linear infinite; }
+        .wl-spk__bob { animation: wl-drift 9s ease-in-out infinite; }
+        .wl-spk__body { animation: wl-flame 2.3s linear infinite; }
+        .wl-spk[data-invite] .wl-spk__pulse { animation: wl-invite 2.4s ease-out infinite; }
+        .wl-spk[data-invite] .wl-spk__pulse + .wl-spk__pulse { animation-delay: 1.2s; }
+        .wl-spk[data-invite] .wl-spk__pop { animation: wl-swell 1.2s ease-in-out infinite; }
+      }
+      @keyframes wl-flick { 0%, 100% { opacity: 0.85; transform: scale(1); } 12% { opacity: 1; transform: scale(1.1); } 24% { opacity: 0.7; transform: scale(0.93); } 41% { opacity: 0.95; transform: scale(1.06); } 58% { opacity: 0.78; transform: scale(0.97); } 77% { opacity: 1; transform: scale(1.12); } }
+      @keyframes wl-drift { 0%, 100% { transform: translate(0, 0); } 20% { transform: translate(3px, -3px); } 45% { transform: translate(-2px, -4.5px); } 70% { transform: translate(-3.5px, 1px); } 85% { transform: translate(1.5px, 2px); } }
+      @keyframes wl-flame { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.12, 1.05); } 30% { transform: scale(0.92, 1.02); } 52% { transform: scale(1.06, 0.95); } 70% { transform: scale(0.95); } 86% { transform: scale(1.1, 1.14); } }
+      @keyframes wl-invite { 0% { opacity: 0.75; transform: scale(0.7); } 100% { opacity: 0; transform: scale(3.6); } }
+      @keyframes wl-swell { 0%, 100% { transform: scale(1); } 30% { transform: scale(1.22); } }
 
       /* After a walk: the distance, large, and what it added to your map. */
-      .wl-sum { display: none; width: 100%; flex-direction: column; align-items: center; }
+      .wl-sum { display: none; width: 100%; flex-direction: column; align-items: center; text-align: center; }
       .wl-summary .wl-head, .wl-summary .wl-stats { display: none; }
       .wl-summary .wl-sum { display: flex; }
       .wl-hero { margin: 0; font: 400 104px/0.9 var(--serif); letter-spacing: -0.015em; color: var(--ink); white-space: nowrap; }
@@ -229,26 +258,30 @@
       .wl-more { margin: 6px 0 0; font-size: 14px; line-height: 1.45; color: var(--muted); }
       .wl-sum[data-empty] .wl-more { margin-top: 18px; }
 
-      .wl-stats { margin: 22px 0 0; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+      .wl-stats { margin: 14px 0 0; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
       .wl-stats b { color: var(--text); font-weight: 600; }
       .wl-msg { margin: 20px 0 0; padding: 12px 14px; width: 100%; border-radius: 14px; background: rgba(255, 140, 90, 0.08); border: 1px solid rgba(255, 150, 100, 0.22); font-size: 14px; line-height: 1.45; text-align: left; color: #f1d6c4; }
       .wl-msg b { color: var(--ink); font-weight: 600; }
+      /* Start: dark glass with a gold edge, lit from inside. */
       .wl-go {
         position: relative;
-        margin-top: 26px;
+        margin-top: 20px;
         width: 100%;
-        height: 58px;
-        border: 0;
+        height: 56px;
+        border: 1px solid rgba(240, 201, 135, 0.5);
         border-radius: 999px;
-        background: linear-gradient(180deg, #ffdca3 0%, #f4b164 100%);
-        color: #21160a;
-        font-size: 17px;
-        font-weight: 600;
-        box-shadow: 0 14px 34px -12px rgba(255, 170, 90, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.55);
-        transition: transform 0.12s ease, filter 0.2s ease;
+        background: linear-gradient(180deg, rgba(240, 201, 135, 0.14), rgba(240, 201, 135, 0.04)), rgba(13, 15, 21, 0.72);
+        -webkit-backdrop-filter: blur(12px);
+        backdrop-filter: blur(12px);
+        color: var(--ink);
+        font-size: 16px;
+        font-weight: 700;
+        box-shadow: inset 0 1px 0 rgba(255, 240, 210, 0.14), 0 0 34px -10px rgba(255, 180, 107, 0.6);
+        transition: transform 0.12s ease, box-shadow 0.25s ease;
       }
       .wl-summary .wl-go { margin-top: 24px; }
-      .wl-go:active { transform: scale(0.985); filter: brightness(0.96); }
+      .wl-go:hover { box-shadow: inset 0 1px 0 rgba(255, 240, 210, 0.2), 0 0 44px -8px rgba(255, 180, 107, 0.85); }
+      .wl-go:active { transform: scale(0.98); }
       .wl-go:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
       .wl-go[aria-busy='true'] { color: transparent; }
       .wl-go[aria-busy='true']::after {
@@ -260,31 +293,25 @@
         height: 22px;
         margin: -11px 0 0 -11px;
         border-radius: 50%;
-        border: 2.5px solid rgba(33, 22, 10, 0.25);
-        border-top-color: #21160a;
+        border: 2.5px solid rgba(244, 234, 216, 0.2);
+        border-top-color: var(--gold);
         animation: wl-spin 0.8s linear infinite;
       }
       @keyframes wl-spin { to { transform: rotate(360deg); } }
       /* One line: what happens to your location, or, wherever the map shows, whose map it is. */
-      .wl-fine { margin: 14px 0 0; font-size: 12px; line-height: 1.5; color: var(--faint); }
+      .wl-fine { margin: 12px 0 0; font-size: 12px; line-height: 1.5; text-align: center; color: var(--faint); }
       .wl-fine a { text-decoration: none; white-space: nowrap; }
       .wl-fine a:hover { text-decoration: underline; }
       .wl-fine__credit, .wl-has-map .wl-fine__privacy { display: none; }
       .wl-has-map .wl-fine__credit { display: inline; }
       @media (max-height: 660px) {
-        .wl-logo { width: 80px; height: 80px; }
-        .wl-title { font-size: 54px; }
         .wl-hero { font-size: 88px; }
         .wl-hero i { font-size: 38px; }
-        .wl-go { margin-top: 20px; }
       }
       /* A phone on its side: the essentials, with Start in view and no scrolling. */
       @media (max-height: 500px) {
         .wl-splash { padding-top: calc(var(--top) + 12px); padding-bottom: calc(var(--bottom) + 12px); }
         .wl-card::before { bottom: calc(-1 * (var(--bottom) + 12px)); }
-        .wl-logo { display: none; }
-        .wl-title { font-size: 44px; }
-        .wl-lead { margin-top: 10px; }
         .wl-hero { font-size: 64px; }
         .wl-hero i { font-size: 30px; }
         .wl-rule { margin-top: 12px; }
@@ -382,34 +409,41 @@
     <div id="map" class="wl-map"></div>
 
     <main id="splash" class="wl-splash">
+      <div class="wl-scene" id="wl-scene" aria-hidden="true">
+        <canvas class="wl-scene__warm"></canvas>
+        <canvas class="wl-scene__fog"></canvas>
+        <div class="wl-spk" data-invite>
+          <div class="wl-spk__beam"></div>
+          <svg viewBox="-60 -60 120 120">
+            <defs>
+              <radialGradient id="wl-wide">
+                <stop offset="0" stop-color="#ffc98e" stop-opacity="0.62" />
+                <stop offset="0.4" stop-color="#ffb46b" stop-opacity="0.3" />
+                <stop offset="1" stop-color="#ffb46b" stop-opacity="0" />
+              </radialGradient>
+              <radialGradient id="wl-tight">
+                <stop offset="0" stop-color="#fff1d6" stop-opacity="0.85" />
+                <stop offset="0.5" stop-color="#ffcf94" stop-opacity="0.3" />
+                <stop offset="1" stop-color="#ffb46b" stop-opacity="0" />
+              </radialGradient>
+              <radialGradient id="wl-orb">
+                <stop offset="0" stop-color="#fffdf6" />
+                <stop offset="0.6" stop-color="#fff0cf" />
+                <stop offset="1" stop-color="#ffd596" />
+              </radialGradient>
+            </defs>
+            <g class="wl-spk__halo"><circle r="47" fill="url(#wl-wide)" /><circle r="15" fill="url(#wl-tight)" /></g>
+            <circle class="wl-spk__pulse" r="9" />
+            <circle class="wl-spk__pulse" r="9" />
+            <g class="wl-spk__bob"><g class="wl-spk__pop"><circle class="wl-spk__body" r="5.6" fill="url(#wl-orb)" /></g></g>
+          </svg>
+        </div>
+        <p class="wl-hint">drag me, I leave the lights on</p>
+      </div>
       <div class="wl-card">
         <div class="wl-head">
-          <svg class="wl-logo" viewBox="0 0 96 96" aria-hidden="true">
-            <defs>
-              <radialGradient id="wl-glow" cx="41" cy="57" r="38" gradientUnits="userSpaceOnUse">
-                <stop offset="0" stop-color="#ffc98a" stop-opacity="0.45" />
-                <stop offset="0.45" stop-color="#ffc98a" stop-opacity="0.12" />
-                <stop offset="1" stop-color="#ffc98a" stop-opacity="0" />
-              </radialGradient>
-              <linearGradient id="wl-cone" x1="41" y1="57" x2="50" y2="12" gradientUnits="userSpaceOnUse">
-                <stop offset="0" stop-color="#ffe3b8" stop-opacity="0.6" />
-                <stop offset="1" stop-color="#ffe3b8" stop-opacity="0" />
-              </linearGradient>
-              <linearGradient id="wl-lit" x1="30" y1="92" x2="56" y2="6" gradientUnits="userSpaceOnUse">
-                <stop offset="0" stop-color="#f0c987" />
-                <stop offset="0.45" stop-color="#ffd9a0" />
-                <stop offset="1" stop-color="#f0c987" stop-opacity="0.15" />
-              </linearGradient>
-            </defs>
-            <circle cx="41" cy="57" r="38" fill="url(#wl-glow)" />
-            <path d="M6 70 90 38" stroke="#2b3242" stroke-width="5" stroke-linecap="round" />
-            <path d="M30 92 56 6" stroke="url(#wl-lit)" stroke-width="4.5" stroke-linecap="round" />
-            <path d="M41 57 34.7 13.1A44 44 0 0 1 70.2 23.9Z" fill="url(#wl-cone)" />
-            <circle cx="41" cy="57" r="8" fill="#ffb46b" />
-            <circle cx="41" cy="57" r="5" fill="#fff6e6" />
-          </svg>
-          <h1 class="wl-title">Mr <i>Sparkles</i></h1>
-          <p class="wl-lead">Your city starts dark. Walk a street and it lights up, for good.</p>
+          <h1 class="wl-title">How much of your city have you really walked?</h1>
+          <p class="wl-lead">Take Mr Sparkles out and see. He lights every street you walk.</p>
         </div>
 
         <section class="wl-sum" aria-live="polite">
@@ -501,6 +535,133 @@
             { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 },
           );
         });
+      })();
+    </script>
+    <script>
+      // First open, no map behind yet: Mr Sparkles in the fog (ADR 0012). He wanders until you drag
+      // him; his light thins the fog ahead, and where he has been stays lit until the page reloads.
+      // It lights a picture of the demo city, never the map: nothing here is a walk or is stored.
+      (function () {
+        var h = document.documentElement, splash = document.getElementById('splash');
+        var scene = document.getElementById('wl-scene'), card = splash.querySelector('.wl-card');
+        var me = scene.querySelector('.wl-spk'), hint = scene.querySelector('.wl-hint');
+        var fog = scene.querySelector('.wl-scene__fog'), warm = scene.querySelector('.wl-scene__warm');
+        var fx = fog.getContext('2d'), wx = warm.getContext('2d');
+        if (!fx || !wx) return;
+        var still = matchMedia('(prefers-reduced-motion: reduce)');
+        // Canvas pixels per CSS pixel: the fog is all soft edges, so half is plenty.
+        var Q = 0.5, FOG = '#0a0c11';
+        var W = 0, H = 0, cx = 0, cy = 0, ax = 0, ay = 0, low = 0, hw = 0;
+        var x = 0, y = 0, tx = 0, ty = 0, dx = 0, dy = -1, held = -1e9, last = 0, on = false, drawn = false;
+        function visible() {
+          return !h.classList.contains('wl-walking') && !h.classList.contains('wl-has-map');
+        }
+        // He keeps to the night above the card, wandering around its middle.
+        function size() {
+          W = innerWidth;
+          H = innerHeight;
+          var top = parseFloat(getComputedStyle(splash).paddingTop) || 24;
+          low = card.getBoundingClientRect().top - 40;
+          cx = W / 2;
+          cy = (top + low) / 2;
+          ax = Math.min(95, W * 0.27);
+          ay = Math.min(130, (low - top) * 0.3);
+          hw = hint.offsetWidth / 2 + 12;
+          fog.width = warm.width = Math.round(W * Q);
+          fog.height = warm.height = Math.round(H * Q);
+          fx.setTransform(Q, 0, 0, Q, 0, 0);
+          wx.setTransform(Q, 0, 0, Q, 0, 0);
+          scene.style.setProperty('--cx', cx + 'px');
+          scene.style.setProperty('--cy', cy + 'px');
+          drawn = false;
+        }
+        function blob(c, bx, by, r, a, rgb) {
+          var g = c.createRadialGradient(bx, by, 0, bx, by, r);
+          g.addColorStop(0, 'rgba(' + rgb + ',' + a + ')');
+          g.addColorStop(0.55, 'rgba(' + rgb + ',' + a * 0.7 + ')');
+          g.addColorStop(1, 'rgba(' + rgb + ',0)');
+          c.fillStyle = g;
+          c.fillRect(bx - r, by - r, 2 * r, 2 * r);
+        }
+        function aim(e) {
+          tx = e.clientX;
+          ty = Math.min(e.clientY, low);
+          held = performance.now();
+          hint.style.opacity = 0;
+        }
+        function step(t) {
+          var idle = t - held > 1800;
+          me.toggleAttribute('data-invite', idle);
+          if (idle && !still.matches) {
+            tx = cx + ax * Math.sin(t * 0.00042);
+            ty = cy + ay * Math.sin(t * 0.00029 + 1);
+          }
+          // Eases after the target at the same pace at any frame rate.
+          var k = 1 - Math.pow(0.91, Math.min(4, (t - last) / 16.7));
+          last = t;
+          var px = x, py = y;
+          x += (tx - x) * k;
+          y += (ty - y) * k;
+          var vx = x - px, vy = y - py, v = Math.sqrt(vx * vx + vy * vy);
+          if (drawn && v < 0.01) return;
+          drawn = true;
+          if (v > 0.15) {
+            dx += (vx / v - dx) * 0.12;
+            dy += (vy / v - dy) * 0.12;
+          }
+          me.style.left = x + 'px';
+          me.style.top = y + 'px';
+          me.style.setProperty('--a', (Math.atan2(dx, -dy) * 180) / Math.PI + 'deg');
+          hint.style.left = Math.max(hw, Math.min(W - hw, x)) + 'px';
+          hint.style.top = y + 34 + 'px';
+          // Where he has been stays lit: the warm trail, which the fog never covers again. Around
+          // him and ahead in his beam the fog only thins, and closes when he moves on.
+          blob(wx, x, y, 27, 0.16, '255,196,120');
+          fx.globalCompositeOperation = 'copy';
+          fx.fillStyle = FOG;
+          fx.fillRect(0, 0, W, H);
+          fx.globalCompositeOperation = 'destination-out';
+          fx.drawImage(warm, 0, 0, W, H);
+          blob(fx, x, y, 65, 0.5, '0,0,0');
+          blob(fx, x + dx * 50, y + dy * 50, 62, 0.38, '0,0,0');
+          blob(fx, x + dx * 93, y + dy * 93, 53, 0.2, '0,0,0');
+        }
+        function frame(t) {
+          if (!visible()) {
+            on = false;
+            return;
+          }
+          requestAnimationFrame(frame);
+          step(t);
+        }
+        // Runs while the scene shows: from the first open, and again if a walk never got going.
+        function wake() {
+          if (on || !visible()) return;
+          on = true;
+          if (!W) {
+            size();
+            x = tx = cx;
+            y = ty = cy;
+          }
+          last = performance.now();
+          step(last);
+          scene.setAttribute('data-live', '');
+          requestAnimationFrame(frame);
+        }
+        scene.addEventListener('pointerdown', function (e) {
+          try {
+            scene.setPointerCapture(e.pointerId);
+          } catch (err) {}
+          aim(e);
+        });
+        scene.addEventListener('pointermove', function (e) {
+          if (e.pointerType === 'mouse' || e.buttons) aim(e);
+        });
+        addEventListener('resize', function () {
+          if (W) size();
+        });
+        new MutationObserver(wake).observe(h, { attributes: true, attributeFilter: ['class'] });
+        wake();
       })();
     </script>
     <script type="module" src="/src/main.ts"></script>

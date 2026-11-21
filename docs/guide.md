@@ -108,7 +108,7 @@ The app asks only for *While Using* permission: a walk you started counts as usi
   `index.html` carries the start screen and its CSS inline, so it paints in the first round trip, before any script.
   A tiny boot script starts downloading the map tiles around where you were last and MapLibre's worker right away, alongside the app, and a tap on Start asks for your location even before the app has loaded.
   The app (~340 KB gzipped, most of it MapLibre) loads behind the start screen, and the service worker keeps it for the next start.
-  The type ships with the app: Instrument Serif and Instrument Sans (OFL, `public/fonts/`, ~60 KB for the start screen, preloaded).
+  The type ships with the app (OFL, `public/fonts/`): Nunito for everything you read and tap, preloaded (39 KB); Instrument Serif for the summary's numbers and the street names, and Instrument Sans for the map's place names.
   Accented letters such as ő load from small extra files only when a name needs them.
   The map's labels draw with the same files.
 - **One download per tile.**
