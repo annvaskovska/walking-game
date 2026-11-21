@@ -18,7 +18,7 @@ import { nameLines } from '../map/names';
 import { createBrowserLocation, type LocationError, type LocationProvider } from '../platform/location';
 import { isNativeApp } from '../platform/native';
 import { createSimLocation, simFactor } from '../platform/simLocation';
-import { simRoute } from '../platform/simRoute';
+import { SIM_ROUTE } from '../platform/simRoute';
 import { openStorage, persistStorage } from '../platform/storage';
 import { WakeLockKeeper } from '../platform/wakeLock';
 import { nightTheme } from '../theme';
@@ -135,9 +135,8 @@ export async function startApp(): Promise<void> {
   const key = (k: string) => k + boot.sfx;
   // The iPhone app records with native GPS, which goes on with the screen locked.
   const native = !sim && isNativeApp();
-  const demo = simRoute(params.get('walk'));
   const provider: LocationProvider = sim
-    ? createSimLocation(simFactor(params.get('sim')), demo.route, demo.name)
+    ? createSimLocation(simFactor(params.get('sim')))
     : native
       ? (await import('../platform/nativeLocation')).createNativeLocation()
       : createBrowserLocation();
@@ -172,7 +171,7 @@ export async function startApp(): Promise<void> {
   const lastPos = readJson<{ lon: number; lat: number }>(key(POS_KEY));
   const known = lastPos && Number.isFinite(lastPos.lon) && Number.isFinite(lastPos.lat) ? lastPos : null;
   // The demo always starts on its route, so its tiles load behind the start screen.
-  const start = known ?? (sim ? { lon: demo.route[0], lat: demo.route[1] } : null);
+  const start = known ?? (sim ? { lon: SIM_ROUTE[0], lat: SIM_ROUTE[1] } : null);
 
   const tiles = new TileSource({
     onTile: (t) => onTile(t),

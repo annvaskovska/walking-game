@@ -10,7 +10,7 @@ import { computeSight, newSight } from './sight';
 import type { Building } from './types';
 
 /**
- * How long a look takes on real streets (Amsterdam, Damrak): the walls, the sight and the paint at
+ * How long a look takes on real streets: the walls, the sight and the paint at
  * 20 spots along a real walk. Prints the timings; skipped when the local data is not there.
  */
 // Local data, not in the repository: the globs come back empty without it.
@@ -18,7 +18,7 @@ const AREA = Object.values(import.meta.glob<string>('../../.context/gps/area.jso
 const SIM = Object.values(import.meta.glob<{ TRUTH: [number, number][] }>('../../.context/gps/sim.ts'));
 const RAD = Math.PI / 180;
 
-describe.skipIf(!AREA.length || !SIM.length)('sight benchmark (Damrak)', () => {
+describe.skipIf(!AREA.length || !SIM.length)('sight benchmark', () => {
   it('looks in a few milliseconds', async () => {
     const area = JSON.parse(await AREA[0]()) as { houses: number[][] };
     const { TRUTH } = await SIM[0]();

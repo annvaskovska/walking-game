@@ -21,7 +21,7 @@ function run(fixes: Fix[]): { state: FilterState; verdicts: Verdict[] } {
 }
 
 describe('lightRadius', () => {
-  it('is 0.8 × accuracy, clamped to 12–25 m', () => {
+  it('is the accuracy, clamped to 15–25 m', () => {
     expect(lightRadius(5)).toBe(15);
     expect(lightRadius(20)).toBe(20);
     expect(lightRadius(24)).toBe(24);

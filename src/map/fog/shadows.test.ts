@@ -308,7 +308,8 @@ describe('the quad covers every pixel the wedge darkens', () => {
         const probe = (x: number, y: number) => {
           if (Math.hypot(x, y) > s.reach) return;
           const sh = shadowAt(w, x, y, m2u);
-          expect(Number.isNaN(sh)).toBe(false);
+          // A plain check, not expect(): this runs over a million times, and expect() alone took seconds.
+          if (Number.isNaN(sh)) throw new Error(`NaN shadow at (${x}, ${y}) trial ${trial} edge ${e}`);
           if (sh > 1e-6) {
             checked++;
             if (!inQuad(w, x, y, 1e-7 * s.reach)) {

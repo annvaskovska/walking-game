@@ -1,13 +1,15 @@
 #!/bin/sh
 # Builds the iPhone app and uploads it to TestFlight, signed by Xcode with an App Store Connect API
-# key, so no Xcode account, certificate or profile has to be set up by hand. Xcode gives each upload
-# the next build number. Needs ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY (the text of the .p8 file) of
-# a key with the Admin role: Admin lets Xcode make the distribution certificate the first time.
+# key, so no Xcode account, certificate or profile has to be set up by hand (ADR 0009). Xcode gives
+# each upload the next build number. Every account detail comes from the environment and none is
+# in this public repository (ADR 0010):
+#   ASC_TEAM_ID    the team that publishes; the Xcode project keeps its own team for runs from Xcode
+#   ASC_KEY_ID     the API key's ID
+#   ASC_ISSUER_ID  the issuer ID above the list of keys
+#   ASC_KEY        the text of the key's .p8 file; Admin access lets Xcode make the certificate
 set -eu
-: "${ASC_KEY_ID:?set ASC_KEY_ID}" "${ASC_ISSUER_ID:?set ASC_ISSUER_ID}" "${ASC_KEY:?set ASC_KEY}"
-
-# The team that publishes the app. The project keeps its own team for running from Xcode.
-TEAM_ID=${ASC_TEAM_ID:?}
+: "${ASC_TEAM_ID:?set ASC_TEAM_ID}" "${ASC_KEY_ID:?set ASC_KEY_ID}"
+: "${ASC_ISSUER_ID:?set ASC_ISSUER_ID}" "${ASC_KEY:?set ASC_KEY}"
 
 cd "$(dirname "$0")/.."
 npm test
@@ -33,7 +35,7 @@ cat > "$tmp/export.plist" <<EOF
 	<key>destination</key>
 	<string>upload</string>
 	<key>teamID</key>
-	<string>$TEAM_ID</string>
+	<string>$ASC_TEAM_ID</string>
 </dict>
 </plist>
 EOF
@@ -43,7 +45,7 @@ set -- -allowProvisioningUpdates -authenticationKeyPath "$key" \
 
 xcodebuild -quiet -project ios/App/App.xcodeproj -scheme App -configuration Release \
   -destination 'generic/platform=iOS' -archivePath "$tmp/App.xcarchive" \
-  DEVELOPMENT_TEAM="$TEAM_ID" "$@" archive
+  DEVELOPMENT_TEAM="$ASC_TEAM_ID" "$@" archive
 
 xcodebuild -quiet -exportArchive -archivePath "$tmp/App.xcarchive" \
   -exportOptionsPlist "$tmp/export.plist" -exportPath "$tmp/export" "$@"

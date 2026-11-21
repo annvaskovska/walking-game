@@ -4,8 +4,7 @@ import type { LocationProvider } from './location';
 import { SIM_ROUTE } from './simRoute';
 
 /**
- * Hidden test mode (`?sim`, `?sim=fast` for 10×, or `?sim=<factor>`; `&walk=damrak` for the
- * Amsterdam walk instead of the Jordaan): walks a scripted route at
+ * Hidden test mode (`?sim`, `?sim=fast` for 10×, or `?sim=<factor>`): walks a scripted route at
  * walking speed on a clock that runs `factor` times faster than real time, so fix timestamps
  * still look like walking to the filter. Adds GPS-like noise, an occasional inaccurate fix and
  * one glitch jump to exercise the filters. Position survives reloads (sessionStorage).
@@ -31,9 +30,8 @@ export function simFactor(param: string | null): number {
   return Number.isFinite(n) && n > 0 ? Math.min(n, 50) : 1;
 }
 
-export function createSimLocation(factor: number, route: readonly number[] = SIM_ROUTE, name = ''): LocationProvider {
-  // Each demo walk keeps its own place along its route.
-  const key = name && name !== 'jordaan' ? `${KEY}-${name}` : KEY;
+export function createSimLocation(factor: number, route: readonly number[] = SIM_ROUTE): LocationProvider {
+  const key = KEY;
   const cum: number[] = [0];
   for (let i = 2; i < route.length; i += 2) {
     cum.push(cum[cum.length - 1] + distanceM(route[i - 2], route[i - 1], route[i], route[i + 1]));

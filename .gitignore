@@ -3,3 +3,9 @@ dist/
 dev-dist/
 *.local
 .DS_Store
+# Scratch work, real GPS traces included: this repository is public (ADR 0010).
+.context/
+# Signing keys and profiles never enter git.
+*.p8
+*.p12
+*.mobileprovision
