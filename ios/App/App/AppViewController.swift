@@ -3,7 +3,7 @@ import UIKit
 
 /// The web app in a full-screen web view, on the same night colour as its start screen, with the
 /// native GPS plugin registered.
-class WanderlightViewController: CAPBridgeViewController {
+class AppViewController: CAPBridgeViewController {
     static let night = UIColor(red: 0x0b / 255, green: 0x0d / 255, blue: 0x12 / 255, alpha: 1)
 
     override func capacitorDidLoad() {

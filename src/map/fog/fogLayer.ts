@@ -267,7 +267,7 @@ export class FogLayer implements CustomLayerInterface {
       return true;
     } catch (e) {
       // Without the fog the map still works: say why once, then keep out of the way.
-      console.error('Wanderlight: fog disabled', e);
+      console.error('Mr Sparkles: fog disabled', e);
       this.broken = true;
       return false;
     }
@@ -350,7 +350,7 @@ export class FogLayer implements CustomLayerInterface {
       try {
         part.init(gl);
       } catch (e) {
-        console.error('Wanderlight: part of the fog disabled', e);
+        console.error('Mr Sparkles: part of the fog disabled', e);
       }
     }
     this.seenClear = false;

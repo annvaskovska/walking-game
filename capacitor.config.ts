@@ -5,8 +5,8 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * native GPS that keeps recording with the screen locked (ios/App/App/WalkTracker.swift).
  */
 const config: CapacitorConfig = {
-  appId: 'io.github.annvaskovska.wanderlight',
-  appName: 'Wanderlight',
+  appId: 'io.github.annvaskovska.mrsparkles',
+  appName: 'Mr Sparkles',
   webDir: 'dist',
   // The night the start screen is drawn on, so nothing flashes white before the first paint.
   backgroundColor: '#0b0d12',

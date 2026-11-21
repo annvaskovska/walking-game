@@ -65,6 +65,7 @@ final class WalkJournal {
 
     static var defaultURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        // Keeps the app's first name, as the web app's database does (ADR 0011).
         return base.appendingPathComponent("Wanderlight", isDirectory: true).appendingPathComponent("walk.jsonl")
     }
 
@@ -204,7 +205,7 @@ final class WalkTracker: NSObject, CLLocationManagerDelegate {
         switch authorization {
         case .granted: beginUpdates()
         case .prompt: ask()
-        case .denied: delegate?.walkTracker(self, didFail: "denied", message: "Location is off for Wanderlight.")
+        case .denied: delegate?.walkTracker(self, didFail: "denied", message: "Location is off for Mr Sparkles.")
         }
         return resumed
     }
@@ -284,7 +285,7 @@ final class WalkTracker: NSObject, CLLocationManagerDelegate {
         } else {
             endUpdates()
             failOneShots(CLError(.denied))
-            if walking { delegate?.walkTracker(self, didFail: "denied", message: "Location is off for Wanderlight.") }
+            if walking { delegate?.walkTracker(self, didFail: "denied", message: "Location is off for Mr Sparkles.") }
         }
     }
 

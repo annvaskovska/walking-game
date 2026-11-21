@@ -215,7 +215,7 @@ export class TileSource {
       .catch((e) => {
         this.loading.delete(key);
         this.stats.failures++;
-        console.warn('Wanderlight: tile failed', key, e);
+        console.warn('Mr Sparkles: tile failed', key, e);
         this.updateWaiting(true);
         // Keep trying the tiles around you, backing off to every 30 s (or at once when back online).
         if (!this.retryTimer) {

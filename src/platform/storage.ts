@@ -23,6 +23,7 @@ export interface Storage {
   readonly kind: 'indexeddb' | 'memory';
 }
 
+/** The app's first name: renaming it would lose every walk on the web (ADR 0011). */
 const DB_NAME = 'wanderlight';
 /**
  * v2 added lit houses and cached building cells. v3 reads streets and houses from the map tiles

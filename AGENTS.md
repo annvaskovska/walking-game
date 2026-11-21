@@ -27,14 +27,14 @@ When you are not sure, leave it out and ask.
 
 ## Decisions
 
-`docs/adr/` records why Wanderlight is built the way it is, one decision per file, listed in `docs/adr/README.md`.
+`docs/adr/` records why Mr Sparkles is built the way it is, one decision per file, listed in `docs/adr/README.md`.
 Development is ADR-driven: read the records for the area before you change it, and decide in a record before you build.
 A change that makes or reverses a decision carries its ADR, written with the `adr` skill, in the same pull request.
 Features and fixes inside an existing decision need no ADR.
 
 ## Product
 
-Wanderlight is a walking motivator: the city starts in fog, and every street you walk lights up for good, with its houses and its name.
+Mr Sparkles is a walking motivator: the city starts in fog, and every street you walk lights up for good, with its houses and its name.
 It is one web app that runs in the browser, from the home screen, and in a native iPhone shell.
 
 Every change keeps these invariants:

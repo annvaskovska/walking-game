@@ -97,7 +97,7 @@ export function createNativeLocation(
             if (n > 1) opts.onCatchUp?.(n);
           } while (again && !stopped);
         } catch (e) {
-          console.warn('Wanderlight: could not read back the walk', e);
+          console.warn('Mr Sparkles: could not read back the walk', e);
         } finally {
           pulling = false;
         }

@@ -1,6 +1,6 @@
 // Generates the PWA icons in public/icons and the iPhone app icon with no dependencies:
 // `node scripts/make-icons.mjs`.
-// The Wanderlight mark, as on the start screen (index.html): a street lit gold through the
+// The Mr Sparkles mark, as on the start screen (index.html): a street lit gold through the
 // night, a dim one crossing it, and you, with your beam of light ahead.
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';

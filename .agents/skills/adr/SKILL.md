@@ -1,6 +1,6 @@
 ---
 name: adr
-description: Record an architecture decision for Wanderlight in `docs/adr/`. Use before building a change that makes or reverses a decision about what lights a street, how location is recorded, what is stored and where, what the app downloads or sends, the map and its tiles, drawing and the frame budget, the iPhone shell, a dependency, or how the app is built and shipped; or when someone asks why Wanderlight is built a certain way and no ADR answers it.
+description: Record an architecture decision for Mr Sparkles in `docs/adr/`. Use before building a change that makes or reverses a decision about what lights a street, how location is recorded, what is stored and where, what the app downloads or sends, the map and its tiles, drawing and the frame budget, the iPhone shell, a dependency, or how the app is built and shipped; or when someone asks why Mr Sparkles is built a certain way and no ADR answers it.
 ---
 
 # Architecture decision records
@@ -26,7 +26,7 @@ Features and fixes inside an existing decision need no ADR.
 
    ## Decision
 
-   What Wanderlight does, concretely: files, modules, values, thresholds.
+   What Mr Sparkles does, concretely: files, modules, values, thresholds.
 
    ## Consequences
 

@@ -107,18 +107,18 @@ function centroid(flat: ArrayLike<number>): [number, number] {
 function locationHelp(e: LocationError, native: boolean): string {
   if (e.kind === 'denied' && native) {
     return (
-      '<b>Location is off for Wanderlight.</b> It lights up the streets you walk, so it needs to know where you are; that never leaves this iPhone.<br>' +
+      '<b>Location is off for Mr Sparkles.</b> It lights up the streets you walk, so it needs to know where you are; that never leaves this iPhone.<br>' +
       '<a href="app-settings:"><b>Open Settings</b></a> → Location → <b>While Using the App</b>, and keep Precise Location on.'
     );
   }
   if (e.kind === 'denied') {
     return (
-      '<b>Location is off for Wanderlight.</b> It lights up the streets you walk, so it needs to know where you are; that never leaves this device.<br>' +
+      '<b>Location is off for Mr Sparkles.</b> It lights up the streets you walk, so it needs to know where you are; that never leaves this device.<br>' +
       '<b>iPhone:</b> Settings → Privacy &amp; Security → Location Services → Safari Websites → While Using.<br>' +
       '<b>Android:</b> tap the icon left of the address, then Permissions → Location → Allow.'
     );
   }
-  if (e.kind === 'insecure') return '<b>Location needs a secure page.</b> Open the https:// address of Wanderlight.';
+  if (e.kind === 'insecure') return '<b>Location needs a secure page.</b> Open the https:// address of Mr Sparkles.';
   return '<b>This browser can’t share your location.</b> Try Safari on iPhone or Chrome on Android.';
 }
 
@@ -811,7 +811,7 @@ export async function startApp(): Promise<void> {
 
   if (sim) {
     // Test hook for the demo walk only.
-    (window as unknown as Record<string, unknown>).__wanderlight = {
+    (window as unknown as Record<string, unknown>).__sparkles = {
       view, tiles, graph, progress, motion, walks, sight,
       get session() {
         return session;

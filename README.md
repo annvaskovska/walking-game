@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="public/icons/icon-512.png" width="128" height="128" alt="Wanderlight app icon: a glowing walker where a lit gold street crosses a dark one, with a beam of light ahead.">
+  <img src="public/icons/icon-512.png" width="128" height="128" alt="Mr Sparkles app icon: a glowing walker where a lit gold street crosses a dark one, with a beam of light ahead.">
 </p>
 
-<h1 align="center">Wanderlight</h1>
+<h1 align="center">Mr Sparkles</h1>
 
 <p align="center">
   <b>Your city starts in fog. Every street you walk lights up, for good.</b><br>
@@ -22,9 +22,9 @@
 
 ---
 
-## What is Wanderlight?
+## What is Mr Sparkles?
 
-Wanderlight is a small walking motivator.
+Mr Sparkles is a small walking motivator.
 Your city starts in fog, and every street you walk lights up with its houses and its name.
 The light stays, so each walk shows you where you have not been yet.
 

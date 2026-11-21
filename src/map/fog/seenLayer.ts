@@ -408,7 +408,7 @@ export class SeenTextures {
       this.init(gl);
       return true;
     } catch (err) {
-      console.error('Wanderlight: seen memory disabled', err);
+      console.error('Mr Sparkles: seen memory disabled', err);
       this.broken = true;
       return false;
     }
@@ -1534,7 +1534,7 @@ export class MoonHouses {
       this.init(gl);
       return true;
     } catch (err) {
-      console.error('Wanderlight: seen houses disabled', err);
+      console.error('Mr Sparkles: seen houses disabled', err);
       this.broken = true;
       return false;
     }

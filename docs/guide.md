@@ -1,11 +1,11 @@
-# Wanderlight guide
+# Mr Sparkles guide
 
 ## Try it without walking
 
 Open **http://localhost:5173/?sim**, or **`?sim=fast`** for 10× speed.
 This hidden demo walks a scripted route through the Jordaan in Amsterdam and keeps its own records, apart from your real walks.
 It never shows up in the normal app.
-In the demo, `__wanderlight.look(90)` in the console turns the beam east as a compass would, and `look(null)` turns it back to the way you walk.
+In the demo, `__sparkles.look(90)` in the console turns the beam east as a compass would, and `look(null)` turns it back to the way you walk.
 
 ## Get it on your phone
 
@@ -53,7 +53,7 @@ The first time:
 3. Plug in your iPhone, unlock it and tap *Trust*.
    Choose it in the device menu at the top and press **Run**.
    iPhone asks for **Developer Mode**: *Settings → Privacy & Security → Developer Mode → On*, restart, and press Run again.
-4. With a free Apple Account, iPhone refuses to open the app the first time: *Settings → General → VPN & Device Management → Apple Development → Trust*, then open Wanderlight.
+4. With a free Apple Account, iPhone refuses to open the app the first time: *Settings → General → VPN & Device Management → Apple Development → Trust*, then open Mr Sparkles.
 
 Picking your team changes `DEVELOPMENT_TEAM` in `ios/App/App.xcodeproj`; leave that change out of your commits (ADR 0010).
 
@@ -70,7 +70,7 @@ This needs a paid Apple Developer Program membership (ADR 0009).
 The first time, on the web:
 
 1. On developer.apple.com, in *Certificates, Identifiers & Profiles → Identifiers → +*, register an App ID with the bundle ID from `capacitor.config.ts`.
-2. In App Store Connect, *Apps → + → New App*: iOS, the name Wanderlight, that bundle ID, and any SKU.
+2. In App Store Connect, *Apps → + → New App*: iOS, the name Mr Sparkles, that bundle ID, and any SKU.
 3. In App Store Connect, *Users and Access → Integrations → App Store Connect API → Team Keys → +*, make a key with **Admin** access and download its `.p8` file once.
 
 Then set four values in the environment and run the upload:

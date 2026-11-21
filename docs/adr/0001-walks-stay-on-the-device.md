@@ -4,7 +4,7 @@ Status: accepted
 
 ## Context
 
-Wanderlight records where a person walks, and that track can show where they live and what they do every day.
+Mr Sparkles records where a person walks, and that track can show where they live and what they do every day.
 The app is a static build on GitHub Pages and the same build inside an iPhone shell, with no backend of its own.
 Lit streets stay lit for good, so progress must survive reloads, a tab closed mid-walk and long breaks between walks.
 Some private browsing modes have no IndexedDB, and a browser may evict site data under storage pressure.

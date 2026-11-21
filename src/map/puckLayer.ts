@@ -71,7 +71,7 @@ export class PuckLayer implements CustomLayerInterface {
       gl.bindVertexArray(null);
       this.gl = gl;
     } catch (e) {
-      console.error('Wanderlight: walker layer disabled', e);
+      console.error('Mr Sparkles: walker layer disabled', e);
       this.broken = true;
     }
   }

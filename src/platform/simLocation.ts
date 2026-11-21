@@ -10,6 +10,7 @@ import { SIM_ROUTE } from './simRoute';
  * one glitch jump to exercise the filters. Position survives reloads (sessionStorage).
  */
 
+/** Keeps the app's first name, as the database does (ADR 0011). */
 const KEY = 'wanderlight-sim';
 const WALK_MPS = 1.4;
 

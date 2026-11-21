@@ -18,7 +18,7 @@ function bootValuesInHtml(): Plugin {
   if (!tiles) throw new Error('DEFAULT_TILES not found in src/data/tileUrl.ts');
   let base = '/';
   return {
-    name: 'wanderlight-boot-values',
+    name: 'boot-values',
     configResolved(config) {
       base = config.base;
     },
@@ -47,8 +47,8 @@ export default defineConfig(({ mode }) => ({
       // Install icons are fetched by the browser when it needs them; the precache keeps the app.
       includeManifestIcons: false,
       manifest: {
-        name: 'Wanderlight',
-        short_name: 'Wanderlight',
+        name: 'Mr Sparkles',
+        short_name: 'Mr Sparkles',
         description: 'Your city starts in fog. Every street you walk lights up, with its houses and its name.',
         start_url: '.',
         scope: '.',

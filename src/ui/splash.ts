@@ -17,7 +17,7 @@ export interface WalkSummary {
 }
 
 /**
- * The one screen besides the map: logo, one line on what Wanderlight is, and Start. Its markup
+ * The one screen besides the map: logo, one line on what Mr Sparkles is, and Start. Its markup
  * lives in index.html so it paints before any script loads; this drives it once the app is up.
  * After a walk it shows, over the map, how far you went and what the walk lit.
  */

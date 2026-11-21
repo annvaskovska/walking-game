@@ -18,7 +18,7 @@
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
 		A1B2C3D40000000000000001 /* WalkTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000011 /* WalkTracker.swift */; };
 		A1B2C3D40000000000000002 /* WalkTrackerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000012 /* WalkTrackerPlugin.swift */; };
-		A1B2C3D40000000000000003 /* WanderlightViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000013 /* WanderlightViewController.swift */; };
+		A1B2C3D40000000000000003 /* AppViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000013 /* AppViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,7 +35,7 @@
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		A1B2C3D40000000000000011 /* WalkTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkTracker.swift; sourceTree = "<group>"; };
 		A1B2C3D40000000000000012 /* WalkTrackerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkTrackerPlugin.swift; sourceTree = "<group>"; };
-		A1B2C3D40000000000000013 /* WanderlightViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderlightViewController.swift; sourceTree = "<group>"; };
+		A1B2C3D40000000000000013 /* AppViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -75,7 +75,7 @@
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				A1B2C3D40000000000000011 /* WalkTracker.swift */,
 				A1B2C3D40000000000000012 /* WalkTrackerPlugin.swift */,
-				A1B2C3D40000000000000013 /* WanderlightViewController.swift */,
+				A1B2C3D40000000000000013 /* AppViewController.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -171,7 +171,7 @@
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				A1B2C3D40000000000000001 /* WalkTracker.swift in Sources */,
 				A1B2C3D40000000000000002 /* WalkTrackerPlugin.swift in Sources */,
-				A1B2C3D40000000000000003 /* WanderlightViewController.swift in Sources */,
+				A1B2C3D40000000000000003 /* AppViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -322,7 +322,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.annvaskovska.wanderlight;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.annvaskovska.mrsparkles;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_VERSION = 5.0;
@@ -344,7 +344,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.annvaskovska.wanderlight;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.annvaskovska.mrsparkles;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 5.0;

@@ -1,6 +1,6 @@
 /**
  * A minimal Mapbox Vector Tile (MVT 2.1) decoder: just enough protobuf to read the layers
- * Wanderlight needs from the basemap tiles it already downloads. No dependencies, so it runs in a
+ * Mr Sparkles needs from the basemap tiles it already downloads. No dependencies, so it runs in a
  * worker and in unit tests alike. Spec: https://github.com/mapbox/vector-tile-spec/tree/master/2.1
  */
 

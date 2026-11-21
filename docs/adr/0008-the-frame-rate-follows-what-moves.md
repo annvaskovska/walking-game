@@ -30,6 +30,6 @@ Drawn as they came, those nudges slid the walker, and the camera that follows it
 - Fast motion still draws on every display frame, so unlock waves and camera slides stay smooth.
 - Anything that animates must say so through `FogLayer.animating`, `FollowCamera.settling` or `MotionFrame.moving`, or it runs at 15 fps.
 - Every `FogLayer` method that changes what goes into the masks must bump its `version`, or the old masks stay on screen.
-- `FogLayer.stats` counts drawn and kept masks, and the demo walk shows them through `__wanderlight.summary()`.
+- `FogLayer.stats` counts drawn and kept masks, and the demo walk shows them through `__sparkles.summary()`.
 - `src/core/motion.test.ts` checks the hold, and `src/map/fog/maskMemo.test.ts` checks when the masks are kept.
   No test checks the frame loop in `app.ts`.

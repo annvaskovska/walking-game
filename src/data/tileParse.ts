@@ -1,5 +1,5 @@
 /**
- * Turns one z14 OpenMapTiles vector tile into Wanderlight's street graph and house footprints.
+ * Turns one z14 OpenMapTiles vector tile into the app's street graph and house footprints.
  *
  * The basemap tiles are built by planetiler-openmaptiles, which shapes them for drawing, not for
  * routing, so this module rebuilds what the walking rules need:
