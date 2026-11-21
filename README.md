@@ -118,6 +118,7 @@ The [guide](docs/guide.md) covers the iPhone app, TestFlight, and testing on you
 Read [AGENTS.md](AGENTS.md) for the invariants and the code style.
 Read the [decision records](docs/adr/README.md) for the area you change, and add one in the same pull request when your change makes or reverses a decision.
 This repository is public: keep secrets, account details and personal data out of every commit, as [ADR 0010](docs/adr/0010-the-repository-is-public.md) lists.
+`npm install` sets up the hooks that check each commit and each push for them ([ADR 0012](docs/adr/0012-a-push-is-checked-with-every-commit-it-sends.md)).
 
 ---
 

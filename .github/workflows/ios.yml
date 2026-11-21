@@ -19,7 +19,12 @@ jobs:
   build:
     runs-on: macos-15
     steps:
+      # The commits of the pull request themselves, with main beside them, so the check for
+      # personal data reads every one of them (ADR 0010).
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22

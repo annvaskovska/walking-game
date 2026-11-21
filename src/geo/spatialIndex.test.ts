@@ -9,7 +9,7 @@ describe('GridIndex', () => {
     const idx = new GridIndex<{ id: string; bbox: BBox }>(0.001);
     idx.insert(item('a', [4.880, 52.370, 4.8805, 52.3702]));
     idx.insert(item('long', [4.870, 52.370, 4.890, 52.3701])); // spans many cells
-    idx.insert(item('far', [5.0, 53.0, 5.001, 53.001]));
+    idx.insert(item('far', [5.05, 52.45, 5.051, 52.451]));
     const hits = idx.query([4.8799, 52.3699, 4.8811, 52.3705]).map((i) => i.id).sort();
     expect(hits).toEqual(['a', 'long']);
   });
@@ -46,7 +46,7 @@ describe('GridIndex', () => {
 
   it('falls back to a scan for huge query boxes', () => {
     const idx = new GridIndex<{ id: string; bbox: BBox }>();
-    idx.insert(item('x', [10, 10, 10.001, 10.001]));
+    idx.insert(item('x', [10, 10, 11, 11]));
     expect(idx.query([-180, -85, 180, 85]).map((i) => i.id)).toEqual(['x']);
   });
 });

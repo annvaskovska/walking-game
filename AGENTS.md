@@ -21,12 +21,14 @@ Before you write any of them, keep out:
 
 A script that needs an account detail reads it from the environment and names the variable, never the value.
 Picking a team in Xcode writes it into `ios/App/App.xcodeproj`: leave that change out of the commit.
-`scripts/check-public.sh` runs first in `npm test` and in the commit hook, and fails on the patterns it knows: teams, machine paths, addresses, keys, track files.
+`scripts/check-public.sh` runs first in `npm test`, in the commit hook and in the push hook, and fails on the patterns it knows: teams, machine paths, addresses, keys, track files, picture metadata, coordinates outside Amsterdam, and the words each contributor lists in `~/.config/check-public-words`.
+The push hook reads every commit the push sends, so a leak that a later commit takes out still stops the push: build that branch again from `main`.
+`npm install` installs both hooks, and the check fails while the push hook is missing.
 A red run means the data comes out.
-It cannot judge a route or an image, so those stay yours to check.
+It cannot judge a place nobody listed, a route inside Amsterdam or what an image shows, so those stay yours to check.
 The repository's own public URLs, such as its GitHub Pages address, are fine.
 When you are not sure, leave it out and ask.
-[ADR 0010](docs/adr/0010-the-repository-is-public.md) records why.
+[ADR 0010](docs/adr/0010-the-repository-is-public.md) and [ADR 0012](docs/adr/0012-a-push-is-checked-with-every-commit-it-sends.md) record why.
 
 ## Decisions
 

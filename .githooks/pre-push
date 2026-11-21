@@ -1,0 +1,6 @@
+#!/bin/sh
+# Stops a push that would publish personal data (ADR 0010): the files, and every commit it sends
+# that main does not have yet. `npm install` installs it.
+while read -r _ref sha _remote_ref _remote_sha; do
+  case $sha in *[!0]*) sh scripts/check-public.sh "$sha" </dev/null || exit 1 ;; esac
+done
