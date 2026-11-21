@@ -5,9 +5,12 @@ export const CONFIG = {
 
   /** Fixes with a worse accuracy than this (metres) are ignored. */
   maxAccuracyM: 35,
-  /** Radius around a walked step used to look for the street being walked. */
-  radiusFactor: 0.8,
-  radiusMinM: 12,
+  /**
+   * Radius around a walked step used to look for the street being walked: the GPS accuracy, and
+   * never less than a street's sidewalk plus the error a phone has between tall houses.
+   */
+  radiusFactor: 1,
+  radiusMinM: 15,
   radiusMaxM: 25,
 
   /**
@@ -24,6 +27,10 @@ export const CONFIG = {
   /** An untagged footway this close (m) to a road being walked is that road's sidewalk. */
   sideNearRoadM: 10,
 
+  /** Share of a ~20 m piece that must be walked along before that piece lights on its own. */
+  pieceLightFraction: 0.4,
+  /** Even a short piece needs this much walked-along length (or its whole length, if shorter). */
+  pieceMinCoverM: 6,
   /** Share of a block's length that must be walked along before the whole block unlocks. */
   blockUnlockFraction: 0.5,
   /** Even a tiny block needs this much walked-along length (or its whole length, if shorter). */

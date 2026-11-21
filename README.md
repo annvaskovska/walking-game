@@ -110,11 +110,15 @@ permission: a walk you started counts as using the app.
 - **Walked along it:** a good GPS step only lights the street it is actually following. Both ends
   of the step must be within 20 m of the street, the step must run alongside it rather than across
   it, and only the nearest parallel street is considered, so walking past a side street does not
-  light it. Good GPS fixes (≤ 35 m accuracy, no impossible jumps, not faster than walking) are
+  light it. The search reaches as far as the GPS accuracy, and never less than 15 m: a sidewalk
+  plus the error a phone has between tall houses. Good GPS fixes (≤ 35 m accuracy, no impossible jumps, not faster than walking) are
   joined into segments first.
-- **Whole-block unlocks:** walked stretches accumulate along each block without double-counting
-  backtracks. Once about half a block (and at least 8 m) has been walked, the whole block lights at
-  once, and the houses within 20 m of it light their windows. Each piece keeps a visit count (once
+- **What you walk lights:** walked stretches accumulate along each block without double-counting
+  backtracks, measured along the whole block so no step is lost where two pieces meet. Each ~20 m
+  piece lights as soon as 40% of it (at least 6 m) is walked, so a street you walk only part of
+  still shows where you went.
+- **Whole-block unlocks:** once about half a block (and at least 8 m) has been walked, the rest of
+  the block lights too. Houses within 20 m of anything lit light their windows. Each piece keeps a visit count (once
   per walk) for future heat colouring. If streets load late (offline), the walk's track is kept and
   replayed once they arrive. Streets lit before a map update are matched again by their shape.
 - **Smooth walker:** GPS fixes go through a small Kalman filter, and the walker glides between

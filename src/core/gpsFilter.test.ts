@@ -22,9 +22,9 @@ function run(fixes: Fix[]): { state: FilterState; verdicts: Verdict[] } {
 
 describe('lightRadius', () => {
   it('is 0.8 × accuracy, clamped to 12–25 m', () => {
-    expect(lightRadius(5)).toBe(12);
-    expect(lightRadius(20)).toBe(16);
-    expect(lightRadius(30)).toBe(24);
+    expect(lightRadius(5)).toBe(15);
+    expect(lightRadius(20)).toBe(20);
+    expect(lightRadius(24)).toBe(24);
     expect(lightRadius(60)).toBe(25);
   });
 });
@@ -37,7 +37,7 @@ describe('stepFilter', () => {
     expect(verdicts[2].kind).toBe('walk');
     if (verdicts[1].kind === 'walk') {
       expect(verdicts[1].distM).toBeCloseTo(7, 0);
-      expect(verdicts[1].radiusM).toBe(12);
+      expect(verdicts[1].radiusM).toBe(15);
     }
   });
 
@@ -48,10 +48,10 @@ describe('stepFilter', () => {
   });
 
   it('uses the worse accuracy of the two ends for the radius', () => {
-    const { verdicts } = run([fix(0, 0, 0, 30), fix(10, 0, 8, 5)]);
+    const { verdicts } = run([fix(0, 0, 0, 22), fix(10, 0, 8, 5)]);
     const v = verdicts[1];
     expect(v.kind).toBe('walk');
-    if (v.kind === 'walk') expect(v.radiusM).toBe(24);
+    if (v.kind === 'walk') expect(v.radiusM).toBe(22);
   });
 
   it('treats tiny moves as standing still (no distance)', () => {
