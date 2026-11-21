@@ -57,7 +57,6 @@ The first time:
 
 Picking your team changes `DEVELOPMENT_TEAM` in `ios/App/App.xcodeproj`; leave that change out of your commits (ADR 0010).
 The hooks that `npm install` sets up run `scripts/check-public.sh`, which stops a commit and a push that hold it.
-List your own private words, such as your name, city and street, one per line in `~/.config/check-public-words`: the same check then stops them too (ADR 0012).
 
 On the first walk, allow location **While Using the App** and keep *Precise Location* on.
 During a walk iOS shows a blue location pill in the status bar: that is the walk being recorded.

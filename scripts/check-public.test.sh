@@ -10,8 +10,6 @@ cd "$dir/repo"
 mkdir scripts
 cp "$here/scripts/check-public.sh" scripts/
 cp "$here/.githooks/pre-push" .git/hooks/
-echo zzyzx >"$dir/words"
-export CHECK_PUBLIC_WORDS="$dir/words"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@users.noreply.github.com
 export GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@users.noreply.github.com
 
@@ -37,7 +35,7 @@ const LAT = 52.37, LON = 56.78;
 { "lat": 12.3, "lng": 4.88 }
 const cache = '/Users/someone/cache';
 // ask someone@elsewhere.dev
-// a spot in Zzyzxville
+const walk = import.meta.glob('../.context/gps/walk.json');
 DEVELOPMENT_TEAM = ABCDE12345;
 EOF
 rm leak.ts

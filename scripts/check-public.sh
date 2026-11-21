@@ -2,15 +2,14 @@
 # Fails when the files, or a commit that main does not have yet, hold what this public repository
 # keeps out (ADR 0010). `npm test` runs it, .githooks/pre-push runs it on every commit a push
 # sends, and .githooks/pre-commit runs `check-public.sh tree`: the files only.
-# ponytail: patterns only, so it cannot name a place nobody listed (see the word list below), tell
-# a real walk inside the demo city from a demo one, or see what a picture shows. Review still
-# covers those; add a scanner such as gitleaks when the patterns miss a leak.
+# ponytail: patterns only, so it cannot know the name of a person or a place, tell a real walk
+# inside the demo city from a demo one, or see what a picture shows. Review and the agent rules in
+# AGENTS.md cover those; add a scanner such as gitleaks when the patterns miss a leak.
 set -eu
 cd "$(dirname "$0")/.."
 bad=0
 new=$(mktemp)
-words=$(mktemp)
-trap 'rm -f "$new" "$words"' EXIT
+trap 'rm -f "$new"' EXIT
 
 fail() {
   echo "check-public: $1 (above). This repository is public: take it out." >&2
@@ -65,14 +64,9 @@ hits=$(scan -E -e '[0-9]\.[0-9]' | sed -E "s/$ams/\1AMS/g" | grep -i -E \
   -e "(^|[^a-z])(lat|lon|lng|latitude|longitude)[0-9]*[\"']? *[:=] *-?[0-9]+\.[0-9]" || true)
 [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; fail 'a coordinate outside the demo city, shown with AMS for each Amsterdam value'; }
 
-# Your own private words, such as your name, your city and your street: one per line in the file
-# below, which lives outside every repository. A line also matches inside a longer word.
-list=${CHECK_PUBLIC_WORDS:-$HOME/.config/check-public-words}
-[ ! -f "$list" ] || grep -v -E '^[[:space:]]*(#|$)' "$list" >"$words" || true
-if [ -s "$words" ]; then
-  hits=$(scan -i -F -f "$words" | cut -d: -f1,2 | sort -u)
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; fail "a word from $list"; }
-fi
+# Code reads tracked files only. .context/ is scratch that git ignores, so what a test or a script
+# loads from it, such as a recorded walk, reaches whoever works on that code.
+check 'code that reads the scratch folder' '\.context/[A-Za-z]'
 
 # Pictures carry no camera or location metadata.
 files=$(git grep --untracked -l -a -i -E -e 'exif|xmpmeta' -- \
