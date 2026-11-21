@@ -9,7 +9,8 @@ Three gaps stayed open.
 The commit hook was set through `core.hooksPath`, which a sandbox can refuse to write and a global hooks path replaces, and the install failed without a word: on such a machine no hook ran.
 The check read the files as they are now, so a real place added in one commit and taken out in the next still went out with the push.
 It had no pattern for coordinates, so a test set in a real city passed.
-ADR 0010 let real GPS traces for local benchmarks live in `.context/`, and a benchmark read them, so a real walk sat in the checkout where every agent works.
+The leak itself began in one commit: a real walk, traced from a screenshot of a phone test, became a second demo walk, and the tests moved to its city.
+ADR 0010 then let real GPS traces for local benchmarks live in `.context/`, and a benchmark read them, so a real walk sat in the checkout where every agent works.
 CI runs after the push, when the commits are already public.
 
 ## Decision

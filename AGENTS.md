@@ -31,7 +31,7 @@ When you are not sure, leave it out and ask.
 
 ## Demo data only
 
-This repository leaked once: a benchmark read the GPS trace of a real walk from a scratch folder, and tests and comments named the city and the streets of that walk.
+This repository leaked once: an agent traced a real walk from a screenshot the user shared, added it as a second demo walk with a benchmark on local data of that area, and moved tests and comments to that city.
 So the code, and every agent that works on it, meets demo data only:
 
 - **Every place is Amsterdam.**
@@ -45,6 +45,7 @@ So the code, and every agent that works on it, meets demo data only:
   `.context/` holds prototypes and captures of the demo walk; a real trace lives outside every checkout.
 - **What you learn about the user stays in the chat.**
   A name, an address, a place or a path that you meet on the machine, in the chat or in a tool result reaches no file, commit subject, branch name or pull request.
+  A screenshot, a recording or a file the user shares shows you the problem: rebuild what it shows on the demo walk.
 
 ## Decisions
 
