@@ -15,6 +15,11 @@ import type { Fix } from './types';
  * Heading comes from the GPS course while moving, else from the filtered velocity, is held for a
  * moment after you stop, and turns along the shortest arc.
  *
+ * Standing still, GPS noise still nudges the filtered position by centimetres every fix. Drawn,
+ * each nudge slides the walker and the camera following it by a fraction of a pixel, every frame,
+ * which keeps the whole map redrawing at full rate for nothing. So once the walker has come to
+ * rest, it is held where it is until the place it is heading for is a pixel away (`holdM`).
+ *
  * The filter runs on fix timestamps and the drawing on the frame clock, so the 10x simulator
  * (whose fixes say "one second later" every 100 ms) looks like a fast walk, not a broken one.
  */
@@ -45,6 +50,11 @@ const HEADING_TAU_S = 0.4;
 const CONE_FADE_S = 0.35;
 /** Doppler speed noise, m/s. */
 const SPEED_SD = 0.5;
+/**
+ * Below this speed (m/s) the drawn walker may be held: walking is ~1.4, and halting from this
+ * within a pixel of its target is a step of a few hundredths of a pixel.
+ */
+const REST_MPS = 0.5;
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
@@ -79,6 +89,8 @@ export class Motion {
   private svx = 0;
   private svy = 0;
   private lastFrame = 0;
+  /** At rest, and held where it is drawn while its target stays within a pixel. */
+  private held = false;
   // Heading.
   private heading: number | null = null;
   private targetHeading: number | null = null;
@@ -98,6 +110,7 @@ export class Motion {
   /** Forget everything; the next fix places the walker at once. */
   reset(): void {
     this.ready = false;
+    this.held = false;
     this.heading = this.targetHeading = null;
     this.headingAt = -Infinity;
     this.cone = 0;
@@ -190,15 +203,20 @@ export class Motion {
     return true;
   }
 
-  /** Where to draw the walker at frame time `now` (performance.now). */
-  frame(now: number): MotionFrame | null {
+  /**
+   * Where to draw the walker at frame time `now` (performance.now). `holdM`: the size of a pixel
+   * on the map (m); once at rest, the walker stays put until its target is further away than that.
+   */
+  frame(now: number, holdM = 0): MotionFrame | null {
     if (!this.ready) return null;
     const dt = this.lastFrame ? clamp((now - this.lastFrame) / 1000, 0, 0.1) : 0;
     this.lastFrame = now;
     const k = this.gDur > 0 ? clamp((now - this.gStart) / this.gDur, 0, 1) : 1;
     const tx = this.g0x + (this.g1x - this.g0x) * k;
     const ty = this.g0y + (this.g1y - this.g0y) * k;
-    if (dt > 0) {
+    // Where the glide ends: a fix that puts it more than a pixel away lets the walker go, from rest.
+    if (this.held && Math.hypot(this.g1x - this.dx, this.g1y - this.dy) > holdM) this.held = false;
+    if (dt > 0 && !this.held) {
       // Critically damped spring (Unity's SmoothDamp).
       const omega = 2 / SMOOTH_S;
       const x = omega * dt;
@@ -209,6 +227,15 @@ export class Motion {
       this.svy = (this.svy - omega * tmpy) * e;
       this.dx = tx + (cx + tmpx) * e;
       this.dy = ty + (cy + tmpy) * e;
+    }
+    // Held again once within half a pixel of where it is going, so a nudge just past a pixel moves
+    // it a little and stops, instead of leaving it on the edge for the next nudge.
+    if (
+      !this.held && holdM > 0 && Math.hypot(this.svx, this.svy) < REST_MPS &&
+      Math.hypot(this.g1x - this.dx, this.g1y - this.dy) <= holdM / 2
+    ) {
+      this.held = true;
+      this.svx = this.svy = 0;
     }
 
     const active = this.targetHeading !== null && now - this.headingAt < HEADING_HOLD_MS;
@@ -222,9 +249,10 @@ export class Motion {
     }
 
     const gliding = k < 1 && Math.hypot(this.g1x - this.g0x, this.g1y - this.g0y) * (1 - k) > 0.02;
-    const moving =
-      gliding || Math.hypot(this.svx, this.svy) > 0.05 || Math.hypot(this.dx - tx, this.dy - ty) > 0.02 ||
-      (this.cone > 0 && this.cone < 1);
+    const fading = this.cone > 0 && this.cone < 1;
+    const moving = this.held
+      ? fading
+      : gliding || Math.hypot(this.svx, this.svy) > 0.05 || Math.hypot(this.dx - tx, this.dy - ty) > 0.02 || fading;
     const { lon, lat } = this.toLonLat(this.dx, this.dy);
     return { lon, lat, heading: this.heading, cone: this.cone, moving, acc: this.acc };
   }

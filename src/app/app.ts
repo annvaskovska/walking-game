@@ -735,7 +735,9 @@ export async function startApp(): Promise<void> {
     lastDraw = now;
     fast = view.fog.animating(now / 1000);
     moving = false;
-    const f = session && motion.hasFix ? motion.frame(now) : null;
+    // A map pixel in metres: standing still, the walker (and the camera on it) holds within one.
+    const mpp = (EARTH_CIRCUMFERENCE_M * Math.cos((prev?.lat ?? 0) * DEG)) / (512 * 2 ** view.map.getZoom());
+    const f = session && motion.hasFix ? motion.frame(now, prev ? mpp : 0) : null;
     if (f) {
       view.camera.update(f.lon, f.lat, now);
       fast ||= view.camera.settling;
@@ -751,10 +753,7 @@ export async function startApp(): Promise<void> {
       }
       prevHeading = light.heading;
       queueSeen();
-      if (moving && prev) {
-        const mpp = (EARTH_CIRCUMFERENCE_M * Math.cos(f.lat * DEG)) / (512 * 2 ** view.map.getZoom());
-        if (distanceM(prev.lon, prev.lat, f.lon, f.lat) / mpp / dt > 24) fast = true;
-      }
+      if (moving && prev && distanceM(prev.lon, prev.lat, f.lon, f.lat) / mpp / dt > 24) fast = true;
       prev = { lon: f.lon, lat: f.lat };
     } else {
       prev = null;

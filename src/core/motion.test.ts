@@ -29,8 +29,10 @@ interface Walk {
  * Feed fixes of a walker at `speed` m/s heading north along x = 0, one per `everyMs` of frame
  * time (fix timestamps always one second apart, like the 10x simulator), drawing at 60 fps.
  */
-function walkNorth(opts: { n: number; speed?: number; noise?: number; everyMs?: number; extra?: (i: number, fix: Fix) => Fix }): Walk {
-  const { n, speed = 1.4, noise = 3, everyMs = 1000 } = opts;
+function walkNorth(opts: {
+  n: number; speed?: number; noise?: number; everyMs?: number; holdM?: number; extra?: (i: number, fix: Fix) => Fix;
+}): Walk {
+  const { n, speed = 1.4, noise = 3, everyMs = 1000, holdM = 0 } = opts;
   const rnd = gauss(7);
   const m = new Motion();
   const frames: Walk['frames'] = [];
@@ -41,7 +43,7 @@ function walkNorth(opts: { n: number; speed?: number; noise?: number; everyMs?: 
     m.push(fix, now);
     for (let k = 0; k < Math.round(everyMs / 16.667); k++) {
       now += 16.667;
-      const f = m.frame(now)!;
+      const f = m.frame(now, holdM)!;
       const p = toXY(f);
       frames.push({ t: now, x: p.x, y: p.y, f });
     }
@@ -159,5 +161,84 @@ describe('Motion', () => {
     m.push({ ...toLL(600, 0), acc: 5, t: 20_000 }, 20_000);
     const p = toXY(m.frame(20_016)!);
     expect(p.x).toBeCloseTo(600, 3);
+  });
+
+  describe('standing still', () => {
+    /** A map pixel at zoom 17 in Amsterdam (m). */
+    const PX = 0.36;
+
+    /**
+     * Stand at the origin for `seconds`, one fix a second 1.5 m off at random (speed 0, like a
+     * phone at rest), drawing at 60 fps.
+     */
+    function stand(m: Motion, seconds: number, holdM: number, start = { now: 1000, i: 0 }) {
+      const rnd = gauss(11);
+      const out: { x: number; y: number; moving: boolean }[] = [];
+      for (let s = 0; s < seconds; s++, start.i++) {
+        m.push({ ...toLL(rnd() * 1.5, rnd() * 1.5), acc: 8, t: 1_000_000 + start.i * 1000, speed: 0 }, start.now);
+        for (let k = 0; k < 60; k++) {
+          const f = m.frame((start.now += 16.667), holdM)!;
+          out.push({ ...toXY(f), moving: f.moving });
+        }
+      }
+      return out;
+    }
+
+    const changed = (fr: { x: number; y: number }[]) =>
+      fr.slice(1).filter((p, i) => p.x !== fr[i].x || p.y !== fr[i].y).length / (fr.length - 1);
+
+    it('holds the walker in GPS noise instead of sliding it a fraction of a pixel every frame', () => {
+      const free = stand(new Motion(), 40, 0).slice(600);
+      const held = stand(new Motion(), 40, PX).slice(600);
+      // Without the hold the walker creeps on almost every frame, and counts as moving.
+      expect(changed(free)).toBeGreaterThan(0.9);
+      // Held, it moves on a few frames only, when its target is more than a pixel away...
+      expect(changed(held)).toBeLessThan(0.25);
+      expect(held.filter((p) => p.moving).length / held.length).toBeLessThan(0.25);
+      // ...and then by hundredths of a pixel a frame, never a hop.
+      const steps = held.slice(1).map((p, i) => Math.hypot(p.x - held[i].x, p.y - held[i].y));
+      expect(Math.max(...steps)).toBeLessThan(PX * 0.1);
+      // And it stays where the free walker is, within a pixel or so.
+      const off = held.map((p, i) => Math.hypot(p.x - free[i].x, p.y - free[i].y));
+      expect(Math.max(...off)).toBeLessThan(PX * 2.5);
+    });
+
+    it('never holds a walker who walks', () => {
+      const { frames } = walkNorth({ n: 60, noise: 3, holdM: PX * 4 });
+      const steady = frames.slice(frames.length / 3);
+      let stalls = 0;
+      for (let i = 1; i < steady.length; i++) if (steady[i].y - steady[i - 1].y < 0.002) stalls++;
+      expect(stalls / steady.length).toBeLessThan(0.05);
+      expect(steady.every((p) => p.f.moving)).toBe(true);
+    });
+
+    it('lets go from rest, without a jump, when you set off', () => {
+      const m = new Motion();
+      const clock = { now: 1000, i: 0 };
+      stand(m, 20, PX, clock);
+      const rest = toXY(m.frame((clock.now += 16.667), PX)!);
+      const path: { x: number; y: number }[] = [rest];
+      for (let s = 1; s <= 8; s++, clock.i++) {
+        m.push({ ...toLL(0, s * 1.4), acc: 8, t: 1_000_000 + clock.i * 1000, speed: 1.4, heading: 0 }, clock.now);
+        for (let k = 0; k < 60; k++) path.push(toXY(m.frame((clock.now += 16.667), PX)!));
+      }
+      let maxStep = 0;
+      for (let i = 1; i < path.length; i++) {
+        maxStep = Math.max(maxStep, Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y));
+      }
+      // At 60 fps a walk is ~2.3 cm a frame: catching up may take a few times that, never a hop.
+      expect(maxStep).toBeLessThan(0.12);
+      expect(path[path.length - 1].y).toBeGreaterThan(7);
+    });
+
+    it('holds nothing without a pixel size', () => {
+      const m = new Motion();
+      m.push({ ...toLL(0, 0), acc: 5, t: 1000 }, 0);
+      m.frame(16);
+      m.push({ ...toLL(0.05, 0), acc: 5, t: 2000, speed: 0 }, 1000);
+      let f = m.frame(1016)!;
+      for (let t = 1032; t < 3000; t += 16) f = m.frame(t)!;
+      expect(toXY(f).x).toBeGreaterThan(0.001);
+    });
   });
 });

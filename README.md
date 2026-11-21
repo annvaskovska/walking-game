@@ -127,8 +127,10 @@ permission: a walk you started counts as using the app.
   per walk) for future heat colouring. If streets load late (offline), the walk's track is kept and
   replayed once they arrive. Streets lit before a map update are matched again by their shape.
 - **Smooth walker:** GPS fixes go through a small Kalman filter, and the walker glides between
-  them on a damped spring, so it never hops; the camera follows it every frame. Drawing runs at
-  60 fps while something moves fast, 30 fps at walking pace and 15 fps standing still.
+  them on a damped spring, so it never hops; the camera follows it every frame. Standing still,
+  the walker (and so the camera) holds still until GPS noise puts its target more than a pixel
+  away. Drawing runs at 60 fps while something moves fast, 30 fps at walking pace and 15 fps
+  standing still, when the fog also reuses its light and seen masks while nothing in them changed.
 - **The fog** is drawn on the GPU as one MapLibre custom layer. A half-resolution light mask holds
   the lit streets, the unlock waves, the pool of light around you and your beam; it is composited
   as night fog with slow mist, a thin warm rim, lamplight along lit streets with a gold line down
