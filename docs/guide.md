@@ -71,6 +71,7 @@ The first time, on the web:
 
 1. On developer.apple.com, in *Certificates, Identifiers & Profiles → Identifiers → +*, register an App ID with the bundle ID from `capacitor.config.ts`.
 2. In App Store Connect, *Apps → + → New App*: iOS, the name Mr Sparkles, that bundle ID, and any SKU.
+   If it says the paid application agreement is outdated, the account holder accepts the new version in *Business → Agreements* first, also for a free app.
 3. In App Store Connect, *Users and Access → Integrations → App Store Connect API → Team Keys → +*, make a key with **Admin** access and download its `.p8` file once.
 
 Then set four values in the environment and run the upload:
@@ -89,7 +90,8 @@ npm run ios:testflight
 Keep the four values in a secret store, never in this repository or in a file inside it (ADR 0010).
 `scripts/testflight.sh` runs the tests, builds the app, signs it and uploads it.
 Xcode makes the certificate and the profile from the key, and gives each upload the next build number.
-Once App Store Connect has processed the build, add yourself to an internal testing group in *TestFlight* and install it from the TestFlight app.
+The first time, in *TestFlight*, create an internal group with automatic distribution and add yourself.
+Once App Store Connect has processed a build, it shows in the TestFlight app on your iPhone.
 
 ### How the lock screen works
 
