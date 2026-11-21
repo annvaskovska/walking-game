@@ -35,6 +35,18 @@ export function mercY(lat: number): number {
   return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI);
 }
 
+/** Inverse of mercX / mercY. */
+export const lonOfMercX = (x: number) => x * 360 - 180;
+export function latOfMercY(y: number): number {
+  return (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI;
+}
+
+/** World metres mercator ("WM"): 0..1 scaled by the earth's circumference. */
+export const wmX = (lon: number) => mercX(lon) * EARTH_CIRCUMFERENCE_M;
+export const wmY = (lat: number) => mercY(lat) * EARTH_CIRCUMFERENCE_M;
+export const lonOfWm = (x: number) => lonOfMercX(x / EARTH_CIRCUMFERENCE_M);
+export const latOfWm = (y: number) => latOfMercY(y / EARTH_CIRCUMFERENCE_M);
+
 export function makeOrigin(lon: number, lat: number): Origin {
   return { ox: mercX(lon), oy: mercY(lat), m2u: 1 / Math.cos(lat * RAD), lon, lat };
 }

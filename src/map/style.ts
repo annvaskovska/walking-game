@@ -1,4 +1,4 @@
-import type { LayerSpecification, StyleSpecification } from 'maplibre-gl';
+import type { FilterSpecification, LayerSpecification, StyleSpecification } from 'maplibre-gl';
 import type { Theme } from '../theme';
 
 /** Tiles come through this protocol, so the map and the street graph share one download each. */
@@ -9,6 +9,13 @@ export const ABOVE_FOG_LAYER = 'ghost-path';
 /** Gold names of lit streets. */
 export const NAMES_SOURCE = 'lit-names';
 export const NAMES_LAYER = 'lit-names';
+/** Street names in moonlight, under the fog: they show only where you have seen or walked. */
+export const MOON_NAMES_LAYER = 'moon-names';
+/** Labels of the landmarks you have seen, over the fog. */
+export const SEEN_PLACES_SOURCE = 'seen-places';
+export const SEEN_PLACES_LAYER = 'seen-places';
+/** The landmark dot, drawn at style load (no sprite). */
+export const LANDMARK_DOT = 'landmark-dot';
 
 export const ATTRIBUTION =
   '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> ' +
@@ -23,11 +30,16 @@ const PATHS = ['path', 'pedestrian'];
 const metres = (m: number) =>
   ['interpolate', ['exponential', 2], ['zoom'], 12, m / 12.8, 16, m / 0.8, 20, m / 0.05] as unknown as number;
 
+/** Moon names on every named street except these (gold already names them over the fog). */
+export const moonNamesFilter = (lit: readonly string[]): FilterSpecification =>
+  (lit.length ? ['match', ['get', 'name'], [...new Set(lit)], false, true] : ['has', 'name']) as FilterSpecification;
+
 /**
- * The basemap at night (OpenMapTiles schema from OpenFreeMap). Under the fog it is only seen
- * where you have walked; above the fog sit faint hints of every street, district names and the
- * gold names of your streets. No road labels, no icons, no glyph downloads: MapLibre draws the
- * few labels with the phone's own fonts.
+ * The basemap at night (OpenMapTiles schema from OpenFreeMap). Under the fog it shows where you
+ * have walked, and dimly where you have seen, street names in moonlight included; above the fog
+ * sit faint hints of every street, the landmarks you have seen, district names and the gold names
+ * of your streets. No icon sprite, no glyph downloads: MapLibre draws the few labels with the
+ * phone's own fonts.
  */
 export function buildStyle(t: Theme): StyleSpecification {
   const m = t.map;
@@ -85,6 +97,31 @@ export function buildStyle(t: Theme): StyleSpecification {
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-color': m.roadMajor, 'line-width': metres(11) },
     },
+    {
+      // Under the fog: hidden where you have not been, faint where you have seen, clear where you
+      // walked, except on streets the gold names already name (see moonNamesFilter).
+      id: MOON_NAMES_LAYER, type: 'symbol', source: 'omt', 'source-layer': 'transportation_name', minzoom: 15,
+      filter: moonNamesFilter([]),
+      layout: {
+        'symbol-placement': 'line',
+        // `name`, like the gold names (tileParse names the streets from it).
+        'text-field': ['get', 'name'],
+        'text-font': ['Medium', ...t.font.names],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 15, 11, 17, 13, 19, 15.5],
+        'text-letter-spacing': 0.04,
+        'text-max-angle': 28,
+        // Placed like the gold names, so where both would show the gold one wins the spot.
+        'text-offset': [0, -1.2],
+        'symbol-spacing': 280,
+        'text-padding': 8,
+      },
+      paint: {
+        'text-color': m.moonName,
+        'text-halo-color': m.nameHalo,
+        'text-halo-width': 1.4,
+        'text-halo-blur': 0.6,
+      },
+    },
 
     // ---- The fog custom layer goes here (inserted before ABOVE_FOG_LAYER). ----
 
@@ -112,6 +149,28 @@ export function buildStyle(t: Theme): StyleSpecification {
           15, ['match', ['get', 'class'], MAJOR, 1.6, 0.9],
           19, ['match', ['get', 'class'], MAJOR, 3, 2],
         ],
+      },
+    },
+    {
+      // Landmarks you have seen: a dot and the name under it. Important ones win the space.
+      id: SEEN_PLACES_LAYER, type: 'symbol', source: SEEN_PLACES_SOURCE, minzoom: 15.5,
+      layout: {
+        'symbol-sort-key': ['get', 'rank'],
+        'icon-image': LANDMARK_DOT,
+        'text-field': ['get', 'name'],
+        'text-font': ['Medium', ...t.font.places],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 16, 10.5, 19, 11.5],
+        'text-anchor': 'top',
+        'text-offset': [0, 0.45],
+        'text-max-width': 8,
+        'text-padding': 4,
+        'icon-padding': 2,
+      },
+      paint: {
+        'text-color': m.landmark,
+        'text-halo-color': m.landmarkHalo,
+        'text-halo-width': 1.3,
+        'text-halo-blur': 0.4,
       },
     },
     {
@@ -168,6 +227,7 @@ export function buildStyle(t: Theme): StyleSpecification {
         attribution: ATTRIBUTION,
       },
       [NAMES_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+      [SEEN_PLACES_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
     },
     layers,
   };

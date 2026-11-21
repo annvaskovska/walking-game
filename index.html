@@ -413,6 +413,24 @@
           }
         } catch (e) {}
         go.addEventListener('click', function () {
+          // Turn the phone to look around: on iPhone the compass needs permission, which a page
+          // may only ask for in a tap, so it asks on every Start tap until it has it (the iPhone
+          // app grants it without asking). It never holds up the GPS below. Its answer: B.orient.
+          var DOE = window.DeviceOrientationEvent;
+          if (B.orient !== 'granted' && DOE && typeof DOE.requestPermission === 'function') {
+            try {
+              DOE.requestPermission().then(
+                function (s) {
+                  B.orient = s === 'granted' ? 'granted' : 'denied';
+                },
+                function () {
+                  B.orient = 'denied';
+                }
+              );
+            } catch (e) {
+              B.orient = 'denied';
+            }
+          }
           if (B.app || B.tapped) return;
           B.tapped = Date.now();
           go.setAttribute('aria-busy', 'true');

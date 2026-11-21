@@ -1,4 +1,6 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MlMap } from 'maplibre-gl';
+import type { Occluders } from '../../core/occluders';
+import type { SeenTile } from '../../core/seen';
 import { polylineLengthM } from '../../geo/geo';
 import type { Theme } from '../../theme';
 import { EARTH_CIRCUMFERENCE_M, GrowBuffer, hex3, invert, localMatrix, program, type Program } from '../gl';
@@ -6,10 +8,14 @@ import {
   HOUSE_FLOATS, KIND_PATH, KIND_ROAD, SEG_FLOATS, houseSeed, makeOrigin, pushHouse, pushPiece,
   type Origin, type Sweep,
 } from './geometry';
+import { MaskMemo, type MaskInputs, type MaskLight } from './maskMemo';
+import { MoonHouses, SeenTextures } from './seenLayer';
+import { ShadowCaster } from './shadows';
 import * as S from './shaders';
 
 /** Where you are, for the lantern. */
 export interface Lantern {
+  /** Where the light comes from: you, stepped out of a house if GPS put you inside one. */
   lon: number;
   lat: number;
   /** Degrees clockwise from north. */
@@ -32,6 +38,8 @@ interface HouseRec {
 /** Rebase the local origin once the view is this far from it (float32 stays mm-exact well past it). */
 const REBASE_M = 200_000;
 const NOISE_SIZE = 128;
+/** Below this zoom the seen memory is not drawn (a tile would be a few pixels). */
+const SEEN_MIN_ZOOM = 14;
 
 /** Seconds on the page clock the shaders animate with. */
 export const pageTime = () => performance.now() / 1000;
@@ -39,7 +47,9 @@ export const pageTime = () => performance.now() / 1000;
 /**
  * The fog of the unwalked city, drawn on the GPU as one MapLibre custom layer right above the
  * basemap. It owns everything "lit": the cleared corridors of your streets with their gold line
- * and unlock wave, your lit houses, and your lantern. See shaders.ts for how it looks.
+ * and unlock wave, your lit houses, and your lantern, whose light stops at walls. It also draws
+ * what you have seen: the fog thins in moonlight there, and seen houses stand out of it. See
+ * shaders.ts for how it looks.
  */
 export class FogLayer implements CustomLayerInterface {
   readonly id = 'wl-fog';
@@ -55,7 +65,21 @@ export class FogLayer implements CustomLayerInterface {
   private hidx = new GrowBuffer((n) => new Uint32Array(n), 8192);
   private lantern: Lantern | null = null;
   private animUntil = 0;
+  /** Until when the masks animate (an unlock wave, a house fading in); the rest is in `render`. */
+  private maskUntil = 0;
+  /** Bumped by every change of what goes into the masks, so a frame that changes nothing skips them. */
+  private version = 0;
+  private memo = new MaskMemo();
+  private still: MaskInputs = {
+    version: 0, t: 0, animUntil: 0, mvp: [], ws: 0, w: 0, h: 0, light: null, probeX: 0, probeY: 0,
+  };
+  private stillLight: MaskLight = { x: 0, y: 0, heading: null, cone: 0 };
   private broken = false;
+  /** Walls around you, for the shadows of your light. */
+  readonly shadows = new ShadowCaster();
+  /** The seen memory, as textures; and the houses you have seen. */
+  readonly seen = new SeenTextures();
+  readonly moon = new MoonHouses();
 
   // GL state, created lazily inside prerender (MapLibre resets its state cache right after).
   private gl: WebGL2RenderingContext | null = null;
@@ -68,16 +92,23 @@ export class FogLayer implements CustomLayerInterface {
   private maskFbo: WebGLFramebuffer | null = null;
   private maskW = 0;
   private maskH = 0;
+  /** Same size as the mask: the seen memory in view, R = 0..1. */
+  private seenTex: WebGLTexture | null = null;
+  /** The seen mask holds nothing (cleared, and nothing drawn since). */
+  private seenClear = false;
+  private seenFbo: WebGLFramebuffer | null = null;
   private noiseTex: WebGLTexture | null = null;
 
-  readonly stats = { segments: 0, houses: 0, frames: 0 };
-  private col: Record<'fill' | 'warm' | 'pale' | 'fog' | 'mist' | 'rim' | 'lamp' | 'beam' | 'flash' | 'street', [number, number, number]>;
+  /** `masks`: frames that drew the masks; `kept`: frames that kept them, as nothing had changed. */
+  readonly stats = { segments: 0, houses: 0, frames: 0, masks: 0, kept: 0 };
+  private col: Record<'fill' | 'warm' | 'pale' | 'fog' | 'mist' | 'rim' | 'lamp' | 'beam' | 'flash' | 'street' | 'moon', [number, number, number]>;
 
   constructor(private theme: Theme) {
     const f = theme.fog, h = theme.house;
     this.col = {
       fill: hex3(h.fill), warm: hex3(h.windowWarm), pale: hex3(h.windowPale),
       fog: hex3(f.color), mist: hex3(f.mist), rim: hex3(f.rim), lamp: hex3(f.lamp), beam: hex3(f.beam), flash: hex3(f.flash), street: hex3(f.street),
+      moon: hex3(theme.seen.moon),
     };
   }
 
@@ -93,8 +124,11 @@ export class FogLayer implements CustomLayerInterface {
     if (sweep) {
       const end = sweep.offsetM + polylineLengthM(coords);
       const reach = Math.max(Math.abs(sweep.offsetM - sweep.fromM), Math.abs(end - sweep.fromM));
-      this.animUntil = Math.max(this.animUntil, sweep.t0 + reach / this.theme.fog.sweepMps + 3);
+      const until = sweep.t0 + reach / this.theme.fog.sweepMps + 3;
+      this.animUntil = Math.max(this.animUntil, until);
+      this.maskUntil = Math.max(this.maskUntil, until);
     }
+    this.version++;
     this.map?.triggerRepaint();
   }
 
@@ -105,6 +139,9 @@ export class FogLayer implements CustomLayerInterface {
     if (!this.origin) this.setOrigin(house.coords[0], house.coords[1]);
     this.pushHouse(rec);
     this.animUntil = Math.max(this.animUntil, tOn + 3);
+    // Its footprint clears the fog over 0.6 s; the windows after that are drawn in `render`.
+    this.maskUntil = Math.max(this.maskUntil, tOn + 0.7);
+    this.version++;
     this.map?.triggerRepaint();
   }
 
@@ -115,7 +152,34 @@ export class FogLayer implements CustomLayerInterface {
     this.hverts.clear();
     this.hidx.clear();
     this.stats.segments = this.stats.houses = 0;
+    this.version++;
     this.map?.triggerRepaint();
+  }
+
+  /** The walls around you: your light stops at them. */
+  setOccluders(occ: Occluders | null): void {
+    this.shadows.setOccluders(occ);
+    this.version++;
+    this.map?.triggerRepaint();
+  }
+
+  /** A tile of the seen memory that is new or changed. */
+  setSeenTile(tile: SeenTile): void {
+    this.seen.set(tile);
+    this.version++;
+    this.map?.triggerRepaint();
+  }
+
+  /** A house you have just seen (or saw on an earlier walk: `tOn` long ago). */
+  addSeenHouse(house: { id: string; coords: ArrayLike<number>; holes?: ArrayLike<number>[] }, tOn: number): void {
+    this.moon.add(house, tOn);
+    this.animUntil = Math.max(this.animUntil, tOn + 1.2);
+    this.map?.triggerRepaint();
+  }
+
+  /** A seen house that has just lit up gold: it is drawn as a lit house from now on. */
+  removeSeenHouse(id: string): void {
+    this.moon.remove(id);
   }
 
   setLantern(l: Lantern | null): void {
@@ -159,6 +223,7 @@ export class FogLayer implements CustomLayerInterface {
     this.stats.houses = 0;
     for (const p of this.pieces) this.pushPiece(p);
     for (const h of this.houses) this.pushHouse(h);
+    this.version++;
   }
 
   // ---- MapLibre hooks ----
@@ -183,7 +248,12 @@ export class FogLayer implements CustomLayerInterface {
     this.progs = null;
     this.vaoSeg = this.vaoHouse = this.vaoQuad = this.vaoTri = null;
     this.maskTex = this.maskFbo = this.noiseTex = null;
+    this.seenTex = this.seenFbo = null;
     this.maskW = this.maskH = 0;
+    this.memo.forget();
+    this.shadows.release();
+    this.seen.release();
+    this.moon.release();
     this.segs.lose();
     this.hverts.lose();
     this.hidx.lose();
@@ -274,26 +344,32 @@ export class FogLayer implements CustomLayerInterface {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+
+    // Without shadows or the seen memory the fog still works: those parts just stay out.
+    for (const part of [this.shadows, this.seen, this.moon]) {
+      try {
+        part.init(gl);
+      } catch (e) {
+        console.error('Wanderlight: part of the fog disabled', e);
+      }
+    }
+    this.seenClear = false;
+    this.version++;
   }
 
   private resizeMask(gl: WebGL2RenderingContext): void {
     const w = Math.max(1, Math.ceil(gl.drawingBufferWidth / 2));
     const h = Math.max(1, Math.ceil(gl.drawingBufferHeight / 2));
     if (w === this.maskW && h === this.maskH && this.maskTex) return;
-    if (this.maskTex) gl.deleteTexture(this.maskTex);
-    if (this.maskFbo) gl.deleteFramebuffer(this.maskFbo);
-    this.maskTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, this.maskTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    this.maskFbo = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.maskFbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.maskTex, 0);
+    for (const t of [this.maskTex, this.seenTex]) if (t) gl.deleteTexture(t);
+    for (const f of [this.maskFbo, this.seenFbo]) if (f) gl.deleteFramebuffer(f);
+    [this.maskTex, this.maskFbo] = target(gl, w, h, gl.RGBA8, gl.RGBA);
+    // Only one channel: the seen memory.
+    [this.seenTex, this.seenFbo] = target(gl, w, h, gl.R8, gl.RED);
+    this.seenClear = false;
     this.maskW = w;
     this.maskH = h;
+    this.version++;
   }
 
   /** Frame constants shared by both passes. */
@@ -309,11 +385,18 @@ export class FogLayer implements CustomLayerInterface {
 
   prerender(gl: WebGL2RenderingContext, opts: CustomRenderMethodInput): void {
     if (!this.map || !this.ensure(gl)) return;
+    this.resizeMask(gl);
+    const t = pageTime();
+    // Standing still, the masks would come out as they are: keep them (and the battery).
+    const still = this.stillInputs(opts, t);
+    if (this.memo.same(still)) {
+      this.stats.kept++;
+      return;
+    }
+    this.stats.masks++;
     const p = this.progs!;
     const f = this.frame(opts);
-    const t = pageTime();
     const fog = this.theme.fog;
-    this.resizeMask(gl);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.maskFbo);
     gl.viewport(0, 0, this.maskW, this.maskH);
     gl.clearColor(0, 0, 0, 0);
@@ -364,15 +447,88 @@ export class FogLayer implements CustomLayerInterface {
       gl.uniform1f(p.lamp.u.u_lantern, fog.lanternM);
       gl.uniform1f(p.lamp.u.u_coneLen, fog.coneM);
       gl.uniform1f(p.lamp.u.u_coneCos, Math.cos((fog.coneHalfDeg * Math.PI) / 180));
+      gl.uniform1f(p.lamp.u.u_coneInnerCos, Math.cos((fog.coneInnerDeg * Math.PI) / 180));
       gl.uniform2f(p.lamp.u.u_dir, Math.sin(h), -Math.cos(h));
       gl.uniform1f(p.lamp.u.u_cone, l.heading === null ? 0 : l.cone);
       gl.uniform1f(p.lamp.u.u_on, 1);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      // Your light stops at walls: darken it behind every wall that faces you.
+      gl.bindVertexArray(null);
+      const reach = Math.max(fog.lanternM, fog.coneM) * f.o.m2u * 1.05;
+      this.shadows.draw(
+        gl, f.matrix, f.o.ox * EARTH_CIRCUMFERENCE_M, f.o.oy * EARTH_CIRCUMFERENCE_M, this.lightAt(x, y), reach,
+        fog.lampRadiusM * f.o.m2u,
+      );
     }
 
     gl.blendEquation(gl.FUNC_ADD);
     gl.bindVertexArray(null);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    // What you have seen, for the view: its own mask, read by the composite. Zoomed far out it
+    // is a few pixels a tile, not worth a texture each. With nothing to draw, cleared once.
+    const seenOn = f.zoom >= SEEN_MIN_ZOOM && this.seen.stats.tiles > 0;
+    let pending = false;
+    if (seenOn || !this.seenClear) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.seenFbo);
+      gl.viewport(0, 0, this.maskW, this.maskH);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      if (seenOn) {
+        gl.disable(gl.BLEND);
+        pending = this.seen.draw(gl, f.matrix, f.o.ox, f.o.oy, this.viewBounds());
+        if (pending) this.map?.triggerRepaint();
+        gl.enable(gl.BLEND);
+      }
+      this.seenClear = !seenOn;
+      gl.bindVertexArray(null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+    this.memo.drawn(still, pending);
+  }
+
+  /** What the masks would be drawn from this frame, without allocating. */
+  private stillInputs(opts: CustomRenderMethodInput, t: number): MaskInputs {
+    const s = this.still;
+    const ws = 512 * 2 ** this.map!.getZoom();
+    s.version = this.version;
+    s.t = t;
+    s.animUntil = this.maskUntil;
+    s.mvp = opts.modelViewProjectionMatrix;
+    s.ws = ws;
+    s.w = this.maskW;
+    s.h = this.maskH;
+    const l = this.lantern;
+    if (l) {
+      const sl = this.stillLight;
+      sl.x = mercXOf(l.lon) * ws;
+      sl.y = mercYOf(l.lat) * ws;
+      sl.heading = l.heading;
+      sl.cone = l.cone;
+      s.light = sl;
+    } else {
+      s.light = null;
+      const c = this.map!.getCenter();
+      s.probeX = mercXOf(c.lng) * ws;
+      s.probeY = mercYOf(c.lat) * ws;
+    }
+    return s;
+  }
+
+  private lightXY = new Float64Array(2);
+  private lightAt(x: number, y: number): Float64Array {
+    this.lightXY[0] = x;
+    this.lightXY[1] = y;
+    return this.lightXY;
+  }
+
+  /** The map's view as WM bounds [west, north, east, south] (x grows east, y south). */
+  private viewBounds(): [number, number, number, number] {
+    const b = this.map!.getBounds();
+    return [
+      mercXOf(b.getWest()) * EARTH_CIRCUMFERENCE_M, mercYOf(b.getNorth()) * EARTH_CIRCUMFERENCE_M,
+      mercXOf(b.getEast()) * EARTH_CIRCUMFERENCE_M, mercYOf(b.getSouth()) * EARTH_CIRCUMFERENCE_M,
+    ];
   }
 
   render(gl: WebGL2RenderingContext, opts: CustomRenderMethodInput): void {
@@ -413,9 +569,15 @@ export class FogLayer implements CustomLayerInterface {
       gl.bindTexture(gl.TEXTURE_2D, this.maskTex);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, this.noiseTex);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, this.seenTex);
       const u = p.comp.u;
       gl.uniform1i(u.u_mask, 0);
       gl.uniform1i(u.u_noise, 1);
+      gl.uniform1i(u.u_seen, 2);
+      gl.uniform1f(u.u_seenClear, th.seen.clear);
+      gl.uniform1f(u.u_seenTint, th.seen.tint);
+      gl.uniform3fv(u.u_moon, this.col.moon);
       gl.uniformMatrix4fv(u.u_inv, false, new Float32Array(inv));
       gl.uniform1f(u.u_ndcZ, ndcZ);
       gl.uniform1f(u.u_time, t);
@@ -432,11 +594,36 @@ export class FogLayer implements CustomLayerInterface {
       gl.uniform3fv(u.u_flash, c.flash);
       gl.uniform3fv(u.u_street, c.street);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, null);
       gl.activeTexture(gl.TEXTURE0);
     }
     gl.bindVertexArray(null);
+
+    // Houses you have seen stand out of the fog in moonlight; walls facing your light glow.
+    this.moon.draw(gl, f.matrix, f.o.ox, f.o.oy, t, f.cssPxUnits, f.dpr, this.maskTex);
+    gl.bindVertexArray(null);
     this.stats.frames++;
   }
+}
+
+/** A render target with linear filtering. */
+function target(
+  gl: WebGL2RenderingContext, w: number, h: number, internal: number, format: number,
+): [WebGLTexture, WebGLFramebuffer] {
+  const tex = gl.createTexture()!;
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, format, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const fbo = gl.createFramebuffer()!;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  return [tex, fbo];
 }
 
 const mercXOf = (lon: number) => (lon + 180) / 360;

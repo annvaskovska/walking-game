@@ -5,7 +5,10 @@ Your city starts in fog. Every street you walk lights up, with its houses and it
 Wanderlight is a small walking motivator. Open it and you get one start screen: what it is, your
 streets so far, and **Start the walk**. After that it is just the map: you, a beam of light ahead
 of you, and the fog. Walk along a street and the whole block lights up in a wave, its houses switch
-their windows on one by one, and its name is written in gold. Tap the map for the time, the
+their windows on one by one, and its name is written in gold. Your light stops at walls and
+spills between houses; whatever it has touched (a square at the end of the street, a shop on the
+corner) stays **moonlit**: blue roofs, a faint name, the landmark's label. Turn the phone to look
+around: the beam follows the compass. Tap the map for the time, the
 distance and an estimate of your steps (distance ÷ 0.75 m, since browsers can't read the phone's
 step counter), and to end the walk; the summary shows the same three numbers and the streets you
 lit.
@@ -26,7 +29,9 @@ npm run build      # type-check + production build into dist/
 
 To try it without walking, open **http://localhost:5173/?sim** (or **`?sim=fast`** for 10×
 speed). This hidden demo walks a scripted route through the Jordaan in Amsterdam and keeps its own
-records, apart from your real walks. It never shows up in the normal app.
+records, apart from your real walks. It never shows up in the normal app. Add **`&walk=damrak`**
+for a loop round Damrak in Amsterdam instead. In the demo, `__wanderlight.look(90)` in the console
+turns the beam east as a compass would (`look(null)`: back to the way you walk).
 
 ## Get it on your phone
 
@@ -129,11 +134,27 @@ permission: a walk you started counts as using the app.
   as night fog with slow mist, a thin warm rim, lamplight along lit streets with a gold line down
   the middle, and lit houses whose windows come on one by one. Every street shows faintly through
   the fog, so you can see where you could go.
+- **Line of sight:** the walls of the houses within ~140 m are gathered around you (re-gathered
+  only after you moved 25 m). On the GPU, every wall facing your light casts an instanced shadow
+  wedge into the lantern channels of the mask, hard where two walls meet and soft at the corners
+  you see round, so the light falls between houses and down side streets, not through them. If GPS
+  puts you inside a house, the light steps out to the street first.
+- **What you have seen** is kept apart from what you walked: a few times a second an angular sweep
+  on the CPU computes what your light reaches (disc around you, cone ahead) and paints it into a
+  persistent raster (zoom-17 tiles, ~0.7 m a texel, in IndexedDB). The fog reads it back as
+  moonlight: thinner fog, a cold tint. Houses the light reached get dim blue roofs with a moonlit
+  outline, walls facing your lantern glow warm, street names show faintly under the fog, and
+  landmarks (shops, cafés, churches from the tiles' `poi` layer) visible from where you stood get
+  their name. Walked still means gold; seen never lights a street.
+- **Look around:** the beam follows the compass (`deviceorientation`; on iPhone the Start tap asks
+  for motion access) while you stand or turn the phone, and the way you walk while you walk.
+  Stretches recorded with the screen locked are looked at the way you walked them.
 
 Code map: `src/core` (pure logic: GPS filter, motion, walked-along rule, blocks, progress, walk
-stats), `src/geo` (geometry, pieces, spatial index), `src/data` (tile decoder and parser, tile
+stats, walls and line of sight, seen memory, heading), `src/geo` (geometry, pieces, spatial index), `src/data` (tile decoder and parser, tile
 source, street graph), `src/platform` (location in the browser and in the iPhone app, wake lock,
-storage, demo walk), `src/map` (style, GPU fog, walker, follow camera, gold names), `src/ui`
+storage, compass, demo walk), `src/map` (style, GPU fog, shadows, seen memory, walker, follow
+camera, gold names), `src/ui`
 (start screen, walk stats, notices), `src/app` (the controller), `ios/` (the iPhone app: Xcode
 project, native GPS plugin). `scripts/make-icons.mjs` draws the app icons, the iPhone one too.
 

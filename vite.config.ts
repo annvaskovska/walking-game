@@ -92,7 +92,7 @@ export default defineConfig(({ mode }) => ({
   ],
   // MapLibre is most of the app (~300 KB gzipped); one chunk loads in one round trip, and the
   // service worker keeps it for the next start.
-  build: { chunkSizeWarningLimit: 1200, target: 'es2022' },
+  build: { chunkSizeWarningLimit: 1300, target: 'es2022' },
   // .context/ holds design prototypes; edits there must not reload the app.
   server: { host: true, watch: { ignored: ['**/.context/**', '**/.malini/**'] } },
   preview: { host: true },

@@ -1,17 +1,20 @@
 import { Blocks, type Block } from '../core/blocks';
-import type { Building, Piece } from '../core/types';
+import type { Building, Piece, Place } from '../core/types';
 import { expandBBox, polylineDistanceM, type BBox } from '../geo/geo';
 import { GridIndex } from '../geo/spatialIndex';
 
 /**
- * The walkable streets and the houses of the map tiles loaded around you, indexed for the
- * walking rule. Tiles come and go as you move; what you lit lives on in `Progress`.
+ * The walkable streets, the houses and the landmarks of the map tiles loaded around you, indexed
+ * for the walking rule and for line of sight. Tiles come and go as you move; what you lit lives on
+ * in `Progress`.
  */
 export class StreetGraph {
   readonly pieces = new GridIndex<Piece>();
   readonly blocks = new Blocks();
   readonly houses = new GridIndex<Building>();
-  private tiles = new Map<string, { blocks: Block[]; houses: Building[] }>();
+  /** Landmarks: a point each, its bbox. */
+  readonly places = new GridIndex<Place>();
+  private tiles = new Map<string, { blocks: Block[]; houses: Building[]; places: Place[] }>();
   /** Bumped on every change. */
   version = 0;
 
@@ -24,7 +27,7 @@ export class StreetGraph {
   }
 
   /** Add a parsed tile; returns its blocks. */
-  addTile(key: string, blocks: Block[], houses: Building[]): Block[] {
+  addTile(key: string, blocks: Block[], houses: Building[], places: Place[] = []): Block[] {
     if (this.tiles.has(key)) return [];
     const added: Block[] = [];
     for (const b of blocks) {
@@ -34,7 +37,10 @@ export class StreetGraph {
     }
     const hs: Building[] = [];
     for (const h of houses) if (this.houses.insert(h)) hs.push(h);
-    this.tiles.set(key, { blocks: added, houses: hs });
+    // Only what this tile added goes when it drops: another tile may hold the same place.
+    const ps: Place[] = [];
+    for (const p of places) if (this.places.insert(p)) ps.push(p);
+    this.tiles.set(key, { blocks: added, houses: hs, places: ps });
     this.version++;
     return added;
   }
@@ -47,6 +53,7 @@ export class StreetGraph {
       for (const p of b.pieces) this.pieces.remove(p.id);
     }
     for (const h of t.houses) this.houses.remove(h.id);
+    for (const p of t.places) this.places.remove(p.id);
     this.tiles.delete(key);
     this.version++;
   }

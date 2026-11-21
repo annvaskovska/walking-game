@@ -7,11 +7,15 @@
  *    G = the flash running along a street the moment it unlocks;
  *    B = the pool of light around you;
  *    A = your beam: the cone of sight ahead of you while you walk.
+ *    B and A then go dark behind every wall that faces you (shadows.ts): light stops at walls.
+ *    A second mask of the same size holds what you have seen (seenLayer.ts), in R.
  * 2. Composite (on screen): fog with drifting mist everywhere the mask is dark, soft edges, a thin
  *    warm rim, lamplight pooled along lit streets with a gold line down the middle, the flash,
- *    and your beam, which lights up the mist it passes through.
+ *    and your beam, which lights up the mist it passes through. Where you have seen, the fog
+ *    thins and the mist turns to moonlight.
  *
- * Lit houses are drawn between the two, as warm shapes whose windows switch on one by one.
+ * Lit houses are drawn between the two, as warm shapes whose windows switch on one by one; seen
+ * houses after the composite, as moonlit roofs over the fog.
  */
 
 /** Capsule around each lit segment: a quad, with the exact distance worked out per fragment. */
@@ -117,6 +121,7 @@ uniform float u_m2u;
 uniform float u_lantern;
 uniform float u_coneLen;
 uniform float u_coneCos;
+uniform float u_coneInnerCos;
 uniform vec2 u_dir;
 uniform float u_cone;
 uniform float u_on;
@@ -126,7 +131,7 @@ void main() {
   float disc = 1.0 - smoothstep(u_lantern * 0.25, u_lantern, d);
   float c = d > 0.01 ? dot(v_d / (d * u_m2u), u_dir) : 1.0;
   // The beam: soft sides, brightest close to you, fading out towards its reach.
-  float side = smoothstep(u_coneCos, mix(u_coneCos, 1.0, 0.6), c);
+  float side = smoothstep(u_coneCos, u_coneInnerCos, c);
   float reach = 1.0 - smoothstep(u_coneLen * 0.15, u_coneLen, d);
   // It starts a few steps ahead of you, so it reads as light thrown forward, not a blob on you.
   float ahead = mix(0.25, 1.0, smoothstep(1.5, 16.0, d));
@@ -209,6 +214,10 @@ in vec2 v_uv;
 in vec2 v_world;
 uniform sampler2D u_mask;
 uniform sampler2D u_noise;
+uniform sampler2D u_seen;
+uniform float u_seenClear;
+uniform float u_seenTint;
+uniform vec3 u_moon;
 uniform float u_time;
 uniform float u_noiseScale;
 uniform float u_mistAmt;
@@ -234,11 +243,16 @@ void main() {
   float lit = smoothstep(0.05, 0.42, r);
   float lamp = m.b;
   float beam = m.a;
-  float clear = max(max(lit, lamp * 0.9), beam * 0.8);
+  // What you have seen stays thinned, in moonlight; its edge drifts with the mist too.
+  float sv = texture(u_seen, v_uv).r;
+  float seen = clamp(sv + (n - 0.5) * 0.16 * sv, 0.0, 1.0);
+  float clear = max(max(lit, lamp * 0.9), max(beam * 0.8, seen * u_seenClear));
   float a = u_opacity * (1.0 - clear);
-  // Night fog: near black, with slow faint drifts of mist.
-  vec3 fog = mix(u_fog, u_mist, smoothstep(0.3, 0.85, n) * 0.75 * u_mistAmt);
+  // Night fog: near black, with slow faint drifts of mist, which catch the moon where you have seen.
+  vec3 mist = mix(u_mist, u_moon * 0.32, seen * 0.6);
+  vec3 fog = mix(u_fog, mist, smoothstep(0.3, 0.85, n) * 0.75 * u_mistAmt);
   vec3 c = fog * a;
+  c += u_moon * seen * u_seenTint * (0.75 + 0.5 * n) * (1.0 - lit);
 
   // Warm light: a thin glow where the fog thins, lamplight pooled along lit streets, and your
   // lantern, whose beam catches the mist ahead of you.

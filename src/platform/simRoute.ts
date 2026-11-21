@@ -39,3 +39,11 @@ export const SIM_ROUTE: readonly number[] = [
   4.885243, 52.374247, 4.884862, 52.374251, 4.884744, 52.374253, 4.884737, 52.3742,
   4.884731, 52.374158, 4.884657, 52.374161, 4.884593, 52.374219,
 ];
+
+/** A second demo walk, taken out of the history. */
+export const SIM_ROUTE_DAMRAK: readonly number[] = [];
+
+/** The demo walk named by `?walk=` (the Jordaan when it names none we know). */
+export function simRoute(name: string | null): { name: string; route: readonly number[] } {
+  return name === 'damrak' ? { name, route: SIM_ROUTE_DAMRAK } : { name: 'jordaan', route: SIM_ROUTE };
+}
