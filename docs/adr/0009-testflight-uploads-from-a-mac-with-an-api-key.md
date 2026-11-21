@@ -17,7 +17,7 @@ GitHub Actions secrets for this repository can be set only by its owner, so an u
 - Xcode's `manageAppVersionAndBuildNumber` default gives each upload the next build number, so the project's `CURRENT_PROJECT_VERSION` stays as it is.
 - The publishing team, the key ID, the issuer ID and the key's text come from `ASC_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY` (ADR 0010).
   The script writes the key to a private temporary folder, restores its PEM line breaks, and deletes it on exit.
-- The archive overrides `DEVELOPMENT_TEAM` on the command line, so the team in `ios/App/App.xcodeproj` stays the one for runs from Xcode.
+- The archive sets `DEVELOPMENT_TEAM` on the command line, because the Xcode project in git holds no team (ADR 0010).
 - The App ID and the App Store Connect record are made once by hand on the web; `docs/guide.md` lists the steps.
 
 ## Consequences

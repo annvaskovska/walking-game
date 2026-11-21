@@ -3,7 +3,7 @@
 # key, so no Xcode account, certificate or profile has to be set up by hand (ADR 0009). Xcode gives
 # each upload the next build number. Every account detail comes from the environment and none is
 # in this public repository (ADR 0010):
-#   ASC_TEAM_ID    the team that publishes; the Xcode project keeps its own team for runs from Xcode
+#   ASC_TEAM_ID    the team that publishes; the Xcode project in git holds none
 #   ASC_KEY_ID     the API key's ID
 #   ASC_ISSUER_ID  the issuer ID above the list of keys
 #   ASC_KEY        the text of the key's .p8 file; Admin access lets Xcode make the certificate

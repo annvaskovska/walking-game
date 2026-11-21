@@ -21,6 +21,9 @@ Before you write any of them, keep out:
 
 A script that needs an account detail reads it from the environment and names the variable, never the value.
 Picking a team in Xcode writes it into `ios/App/App.xcodeproj`: leave that change out of the commit.
+`scripts/check-public.sh` runs first in `npm test` and in the commit hook, and fails on the patterns it knows: teams, machine paths, addresses, keys, track files.
+A red run means the data comes out.
+It cannot judge a route or an image, so those stay yours to check.
 The repository's own public URLs, such as its GitHub Pages address, are fine.
 When you are not sure, leave it out and ask.
 [ADR 0010](docs/adr/0010-the-repository-is-public.md) records why.

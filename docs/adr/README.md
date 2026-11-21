@@ -15,5 +15,5 @@ An accepted record is never rewritten, only superseded.
 | [0007](0007-the-first-paint-comes-from-index-html-alone.md) | The start screen, its CSS and a boot script that prefetches tiles and the worker are inline; the fonts ship with the app and are preloaded |
 | [0008](0008-the-frame-rate-follows-what-moves.md) | Drawing slows to 30 or 15 fps by motion, the walker holds within a pixel, and fog masks are kept while unchanged |
 | [0009](0009-testflight-uploads-from-a-mac-with-an-api-key.md) | `npm run ios:testflight` signs with an App Store Connect API key from the environment and uploads from a Mac |
-| [0010](0010-the-repository-is-public.md) | Nothing in git names a person, an account, a machine or a place tied to a person; account details come from the environment |
+| [0010](0010-the-repository-is-public.md) | Nothing in git names a person, an account, a machine or a place tied to a person; account details come from the environment, and `scripts/check-public.sh` checks every test run and commit |
 | [0011](0011-the-app-is-called-mr-sparkles.md) | The app is Mr Sparkles with the bundle ID `io.github.annvaskovska.mrsparkles`; names that find stored data stay `wanderlight` |

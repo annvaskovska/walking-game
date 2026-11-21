@@ -1,0 +1,3 @@
+#!/bin/sh
+# Stops a commit that would publish personal data (ADR 0010). `npm install` points git here.
+exec sh scripts/check-public.sh

@@ -56,6 +56,7 @@ The first time:
 4. With a free Apple Account, iPhone refuses to open the app the first time: *Settings → General → VPN & Device Management → Apple Development → Trust*, then open Mr Sparkles.
 
 Picking your team changes `DEVELOPMENT_TEAM` in `ios/App/App.xcodeproj`; leave that change out of your commits (ADR 0010).
+The commit hook that `npm install` sets up, `scripts/check-public.sh`, stops a commit that holds it.
 
 On the first walk, allow location **While Using the App** and keep *Precise Location* on.
 During a walk iOS shows a blue location pill in the status bar: that is the walk being recorded.
