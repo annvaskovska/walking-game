@@ -1,4 +1,4 @@
-import type { FilterSpecification, LayerSpecification, StyleSpecification } from 'maplibre-gl';
+import type { FilterSpecification, FontFacesSpecification, LayerSpecification, StyleSpecification } from 'maplibre-gl';
 import type { Theme } from '../theme';
 
 /** Tiles come through this protocol, so the map and the street graph share one download each. */
@@ -26,6 +26,29 @@ const MINOR = ['minor', 'service', 'track'];
 const MAJOR = ['motorway', 'trunk', 'primary', 'secondary', 'tertiary'];
 const PATHS = ['path', 'pedestrian'];
 
+// The ranges of Google Fonts' latin and latin-ext subsets, as in the @font-face rules of index.html.
+const LATIN = 'U+0000-00FF U+0131 U+0152-0153 U+02BB-02BC U+02C6 U+02DA U+02DC U+0304 U+0308 U+0329 U+2000-206F U+20AC U+2122 U+2191 U+2193 U+2212 U+2215 U+FEFF U+FFFD'.split(' ');
+const LATIN_EXT = 'U+0100-02BA U+02BD-02C5 U+02C7-02CC U+02CE-02D7 U+02DD-02FF U+0304 U+0308 U+0329 U+1D00-1DBF U+1E00-1E9F U+1EF2-1EFF U+2020 U+20A0-20AB U+20AD-20C4 U+2113 U+2C60-2C7F U+A720-A7FF'.split(' ');
+
+/**
+ * The fonts shipped in public/fonts, for the labels (by the names `text-font` asks for). MapLibre
+ * draws each letter only once its file has loaded, so a label never sticks in a stand-in font;
+ * the latin-ext file (ő, š…) loads only when a name needs it. Other scripts fall back to the
+ * phone's fonts further down the stack.
+ */
+function fontFaces(): FontFacesSpecification {
+  const url = (file: string) => new URL(`${import.meta.env.BASE_URL}fonts/${file}.woff2`, location.href).href;
+  const face = (file: string) => [
+    { url: url(`${file}-latin`), 'unicode-range': LATIN },
+    { url: url(`${file}-latin-ext`), 'unicode-range': LATIN_EXT },
+  ];
+  return {
+    'Instrument Serif': face('instrument-serif'),
+    'Instrument Serif Italic': face('instrument-serif-italic'),
+    'Instrument Sans': face('instrument-sans'),
+  };
+}
+
 /** A width in metres on the ground, as pixels (about right for the latitudes of Europe). */
 const metres = (m: number) =>
   ['interpolate', ['exponential', 2], ['zoom'], 12, m / 12.8, 16, m / 0.8, 20, m / 0.05] as unknown as number;
@@ -38,8 +61,8 @@ export const moonNamesFilter = (lit: readonly string[]): FilterSpecification =>
  * The basemap at night (OpenMapTiles schema from OpenFreeMap). Under the fog it shows where you
  * have walked, and dimly where you have seen, street names in moonlight included; above the fog
  * sit faint hints of every street, the landmarks you have seen, district names and the gold names
- * of your streets. No icon sprite, no glyph downloads: MapLibre draws the few labels with the
- * phone's own fonts.
+ * of your streets. No icon sprite, no glyph downloads: MapLibre draws the few labels itself, with
+ * the app's own two fonts (see fontFaces).
  */
 export function buildStyle(t: Theme): StyleSpecification {
   const m = t.map;
@@ -107,7 +130,8 @@ export function buildStyle(t: Theme): StyleSpecification {
         // `name`, like the gold names (tileParse names the streets from it).
         'text-field': ['get', 'name'],
         'text-font': ['Medium', ...t.font.names],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 15, 11, 17, 13, 19, 15.5],
+        // Instrument Serif runs small for its size: a size up from the phone's serif.
+        'text-size': ['interpolate', ['linear'], ['zoom'], 15, 12, 17, 14, 19, 16.5],
         'text-letter-spacing': 0.04,
         'text-max-angle': 28,
         // Placed like the gold names, so where both would show the gold one wins the spot.
@@ -197,9 +221,11 @@ export function buildStyle(t: Theme): StyleSpecification {
       layout: {
         'symbol-placement': 'line',
         'text-field': ['get', 'n'],
-        // The first entry only carries the weight: MapLibre reads it from the first name.
-        'text-font': ['Semibold', ...t.font.names],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 15, 12, 17, 14.5, 19, 17],
+        // In italic, as on the summary: walked streets in gold italic, seen ones in plain moonlight.
+        // The first entry only carries the weight of the phone's fallback serif (MapLibre reads it
+        // from the first name); the shipped files carry their own.
+        'text-font': ['Semibold', ...t.font.walked],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 15, 13.5, 17, 16, 19, 19],
         'text-letter-spacing': 0.04,
         'text-max-angle': 28,
         // Beside the street, not on it: the gold line stays whole and you never cover the name.
@@ -218,6 +244,7 @@ export function buildStyle(t: Theme): StyleSpecification {
 
   return {
     version: 8,
+    'font-faces': fontFaces(),
     sources: {
       omt: {
         type: 'vector',

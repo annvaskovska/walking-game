@@ -63,7 +63,8 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,mjs,html,svg}'],
+        // The fonts too (~85 KB): the start screen's title waits for its own, so it must be here offline.
+        globPatterns: ['**/*.{js,mjs,html,svg,woff2}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
           {

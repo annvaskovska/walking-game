@@ -5,9 +5,15 @@
  */
 export interface Theme {
   font: {
-    /** Gold street names: a book serif from the system, so no font is downloaded. */
+    /**
+     * Gold names of the streets you walked: Instrument Serif in italic, as on the summary. The first
+     * names are the files the app ships (style.ts fontFaces); the phone's own serifs follow for
+     * scripts those files lack.
+     */
+    walked: string[];
+    /** Moonlit names of the streets you have seen: the same serif, upright. */
     names: string[];
-    /** Faint district names. */
+    /** Faint district names and landmarks: Instrument Sans. */
     places: string[];
   };
   map: {
@@ -109,8 +115,9 @@ export interface Theme {
 
 export const nightTheme: Theme = {
   font: {
-    names: ['ui-serif', 'New York', 'Iowan Old Style', 'Georgia', 'Noto Serif', 'serif'],
-    places: ['system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+    walked: ['Instrument Serif Italic', 'Instrument Serif', 'ui-serif', 'New York', 'Iowan Old Style', 'Georgia', 'Noto Serif', 'serif'],
+    names: ['Instrument Serif', 'ui-serif', 'New York', 'Iowan Old Style', 'Georgia', 'Noto Serif', 'serif'],
+    places: ['Instrument Sans', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
   },
   map: {
     background: '#0f1218',

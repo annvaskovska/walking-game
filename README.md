@@ -28,7 +28,7 @@ Wanderlight is a small walking motivator.
 Your city starts in fog, and every street you walk lights up with its houses and its name.
 The light stays, so each walk shows you where you have not been yet.
 
-Open it and you get one start screen: what it is, your streets so far, and **Start the walk**.
+Open it and you get one start screen: what it is, your streets so far, and **Start walking**.
 After that it is just the map: you, a beam of light ahead of you, and the fog.
 
 ---
@@ -76,7 +76,7 @@ The web app records only while it is open with the screen on.
 
 # Use
 
-1. Tap **Start the walk** and allow location.
+1. Tap **Start walking** and allow location.
 2. Walk: each street lights as you follow it.
 3. Turn the phone to look around.
 4. Tap the map for your time, distance and steps, and to end the walk.

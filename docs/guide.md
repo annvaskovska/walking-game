@@ -105,7 +105,9 @@ The app asks only for *While Using* permission: a walk you started counts as usi
   `index.html` carries the start screen and its CSS inline, so it paints in the first round trip, before any script.
   A tiny boot script starts downloading the map tiles around where you were last and MapLibre's worker right away, alongside the app, and a tap on Start asks for your location even before the app has loaded.
   The app (~340 KB gzipped, most of it MapLibre) loads behind the start screen, and the service worker keeps it for the next start.
-  No web fonts: names use the phone's own serif.
+  The type ships with the app: Instrument Serif and Instrument Sans (OFL, `public/fonts/`, ~60 KB for the start screen, preloaded).
+  Accented letters such as ő load from small extra files only when a name needs them.
+  The map's labels draw with the same files.
 - **One download per tile.**
   The [OpenFreeMap](https://openfreemap.org) vector tiles (OpenMapTiles schema, z14) that draw the map are also parsed, in a worker, into the walkable street graph and the house footprints.
   MapLibre gets each tile through a custom protocol from the same download.
