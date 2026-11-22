@@ -283,36 +283,41 @@ void main() {
   gl_Position = u_matrix * vec4(v_px, 0.0, 1.0);
 }`;
 
+/**
+ * Mr Sparkles (ADR 0012): one round light in a tight bright shine and a wide warm one, the same
+ * sizes and colours as on the start screen (index.html). He flickers like a candle, from sines out
+ * of step so it never quite repeats, and drifts a pixel or two. His flashlight is the fog's beam.
+ */
 export const PUCK_FS = `#version 300 es
 precision highp float;
 in vec2 v_px;
 uniform float u_time;
-uniform vec2 u_dir;
-uniform float u_cone;
 uniform float u_scale;
 uniform vec3 u_core;
-uniform vec3 u_ring;
+uniform vec3 u_edge;
+uniform vec3 u_shine;
 uniform vec3 u_glow;
 out vec4 o;
+// A radial gradient as SVG draws one: a at the centre, b at stop m, nothing at the rim (s = 1).
+float ramp(float s, float a, float b, float m) {
+  return s < m ? mix(a, b, s / m) : mix(b, 0.0, min(1.0, (s - m) / (1.0 - m)));
+}
+vec4 over(vec4 top, vec4 under) {
+  return top + under * (1.0 - top.a);
+}
 void main() {
-  float d = length(v_px);
-  float pulse = 0.5 + 0.5 * sin(u_time * 2.4);
-  float glow = exp(-d * d / (120.0 + 40.0 * pulse)) * 0.55;
+  float t = u_time;
+  float f = 0.05 * sin(t * 2.7) + 0.04 * sin(t * 6.3 + 1.3) + 0.03 * sin(t * 10.1 + 0.4);
+  vec2 p = v_px - vec2(2.0 * sin(t * 0.69), 2.5 * sin(t * 0.51 + 1.0));
+  float d = length(p);
   float aa = 0.8 / u_scale;
-  float ring = 1.0 - smoothstep(8.5 - aa, 8.5 + aa, d);
-  float core = 1.0 - smoothstep(5.5 - aa, 5.5 + aa, d);
-  // A small chevron just outside the ring, pointing where you walk.
-  vec2 dir = u_dir;
-  float along = dot(v_px, dir);
-  float across = abs(dot(v_px, vec2(-dir.y, dir.x)));
-  float chev = (1.0 - smoothstep(0.0, aa * 2.0, across - (15.0 - along) * 0.75))
-             * smoothstep(9.5, 10.5, along) * (1.0 - smoothstep(14.0, 15.0, along)) * u_cone;
-  vec3 c = u_glow * glow;
-  float a = glow * 0.6;
-  c = mix(c, u_ring, ring);
-  a = mix(a, 1.0, ring);
-  c = mix(c, u_core, core);
-  c = mix(c, u_ring, chev);
-  a = max(a, chev);
-  o = vec4(c * a, a);
+  float shine = 0.88 + 1.5 * f;
+  float wide = ramp(d / (65.0 * (1.0 + f)), 0.62, 0.3, 0.4) * shine;
+  float tight = ramp(d / (22.5 * (1.0 + f)), 0.85, 0.3, 0.5) * shine;
+  float r = 8.4 * (1.0 + 0.8 * f);
+  float body = 1.0 - smoothstep(r - aa, r + aa, d);
+  vec3 orb = mix(u_core, u_edge, smoothstep(0.3, 1.0, d / r));
+  vec4 c = vec4(u_glow * wide, wide);
+  c = over(vec4(mix(u_shine, u_glow, min(1.0, d / 22.5)) * tight, tight), c);
+  o = over(vec4(orb * body, body), c);
 }`;

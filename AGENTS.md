@@ -38,7 +38,7 @@ Features and fixes inside an existing decision need no ADR.
 ## Product
 
 Mr Sparkles is a walking motivator: the city starts in fog, and every street you walk lights up for good, with its houses and its name.
-It is one web app that runs in the browser, from the home screen, and in a native iPhone shell.
+It is one web app: in its native iPhone shell it records real walks, and in any browser it is a demo that walks a scripted route through Amsterdam (ADR 0013).
 
 Every change keeps these invariants:
 
@@ -46,6 +46,7 @@ Every change keeps these invariants:
   No account, no server, no analytics; apart from the app, every request goes to the tile host (ADR 0001).
 - **Real walking only.** Only filtered GPS steps that follow a street light it.
   Nothing lights from a tap (ADR 0004).
+  The browser's demo walk sends its scripted fixes through the same filter, into records of its own.
 - **One app.** The iPhone app is the web app in a Capacitor shell.
   Native code does only what the web cannot: record with the screen locked (ADR 0002).
 - **First paint first.** `index.html` paints the start screen before any script runs, and nothing may delay it (ADR 0007).
@@ -56,7 +57,6 @@ Every change keeps these invariants:
 - TypeScript and Vite, with no UI framework.
 - MapLibre GL for the map, with custom WebGL layers for the fog and the shadows (`src/map/fog/`).
 - OpenFreeMap vector tiles (OpenMapTiles schema), decoded in a worker into the map, the street graph and the houses (`src/data/`).
-- `vite-plugin-pwa` for the service worker and the install manifest.
 - Capacitor for the iPhone app, Swift for its background GPS (`ios/App/App/`).
 - Vitest for unit tests.
 
@@ -65,25 +65,25 @@ Every change keeps these invariants:
 - `src/core/`: pure logic, each module with its test: GPS filter, motion, walked-along rule, blocks, progress, walk stats, walls and line of sight, seen memory, heading.
 - `src/geo/`: geometry, pieces, spatial index.
 - `src/data/`: tile decoder and parser, tile source, street graph. `tileUrl.ts` is the one place the tile URL lives.
-- `src/platform/`: location in the browser and in the iPhone app, wake lock, storage, compass, demo walk.
+- `src/platform/`: the iPhone app's location, the demo walk, wake lock, storage, compass.
 - `src/map/`: style, GPU fog, shadows, seen memory, walker, follow camera, gold names.
 - `src/ui/`: start screen, walk stats, notices.
 - `src/app/`: the controller.
-- `index.html`: the start screen, its CSS and the boot script, inline.
+- `index.html`: the start screen with Mr Sparkles in the fog, its CSS and its scripts, inline.
 - `ios/`: the Xcode project and the native GPS plugin.
 - `scripts/make-icons.mjs` draws the app icons, the iPhone one too; `scripts/testflight.sh` uploads to TestFlight.
 - `docs/guide.md`: how to run, install and ship it, and how it works under the hood. `docs/adr/`: why.
 
 ## Commands
 
-- `npm run dev` serves the app at `localhost:5173`.
-  `?sim` walks a scripted demo route without GPS, `?sim=fast` at 10× speed, with records apart from real walks.
+- `npm run dev` serves the app at `localhost:5173`, where it is the demo: Start walks a scripted route without GPS, with records apart from real walks.
+  `?sim=fast` walks it at 10× speed.
 - `npm test` runs the unit tests, `npm run typecheck` type-checks, `npm run build` does both and builds into `dist/`.
-- `npm run phone` serves a build over self-signed HTTPS for a phone on the same Wi-Fi.
 - `npm run ios` builds, copies the web app into `ios/` and opens Xcode; `npm run ios:sync` only builds and copies.
+  Real GPS is tested only in the iPhone app, run from Xcode or installed from TestFlight.
 - `npm run ios:testflight` uploads a build to TestFlight with an App Store Connect API key from the environment (ADR 0009).
   `xcodebuild` resolves Swift packages in a sandbox of its own, so run it outside any other sandbox.
-- CI: `.github/workflows/ios.yml` tests and builds the iPhone app on every pull request; `.github/workflows/pages.yml` deploys `main` to GitHub Pages.
+- CI: `.github/workflows/ios.yml` tests and builds the iPhone app on every pull request; `.github/workflows/pages.yml` deploys `main` to GitHub Pages as the public demo.
 - Commit subjects and pull request titles are plain imperative sentences that say what changes for the walker, as `git log` shows.
 
 ## Code: lazy senior developer

@@ -15,7 +15,7 @@ import { LONG_AGO } from '../map/fog/geometry';
 import { EARTH_CIRCUMFERENCE_M } from '../map/gl';
 import { MapView } from '../map/mapView';
 import { nameLines } from '../map/names';
-import { createBrowserLocation, type LocationError, type LocationProvider } from '../platform/location';
+import type { LocationError, LocationProvider } from '../platform/location';
 import { isNativeApp } from '../platform/native';
 import { createSimLocation, simFactor } from '../platform/simLocation';
 import { SIM_ROUTE } from '../platform/simRoute';
@@ -49,8 +49,6 @@ interface Boot {
   sfx: string;
   /** When Start was tapped before the app had loaded (0: not). */
   tapped: number;
-  fix: Fix | null;
-  err: { code: number; message: string } | null;
   /** Motion access asked for in the Start tap (iPhone), for the compass. */
   orient?: 'granted' | 'denied';
   app: unknown;
@@ -104,42 +102,23 @@ function centroid(flat: ArrayLike<number>): [number, number] {
   return [x / n, y / n];
 }
 
-function locationHelp(e: LocationError, native: boolean): string {
-  if (e.kind === 'denied' && native) {
-    return (
-      '<b>Location is off for Mr Sparkles.</b> It lights up the streets you walk, so it needs to know where you are; that never leaves this iPhone.<br>' +
-      '<a href="app-settings:"><b>Open Settings</b></a> → Location → <b>While Using the App</b>, and keep Precise Location on.'
-    );
-  }
-  if (e.kind === 'denied') {
-    return (
-      '<b>Location is off for Mr Sparkles.</b> It lights up the streets you walk, so it needs to know where you are; that never leaves this device.<br>' +
-      '<b>iPhone:</b> Settings → Privacy &amp; Security → Location Services → Safari Websites → While Using.<br>' +
-      '<b>Android:</b> tap the icon left of the address, then Permissions → Location → Allow.'
-    );
-  }
-  if (e.kind === 'insecure') return '<b>Location needs a secure page.</b> Open the https:// address of Mr Sparkles.';
-  return '<b>This browser can’t share your location.</b> Try Safari on iPhone or Chrome on Android.';
-}
-
-function bootLocationError(err: { code: number; message: string }): LocationError {
-  return { kind: err.code === 1 ? 'denied' : err.code === 2 ? 'unavailable' : 'timeout', message: err.message };
-}
+/** Location refused in the iPhone app: the demo walk asks for none. */
+const LOCATION_OFF =
+  '<b>Location is off for Mr Sparkles.</b> It lights up the streets you walk, so it needs to know where you are; that never leaves this iPhone.<br>' +
+  '<a href="app-settings:"><b>Open Settings</b></a> → Location → <b>While Using the App</b>, and keep Precise Location on.';
 
 export async function startApp(): Promise<void> {
   const params = new URLSearchParams(location.search);
+  // Only the iPhone app walks for real, with native GPS that goes on with the screen locked; a
+  // browser walks the demo (ADR 0013). The boot script in index.html decides it before first paint.
   const boot: Boot = (window as unknown as { __wl?: Boot }).__wl ?? {
-    sim: params.has('sim'), sfx: params.has('sim') ? '-sim' : '', tapped: 0, fix: null, err: null, app: null,
+    sim: !isNativeApp(), sfx: isNativeApp() ? '' : '-sim', tapped: 0, app: null,
   };
   const sim = boot.sim;
   const key = (k: string) => k + boot.sfx;
-  // The iPhone app records with native GPS, which goes on with the screen locked.
-  const native = !sim && isNativeApp();
   const provider: LocationProvider = sim
     ? createSimLocation(simFactor(params.get('sim')))
-    : native
-      ? (await import('../platform/nativeLocation')).createNativeLocation()
-      : createBrowserLocation();
+    : (await import('../platform/nativeLocation')).createNativeLocation();
   const theme = nightTheme;
 
   const splash = new Splash(sim);
@@ -179,23 +158,17 @@ export async function startApp(): Promise<void> {
     onWaiting: (w) => onWaiting(w),
   });
   const view = new MapView(document.getElementById('map')!, theme, tiles, start && { ...start, zoom: 15.5 });
-  // Once the streets around are drawn, show them behind the start screen.
-  if (start) view.map.once('idle', () => splash.overMap(true));
+  // Once the streets around are drawn, show them behind the start screen. Before the first walk
+  // (the demo's too), Mr Sparkles waits there in the fog instead (ADR 0012).
+  if (known) view.map.once('idle', () => splash.overMap(true));
   hud.source(() => ({
     elapsedMs: session ? provider.now() - session.startedAt : 0,
     distanceM: session?.distanceM ?? 0,
   }));
 
-  // In a browser the walk stops when the phone locks, so the screen is kept on. The iPhone app
-  // records with the screen locked, so it lets the phone lock as usual.
-  const wake = native
-    ? null
-    : new WakeLockKeeper((s) => {
-        // Without a wake lock the phone may lock and stop the walk; the demo walk doesn't care.
-        if (session && !sim && (s === 'failed' || s === 'unsupported')) {
-          toasts.show('wake', 'Keep the screen on to keep recording.', 'info', 6000);
-        }
-      });
+  // The demo keeps the screen on while it walks. The iPhone app records with the screen locked,
+  // so it lets the phone lock as usual.
+  const wake = sim ? new WakeLockKeeper() : null;
 
   // ---- What you lit so far ----
   const storage = await openStorage(sim ? 'wanderlight-sim' : undefined);
@@ -525,8 +498,8 @@ export async function startApp(): Promise<void> {
   }
 
   function onLocError(e: LocationError): void {
-    if (e.kind === 'denied' || e.kind === 'insecure' || e.kind === 'unsupported') {
-      void abandonWalk(e);
+    if (e.kind === 'denied') {
+      void abandonWalk();
       return;
     }
     if (!session) return;
@@ -573,8 +546,6 @@ export async function startApp(): Promise<void> {
     // Tells the service worker (main.ts) that from now on a new version waits for a quiet moment.
     boot.tapped ||= Date.now();
     splash.message(null);
-    const unavailable = provider.unavailable?.();
-    if (unavailable) return showLocationHelp(unavailable);
     splash.busy(true);
     const t = provider.now();
     session = {
@@ -596,9 +567,6 @@ export async function startApp(): Promise<void> {
     persistSession(true);
     writeLocal(key(WALKING_KEY), '1');
     beginTracking(session);
-    // A position taken in the tap that started this, before the app had loaded.
-    if (boot.fix && Math.abs(Date.now() - boot.fix.t) < 60_000) onFix(boot.fix);
-    boot.fix = null;
     clearTimeout(revealTimer);
     revealTimer = window.setTimeout(reveal, motion.hasFix ? 0 : FIRST_FIX_WAIT_MS);
   }
@@ -681,15 +649,11 @@ export async function startApp(): Promise<void> {
     splash.show();
   }
 
-  async function abandonWalk(e: LocationError): Promise<void> {
+  async function abandonWalk(): Promise<void> {
     if (session && session.distanceM > 0) await endWalk(false);
     else await cancelWalk();
-    showLocationHelp(e);
-  }
-
-  function showLocationHelp(e: LocationError): void {
     splash.busy(false);
-    splash.message(locationHelp(e, native));
+    splash.message(LOCATION_OFF);
   }
 
   /** Behind the summary, pull back to show the streets this walk went along. */
@@ -742,7 +706,7 @@ export async function startApp(): Promise<void> {
       fast ||= view.camera.settling;
       // The light comes from you and points where you look (compass), else where you walk.
       const light = sight.frame(now, f);
-      view.puck.set({ lon: f.lon, lat: f.lat, heading: light.heading, cone: light.cone });
+      view.puck.set({ lon: f.lon, lat: f.lat });
       view.fog.setLantern(light);
       moving = f.moving || light.settling;
       // Turning to look around: the beam and its shadows follow at full speed.
@@ -800,9 +764,8 @@ export async function startApp(): Promise<void> {
     writeLocal(key(WALKING_KEY), null);
     splash.show();
     if (start) view.map.setPadding(splashPadding());
-    // Start was tapped while the app loaded: carry on, unless location was refused right away.
-    if (boot.err?.code === 1) showLocationHelp(bootLocationError(boot.err));
-    else if (boot.tapped) startWalk();
+    // Start was tapped while the app loaded: carry on.
+    if (boot.tapped) startWalk();
   }
   if (!session) hud.hideAll();
 

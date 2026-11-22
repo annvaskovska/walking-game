@@ -8,16 +8,15 @@ import { PUCK_FS, PUCK_VS } from './fog/shaders';
 export interface PuckState {
   lon: number;
   lat: number;
-  heading: number | null;
-  cone: number;
 }
 
-/** Half-size of the quad the walker is drawn in, CSS px. */
-const SIZE = 26;
+/** Half-size of the quad the walker is drawn in, CSS px: his wide glow at its fullest, and his drift. */
+const SIZE = 76;
 
 /**
- * You on the map, drawn on the GPU in the same frame as the map itself (a DOM marker trails the
- * map by a frame while the camera follows you, which reads as jitter).
+ * You on the map, as Mr Sparkles (ADR 0012), drawn on the GPU in the same frame as the map itself
+ * (a DOM marker trails the map by a frame while the camera follows you, which reads as jitter).
+ * Where you look shows in the fog's beam, not on him.
  */
 export class PuckLayer implements CustomLayerInterface {
   readonly id = 'wl-puck';
@@ -29,10 +28,11 @@ export class PuckLayer implements CustomLayerInterface {
   private vao: WebGLVertexArrayObject | null = null;
   private broken = false;
   private state: PuckState | null = null;
-  private col: Record<'core' | 'ring' | 'glow', [number, number, number]>;
+  private col: Record<keyof Theme['puck'], [number, number, number]>;
 
   constructor(theme: Theme) {
-    this.col = { core: hex3(theme.puck.core), ring: hex3(theme.puck.ring), glow: hex3(theme.puck.glow) };
+    const p = theme.puck;
+    this.col = { core: hex3(p.core), edge: hex3(p.edge), shine: hex3(p.shine), glow: hex3(p.glow) };
   }
 
   set(s: PuckState | null): void {
@@ -82,7 +82,6 @@ export class PuckLayer implements CustomLayerInterface {
     const ws = 512 * 2 ** this.map.getZoom();
     // One unit = one CSS pixel, centred on you.
     const m = localMatrix(opts.modelViewProjectionMatrix, ws, mercX(s.lon), mercY(s.lat), ws);
-    const h = ((s.heading ?? 0) * Math.PI) / 180;
     const u = this.prog.u;
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.STENCIL_TEST);
@@ -94,11 +93,10 @@ export class PuckLayer implements CustomLayerInterface {
     gl.uniformMatrix4fv(u.u_matrix, false, new Float32Array(m));
     gl.uniform1f(u.u_size, SIZE);
     gl.uniform1f(u.u_time, pageTime());
-    gl.uniform2f(u.u_dir, Math.sin(h), -Math.cos(h));
-    gl.uniform1f(u.u_cone, s.heading === null ? 0 : s.cone);
     gl.uniform1f(u.u_scale, this.map.getPixelRatio());
     gl.uniform3fv(u.u_core, this.col.core);
-    gl.uniform3fv(u.u_ring, this.col.ring);
+    gl.uniform3fv(u.u_edge, this.col.edge);
+    gl.uniform3fv(u.u_shine, this.col.shine);
     gl.uniform3fv(u.u_glow, this.col.glow);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);

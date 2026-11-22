@@ -1,22 +1,22 @@
 <p align="center">
-  <img src="public/icons/icon-512.png" width="128" height="128" alt="Mr Sparkles app icon: a glowing walker where a lit gold street crosses a dark one, with a beam of light ahead.">
+  <img src="ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png" width="128" height="128" alt="Mr Sparkles app icon: a glowing walker where a lit gold street crosses a dark one, with a beam of light ahead.">
 </p>
 
 <h1 align="center">Mr Sparkles</h1>
 
 <p align="center">
   <b>Your city starts in fog. Every street you walk lights up, for good.</b><br>
-  A walking motivator for your phone, in the browser or as an iPhone app.<br>
+  A walking motivator for your iPhone, with a demo walk in the browser.<br>
   No account, no server: your walks stay on your phone.
 </p>
 
 <p align="center">
-  <a href="https://annvaskovska.github.io/walking-game/"><img src="https://img.shields.io/badge/Open_the_web_app-000?style=for-the-badge" alt="Open the web app" height="40"></a>
+  <a href="https://annvaskovska.github.io/walking-game/"><img src="https://img.shields.io/badge/Try_the_demo_walk-000?style=for-the-badge" alt="Try the demo walk" height="40"></a>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/iPhone-records_with_the_screen_locked-1c1c1e?logo=apple" alt="The iPhone app records with the screen locked">
-  <img src="https://img.shields.io/badge/web-installable-1c1c1e" alt="Installable web app">
+  <img src="https://img.shields.io/badge/web-demo_walk_through_Amsterdam-1c1c1e" alt="The web version is a demo walk through Amsterdam">
   <img src="https://img.shields.io/badge/data-on_your_phone-1c1c1e" alt="Your data stays on your phone">
 </p>
 
@@ -28,7 +28,8 @@ Mr Sparkles is a small walking motivator.
 Your city starts in fog, and every street you walk lights up with its houses and its name.
 The light stays, so each walk shows you where you have not been yet.
 
-Open it and you get one start screen: what it is, your streets so far, and **Start walking**.
+Open it and you get one start screen: a question, your streets so far, and **Start walking**.
+The first time, Mr Sparkles waits there in the fog: drag him around and the streets he passes light up.
 After that it is just the map: you, a beam of light ahead of you, and the fog.
 
 ---
@@ -67,12 +68,10 @@ The summary shows the same three numbers and the streets you lit.
 
 # Install
 
-**On any phone**, open **https://annvaskovska.github.io/walking-game/** and allow location when you start your first walk.
-Add it to your home screen: in Safari, tap *Share → Add to Home Screen*; in Chrome on Android, tap *⋮ → Install app*.
-The web app records only while it is open with the screen on.
-
-**On iPhone**, the app records with the screen locked too.
+**On iPhone**, Mr Sparkles walks for real, with the screen locked too.
 [Run it from Xcode](docs/guide.md#run-it-from-xcode) with a free Apple Account.
+
+**In any browser**, **https://annvaskovska.github.io/walking-game/** is a demo: Mr Sparkles walks a route through Amsterdam for you, and never asks for your location.
 
 # Use
 
@@ -96,7 +95,7 @@ The iPhone app asks for location only *While Using the App*.
 - **One download per tile.** The vector tiles that draw the map are also parsed into the street graph and the houses.
 - **Fog on the GPU.** One MapLibre layer draws the fog, the lit streets, and the shadows every wall casts in your light.
 
-The stack: TypeScript and Vite, MapLibre GL with custom WebGL layers, OpenFreeMap vector tiles, a service worker, and a Capacitor shell with Swift GPS for iPhone.
+The stack: TypeScript and Vite, MapLibre GL with custom WebGL layers, OpenFreeMap vector tiles, and a Capacitor shell with Swift GPS for iPhone.
 [More under the hood](docs/guide.md#under-the-hood), and why it is built this way in the [decision records](docs/adr/README.md).
 
 # Build from source
@@ -109,9 +108,9 @@ npm ci
 npm run dev        # http://localhost:5173
 ```
 
-Open **http://localhost:5173/?sim** to watch a demo walk without walking.
+In a browser it is the demo walk; **http://localhost:5173/?sim=fast** walks it at 10× speed.
 `npm test` runs the unit tests, and `npm run build` type-checks and builds into `dist/`.
-The [guide](docs/guide.md) covers the iPhone app, TestFlight, and testing on your phone.
+The [guide](docs/guide.md) covers the iPhone app and TestFlight.
 
 # Contributing
 
