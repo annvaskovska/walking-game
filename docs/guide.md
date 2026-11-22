@@ -1,41 +1,22 @@
 # Mr Sparkles guide
 
-## Try it without walking
+## The demo in a browser
 
-Open **http://localhost:5173/?sim**, or **`?sim=fast`** for 10× speed.
-This hidden demo walks a scripted route through the Jordaan in Amsterdam and keeps its own records, apart from your real walks.
-It never shows up in the normal app.
+Only the iPhone app records real walks (ADR 0013).
+In any browser, Mr Sparkles is a demo: Start walks a scripted route through the Jordaan in Amsterdam and never asks for your location.
+Run `npm run dev` and open **http://localhost:5173**, or **http://localhost:5173/?sim=fast** for 10× speed.
+The demo keeps its own records, apart from real walks, and keeps the screen on while it walks.
+Real walks recorded in a browser before it became the demo stay in that browser's storage, and the app no longer shows them.
 In the demo, `__sparkles.look(90)` in the console turns the beam east as a compass would, and `look(null)` turns it back to the way you walk.
 
-## Get it on your phone
-
-### From GitHub Pages
-
-Every push to `main` builds and deploys the app (`.github/workflows/pages.yml`).
+Every push to `main` builds the app and deploys it to **https://annvaskovska.github.io/walking-game/** as the public demo (`.github/workflows/pages.yml`).
 In the repository's *Settings → Pages*, set *Source* to **GitHub Actions** once.
-Then, on your phone:
-
-1. Open **https://annvaskovska.github.io/walking-game/**.
-2. Allow location when you start your first walk.
-3. Add it to your home screen: in Safari, tap *Share → Add to Home Screen*; in Chrome on Android, tap *⋮ → Add to Home screen / Install app*.
-
-### From your laptop on the same Wi-Fi
-
-```sh
-npm run phone
-```
-
-This builds the app and serves it over HTTPS with a self-signed certificate, since geolocation needs HTTPS.
-Open the `https://<your-laptop-ip>:4173/` address it prints on your phone and accept the certificate warning.
 
 ## The iPhone app
 
-The web app can only track you while it is open with the screen on.
-It keeps the screen awake during a walk (Wake Lock API), but when you lock your phone or switch apps, the browser stops sending GPS and that stretch of the walk is not lit.
-
-The iPhone app has no such gap.
-It is the same web app (same start screen, map, fog and gestures) in a native [Capacitor](https://capacitorjs.com) shell, with native GPS that keeps recording in the background.
+The iPhone app is the same web app (same start screen, map, fog and gestures) in a native [Capacitor](https://capacitorjs.com) shell, with native GPS that keeps recording in the background.
 Lock the phone, put it in your pocket, and when you look again the streets you walked light up at once.
+Real GPS is tested here, in the app run from Xcode or installed from TestFlight.
 
 ### Run it from Xcode
 
@@ -106,9 +87,10 @@ The app asks only for *While Using* permission: a walk you started counts as usi
 
 - **Fast on a phone network.**
   `index.html` carries the start screen and its CSS inline, so it paints in the first round trip, before any script.
-  A tiny boot script starts downloading the map tiles around where you were last and MapLibre's worker right away, alongside the app, and a tap on Start asks for your location even before the app has loaded.
-  The app (~340 KB gzipped, most of it MapLibre) loads behind the start screen, and the service worker keeps it for the next start.
-  The type ships with the app: Instrument Serif and Instrument Sans (OFL, `public/fonts/`, ~60 KB for the start screen, preloaded).
+  A tiny boot script picks the real walk in the iPhone app or the demo in a browser, and starts downloading the map tiles around where you were last and MapLibre's worker right away, alongside the app.
+  A tap on Start before the app has loaded starts the walk as soon as it is up.
+  The app (~340 KB gzipped, most of it MapLibre) loads behind the start screen; the iPhone app carries it inside.
+  The type ships with the app (OFL, `public/fonts/`): Nunito for everything you read and tap, preloaded (39 KB); Instrument Serif for the summary's numbers and the street names, and Instrument Sans for the map's place names.
   Accented letters such as ő load from small extra files only when a name needs them.
   The map's labels draw with the same files.
 - **One download per tile.**
@@ -149,7 +131,7 @@ The app asks only for *While Using* permission: a walk you started counts as usi
   Houses the light reached get dim blue roofs with a moonlit outline, walls facing your lantern glow warm, street names show faintly under the fog, and landmarks (shops, cafés, churches from the tiles' `poi` layer) visible from where you stood get their name.
   Walked still means gold; seen never lights a street.
 - **Look around.**
-  The beam follows the compass (`deviceorientation`; on iPhone the Start tap asks for motion access) while you stand or turn the phone, and the way you walk while you walk.
+  The beam follows the compass (`deviceorientation`; in Safari on iPhone the Start tap asks for motion access) while you stand or turn the phone, and the way you walk while you walk.
   Stretches recorded with the screen locked are looked at the way you walked them.
 
 Why each of these is built this way is in the [decision records](adr/README.md).

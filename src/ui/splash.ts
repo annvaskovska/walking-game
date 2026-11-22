@@ -17,8 +17,9 @@ export interface WalkSummary {
 }
 
 /**
- * The one screen besides the map: logo, one line on what Mr Sparkles is, and Start. Its markup
- * lives in index.html so it paints before any script loads; this drives it once the app is up.
+ * The one screen besides the map: a question, one line on Mr Sparkles, and Start, over your map or,
+ * before your first walk, over Mr Sparkles in the fog. Its markup and that scene live in index.html
+ * so they paint before any script loads; this drives the screen once the app is up.
  * After a walk it shows, over the map, how far you went and what the walk lit.
  */
 export class Splash {

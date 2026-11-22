@@ -1,4 +1,4 @@
-// Generates the PWA icons in public/icons and the iPhone app icon with no dependencies:
+// Generates the bookmark icon in public/icons and the iPhone app icon with no dependencies:
 // `node scripts/make-icons.mjs`.
 // The Mr Sparkles mark, as on the start screen (index.html): a street lit gold through the
 // night, a dim one crossing it, and you, with your beam of light ahead.
@@ -111,7 +111,7 @@ function logo(x, y) {
   return c;
 }
 
-/** `zoom` > 1 crops in on you; < 1 leaves room for a maskable icon's safe zone. */
+/** `zoom` > 1 crops in on you. */
 function art(zoom) {
   const SS = 4;
   return (px, py, size) => {
@@ -131,9 +131,6 @@ function art(zoom) {
 }
 
 mkdirSync('public/icons', { recursive: true });
-writeFileSync('public/icons/icon-192.png', png(192, art(1.1)));
-writeFileSync('public/icons/icon-512.png', png(512, art(1.1)));
-writeFileSync('public/icons/icon-maskable-512.png', png(512, art(0.85)));
 writeFileSync('public/icons/apple-touch-icon.png', png(180, art(1.05)));
 // The iPhone app (ios/): the same art as the home-screen icon, at the one size Xcode needs.
 writeFileSync('ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png', png(1024, art(1.05)));

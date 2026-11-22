@@ -54,7 +54,6 @@ export function createNativeLocation(
   return {
     kind: 'device',
     now: () => Date.now(),
-    unavailable: () => null,
 
     watch(onFix, onError, opts = {}) {
       const walk = opts.walk ?? `w${Date.now().toString(36)}`;
