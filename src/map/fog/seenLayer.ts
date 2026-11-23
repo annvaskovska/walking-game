@@ -1,6 +1,6 @@
 import earcut from 'earcut';
 import { SEEN_TILE, SEEN_Z } from '../../core/seen';
-import { nightTheme, type Theme } from '../../theme';
+import { paperTheme, type Theme } from '../../theme';
 import { EARTH_CIRCUMFERENCE_M, hex3, program, type Program } from '../gl';
 import { houseSeed, mercX, mercY } from './geometry';
 
@@ -8,9 +8,9 @@ import { houseSeed, mercX, mercY } from './geometry';
  * What you have seen, on the GPU, in two parts:
  *
  * - SeenTextures: the seen memory (one R8 texture per z17 tile), drawn world-anchored into the
- *   fog's half-resolution `seenMask` (R = seen 0..1), which the composite reads to thin the fog.
- * - MoonHouses: the houses you have seen, over the fog: dim blue roofs with a moonlit outline,
- *   fading in. Walls that face your light right now glow warm.
+ *   fog's half-resolution `seenMask` (R = seen 0..1), which the composite reads to clear the wash.
+ * - MoonHouses: the houses you have seen, over the wash: paper roofs with a pen outline, fading in.
+ *   Walls that face you right now are drawn a little heavier.
  *
  * Positions on the GPU are the fog's local units: WM (mercator metres, y south) minus the fog's
  * origin, so float32 stays exact.
@@ -415,7 +415,7 @@ export class SeenTextures {
   }
 }
 
-// ---- Moonlit houses ----
+// ---- Seen houses ----
 
 /** Seconds a newly seen house takes to fade in (ease-out). */
 export const MOON_FADE_S = 0.9;
@@ -427,7 +427,7 @@ export const MOON_EDGE_FLOATS = 10;
 const SAME_CORNER = 0.01;
 /** How far outward of a wall the light is read, CSS px: just past the wall, clear of its shadow. */
 const LOOK_PX = 2;
-/** A lit wall's outline is this much wider (CSS px), and throws a warm halo this wide onto the street. */
+/** A wall that faces you is drawn this much wider (CSS px); its quad reaches this far out of the house. */
 const GLOW_EXTRA_PX = 0.9;
 const HALO_PX = 3;
 
@@ -585,9 +585,7 @@ void main() {
   float t = clamp((u_time - v_house.y) / ${FADE_GLSL}, 0.0, 1.0);
   float a = u_alpha * (1.0 - (1.0 - t) * (1.0 - t));
   if (a <= 0.0) discard;
-  // Neighbouring houses differ a little in tone, so a terrace reads as houses, not one slab.
-  vec3 c = u_fill * (0.84 + 0.32 * fract(v_house.x * 0.7548776));
-  o = vec4(c * a, a);
+  o = vec4(u_fill * a, a);
 }`;
 
 /**
@@ -650,14 +648,12 @@ uniform float u_useMask;
 uniform float u_time;
 uniform float u_width;
 uniform float u_glowWidth;
-uniform float u_halo;
 uniform vec3 u_edge;
 uniform float u_edgeAlpha;
-uniform vec3 u_facade;
 out vec4 o;
 void main() {
-  // Your light (lantern B, cone A) just outside the wall: lit in front of a wall that faces you,
-  // dark behind a back wall, which sits in its own house's shadow.
+  // Your sight (disc B, cone A) just outside the wall: the pen presses harder on a wall that
+  // faces you, not on a back wall, which sits in its own house's shadow.
   vec4 m = textureLod(u_mask, v_look.xy / v_look.w * 0.5 + 0.5, 0.0);
   float g = smoothstep(0.03, 0.7, max(m.b, m.a)) * u_useMask;
   float t = clamp((u_time - v_house.y) / ${FADE_GLSL}, 0.0, 1.0);
@@ -666,10 +662,8 @@ void main() {
   float w = mix(u_width, u_glowWidth, g);
   float wd = max(w, 1.0);
   float line = clamp(wd * 0.5 + 0.5 - abs(v_across), 0.0, 1.0) * (w / wd) * mix(u_edgeAlpha, 1.0, g);
-  // A lit wall throws a little warm light onto the street in front of it.
-  float halo = g * 0.3 * smoothstep(-0.75, 0.75, v_across) * (1.0 - smoothstep(0.0, u_halo, v_across));
-  vec3 c = mix(u_edge, u_facade, g * 0.85) * line + u_facade * halo * (1.0 - line);
-  float a = (line + halo * (1.0 - line)) * fade;
+  vec3 c = u_edge * line;
+  float a = line * fade;
   if (a <= 0.0) discard;
   o = vec4(c * fade, a);
 }`;
@@ -1331,13 +1325,13 @@ export class MoonHouses {
   private gpuLen = new Float64Array(3);
   private gpuEnd = new Float64Array(3);
   private broken = false;
-  private col: Record<'fill' | 'edge' | 'facade', [number, number, number]>;
+  private col: Record<'fill' | 'edge', [number, number, number]>;
 
   readonly stats: MoonStats = this.pack.stats;
 
-  constructor(private theme: Theme = nightTheme) {
+  constructor(private theme: Theme = paperTheme) {
     const s = theme.seen;
-    this.col = { fill: hex3(s.fill), edge: hex3(s.edge), facade: hex3(s.facade) };
+    this.col = { fill: hex3(s.fill), edge: hex3(s.edge) };
   }
 
   /** A house you have seen: `coords` a closed lon/lat outer ring; it fades in from page time `tOn`. */
@@ -1420,7 +1414,7 @@ export class MoonHouses {
    * - `cssPxUnits`: local units per CSS px (frame().cssPxUnits); the zoom is read from it;
    * - `dpr`: device px per CSS px (frame().dpr);
    * - `mask`: the fog's half-resolution mask after shadows (B lantern, A cone), drawn with the
-   *   same matrix; null for no facade glow;
+   *   same matrix; null for no pressed walls;
    * - `view`: optional, the view in WM [west, north, east, south]; read off `matrix` when absent.
    *
    * Disables face culling, uses texture unit 0 (left active, with nothing bound) and unbinds its
@@ -1478,10 +1472,9 @@ export class MoonHouses {
     gl.uniform1f(u.u_time, time);
     gl.uniform1f(u.u_width, width);
     gl.uniform1f(u.u_glowWidth, glow);
-    gl.uniform1f(u.u_halo, halo);
     gl.uniform3fv(u.u_edge, this.col.edge);
-    gl.uniform1f(u.u_edgeAlpha, s.edgeOpacity);
-    gl.uniform3fv(u.u_facade, this.col.facade);
+    // The pen thins out as the map zooms out, as the basemap's ink does (style.ts inkOpacity).
+    gl.uniform1f(u.u_edgeAlpha, s.edgeOpacity * Math.min(1, Math.max(0.45, 0.45 + (0.55 * (zoom - 13)) / 2.5)));
     gl.bindBuffer(gl.ARRAY_BUFFER, this.bufs[2]);
     const er = pack.edgeRuns, es = MOON_EDGE_FLOATS * 4;
     for (let k = 0; k < pack.nEdge; k += 2) {

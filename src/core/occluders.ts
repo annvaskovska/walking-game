@@ -1,7 +1,7 @@
 import { expandBBox } from '../geo/geo';
 import type { GridIndex } from '../geo/spatialIndex';
 import { wmX, wmY } from '../map/fog/geometry';
-import { nightTheme } from '../theme';
+import { paperTheme } from '../theme';
 import type { Building } from './types';
 
 /**
@@ -212,7 +212,7 @@ export class OccluderCache {
    * before the walls are gathered again. The gather radius is their sum.
    */
   constructor(opts: { radiusM?: number; slackM?: number } = {}) {
-    this.radiusM = opts.radiusM ?? nightTheme.fog.coneM + 5;
+    this.radiusM = opts.radiusM ?? paperTheme.fog.coneM + 5;
     this.slackM = opts.slackM ?? 25;
   }
 

@@ -4,16 +4,16 @@ import type { Theme } from '../theme';
 /** Tiles come through this protocol, so the map and the street graph share one download each. */
 export const TILE_PROTOCOL = 'wlt';
 
-/** The fog is drawn right above the basemap; everything from here up stays readable over it. */
-export const ABOVE_FOG_LAYER = 'ghost-path';
-/** Gold names of lit streets. */
+/** Names of walked streets, each in its pencil. */
 export const NAMES_SOURCE = 'lit-names';
 export const NAMES_LAYER = 'lit-names';
-/** Street names in moonlight, under the fog: they show only where you have seen or walked. */
+/** Street names in ink, under the wash: they print in full only where you have seen or walked. */
 export const MOON_NAMES_LAYER = 'moon-names';
-/** Labels of the landmarks you have seen, over the fog. */
+/** Labels of the landmarks you have seen, over the wash. */
 export const SEEN_PLACES_SOURCE = 'seen-places';
 export const SEEN_PLACES_LAYER = 'seen-places';
+/** The paper wash is drawn right above the basemap, under this layer; everything from here up stays readable over it. */
+export const ABOVE_FOG_LAYER = SEEN_PLACES_LAYER;
 /** The landmark dot, drawn at style load (no sprite). */
 export const LANDMARK_DOT = 'landmark-dot';
 
@@ -49,38 +49,49 @@ function fontFaces(): FontFacesSpecification {
   };
 }
 
-/** A width in metres on the ground, as pixels (about right for the latitudes of Europe). */
-const metres = (m: number) =>
-  ['interpolate', ['exponential', 2], ['zoom'], 12, m / 12.8, 16, m / 0.8, 20, m / 0.05] as unknown as number;
+/**
+ * A street's width on the ground as pixels at each zoom (about right for the latitudes of Europe):
+ * [zoom, pixels per metre, pen lines added]. Its paper inside, and the ink casing it is cut from.
+ */
+const INSIDE = [[12, 1 / 12.8, 0], [16, 1 / 0.8, 0], [20, 1 / 0.05, 0]];
+const CASED = [[12, 1 / 12.8, 0.5], [14, 1 / 3.2, 1], [16, 1 / 0.8, 1.8], [18, 1 / 0.2, 2.4], [20, 1 / 0.05, 3]];
 
-/** Moon names on every named street except these (gold already names them over the fog). */
+/**
+ * Pen lines thin out as the map zooms out, so a whole walk on one screen (the summary) reads as a
+ * drawing, not a block of ink.
+ */
+const inkOpacity = (far: number) => ['interpolate', ['linear'], ['zoom'], 13, far, 15.5, 1] as unknown as number;
+
+/** Street names in ink on every named street except these (their pencil already names them over the wash). */
 export const moonNamesFilter = (lit: readonly string[]): FilterSpecification =>
   (lit.length ? ['match', ['get', 'name'], [...new Set(lit)], false, true] : ['has', 'name']) as FilterSpecification;
 
+const ROAD = ['all', ['in', ['get', 'class'], ['literal', [...MINOR, ...MAJOR]]], ['!=', ['get', 'brunnel'], 'tunnel']] as FilterSpecification;
 /**
- * The basemap at night (OpenMapTiles schema from OpenFreeMap). Under the fog it shows where you
- * have walked, and dimly where you have seen, street names in moonlight included; above the fog
- * sit faint hints of every street, the landmarks you have seen, district names and the gold names
- * of your streets. No icon sprite, no glyph downloads: MapLibre draws the few labels itself, with
- * the app's own two fonts (see fontFaces).
+ * Major streets 11 m wide, service ones 5 m, the rest 7 m. The zoom goes outside: MapLibre takes
+ * one zoom curve per expression.
+ */
+const roadWidth = (stops: number[][]) =>
+  [
+    'interpolate', ['exponential', 2], ['zoom'],
+    ...stops.flatMap(([z, k, pen]) => [z, ['match', ['get', 'class'], MAJOR, 11 * k + pen, ['service', 'track'], 5 * k + pen, 7 * k + pen]]),
+  ] as unknown as number;
+
+/**
+ * The basemap as a pen drawing on paper (OpenMapTiles schema from OpenFreeMap): houses, water and
+ * parks in outline, streets as two pen lines with paper between. Under the wash it shows faintly
+ * where you have not been, and in full where you have seen or walked; above it sit the landmarks
+ * you have seen, district names and the names of your streets in their pencils. No icon sprite,
+ * no glyph downloads: MapLibre draws the few labels itself, with the app's own two fonts (see
+ * fontFaces).
  */
 export function buildStyle(t: Theme): StyleSpecification {
   const m = t.map;
   const layers: LayerSpecification[] = [
-    { id: 'background', type: 'background', paint: { 'background-color': m.background } },
+    { id: 'background', type: 'background', paint: { 'background-color': m.paper } },
     {
-      id: 'residential', type: 'fill', source: 'omt', 'source-layer': 'landuse',
-      filter: ['in', ['get', 'class'], ['literal', ['residential', 'suburb', 'neighbourhood']]],
-      paint: { 'fill-color': m.residential },
-    },
-    {
-      id: 'wood', type: 'fill', source: 'omt', 'source-layer': 'landcover',
-      filter: ['==', ['get', 'class'], 'wood'],
-      paint: { 'fill-color': m.wood },
-    },
-    {
-      id: 'grass', type: 'fill', source: 'omt', 'source-layer': 'landcover',
-      filter: ['in', ['get', 'class'], ['literal', ['grass', 'wetland', 'farmland']]],
+      id: 'green', type: 'fill', source: 'omt', 'source-layer': 'landcover',
+      filter: ['in', ['get', 'class'], ['literal', ['wood', 'grass', 'wetland', 'farmland']]],
       paint: { 'fill-color': m.park },
     },
     { id: 'park', type: 'fill', source: 'omt', 'source-layer': 'park', paint: { 'fill-color': m.park } },
@@ -90,91 +101,89 @@ export function buildStyle(t: Theme): StyleSpecification {
       paint: { 'fill-color': m.water },
     },
     {
-      id: 'waterway', type: 'line', source: 'omt', 'source-layer': 'waterway',
-      paint: { 'line-color': m.waterway, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.5, 16, 3] },
+      // The banks, in pen.
+      id: 'water-edge', type: 'line', source: 'omt', 'source-layer': 'water', minzoom: 13,
+      filter: ['!=', ['get', 'brunnel'], 'tunnel'],
+      paint: {
+        'line-color': m.ink,
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0.3, 16, 0.75],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.5, 17, 1.2],
+      },
     },
     {
-      id: 'building', type: 'fill', source: 'omt', 'source-layer': 'building', minzoom: 13,
-      paint: { 'fill-color': m.building, 'fill-outline-color': m.buildingEdge },
+      id: 'waterway', type: 'line', source: 'omt', 'source-layer': 'waterway',
+      paint: {
+        'line-color': m.ink,
+        'line-opacity': 0.5,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.4, 16, 1],
+      },
+    },
+    {
+      // Houses in outline, a hairline that fades in as they get big enough to draw.
+      id: 'building', type: 'fill', source: 'omt', 'source-layer': 'building', minzoom: 14,
+      paint: {
+        'fill-color': m.paper,
+        'fill-outline-color': m.ink,
+        'fill-opacity': ['interpolate', ['linear'], ['zoom'], 14, 0, 15, 0.55, 16.5, 1],
+      },
     },
     {
       id: 'rail', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 13,
       filter: ['in', ['get', 'class'], ['literal', ['rail', 'transit']]],
-      paint: { 'line-color': m.rail, 'line-width': 1 },
+      paint: { 'line-color': m.ink, 'line-opacity': inkOpacity(0.3), 'line-width': 0.8, 'line-dasharray': [5, 3] },
     },
     {
+      // Every street's casing first, then every street's paper inside: crossings stay open.
+      id: 'road-casing', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12,
+      filter: ROAD,
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': m.ink, 'line-opacity': inkOpacity(0.45), 'line-width': roadWidth(CASED) },
+    },
+    {
+      id: 'road', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12,
+      filter: ROAD,
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': m.road, 'line-width': roadWidth(INSIDE) },
+    },
+    {
+      // Footpaths and pedestrian streets: a dashed pen line.
       id: 'road-path', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 14,
       filter: ['all', ['in', ['get', 'class'], ['literal', PATHS]], ['!=', ['get', 'brunnel'], 'tunnel']],
-      layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': m.path, 'line-width': metres(2.5) },
+      paint: {
+        'line-color': m.ink,
+        'line-opacity': inkOpacity(0.4),
+        'line-width': ['interpolate', ['linear'], ['zoom'], 14, 0.6, 18, 1.2],
+        'line-dasharray': [3, 2.2],
+      },
     },
     {
-      id: 'road-minor', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12,
-      filter: ['all', ['in', ['get', 'class'], ['literal', MINOR]], ['!=', ['get', 'brunnel'], 'tunnel']],
-      layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': m.roadMinor, 'line-width': metres(7) },
-    },
-    {
-      id: 'road-major', type: 'line', source: 'omt', 'source-layer': 'transportation',
-      filter: ['all', ['in', ['get', 'class'], ['literal', MAJOR]], ['!=', ['get', 'brunnel'], 'tunnel']],
-      layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': m.roadMajor, 'line-width': metres(11) },
-    },
-    {
-      // Under the fog: hidden where you have not been, faint where you have seen, clear where you
-      // walked, except on streets the gold names already name (see moonNamesFilter).
+      // Under the wash: faint where you have not been, in full where you have seen or walked,
+      // except on streets your pencil already names (see moonNamesFilter).
       id: MOON_NAMES_LAYER, type: 'symbol', source: 'omt', 'source-layer': 'transportation_name', minzoom: 15,
       filter: moonNamesFilter([]),
       layout: {
         'symbol-placement': 'line',
-        // `name`, like the gold names (tileParse names the streets from it).
+        // `name`, like the walked names (tileParse names the streets from it).
         'text-field': ['get', 'name'],
         'text-font': ['Medium', ...t.font.names],
         // Instrument Serif runs small for its size: a size up from the phone's serif.
-        'text-size': ['interpolate', ['linear'], ['zoom'], 15, 12, 17, 14, 19, 16.5],
-        'text-letter-spacing': 0.04,
+        'text-size': ['interpolate', ['linear'], ['zoom'], 15, 12.5, 17, 14.5, 19, 17],
+        'text-letter-spacing': 0.02,
         'text-max-angle': 28,
-        // Placed like the gold names, so where both would show the gold one wins the spot.
+        // Placed like the walked names, so where both would show the walked one wins the spot.
         'text-offset': [0, -1.2],
         'symbol-spacing': 280,
         'text-padding': 8,
       },
       paint: {
-        'text-color': m.moonName,
-        'text-halo-color': m.nameHalo,
-        'text-halo-width': 1.4,
-        'text-halo-blur': 0.6,
+        'text-color': m.name,
+        'text-halo-color': m.paper,
+        'text-halo-width': 1.6,
       },
     },
 
-    // ---- The fog custom layer goes here (inserted before ABOVE_FOG_LAYER). ----
+    // ---- The paper wash custom layer goes here (inserted before ABOVE_FOG_LAYER). ----
 
-    {
-      id: ABOVE_FOG_LAYER, type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 15,
-      filter: ['all', ['in', ['get', 'class'], ['literal', PATHS]], ['!=', ['get', 'brunnel'], 'tunnel']],
-      layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: {
-        'line-color': m.ghost,
-        'line-opacity': m.ghostPathOpacity,
-        'line-width': ['interpolate', ['linear'], ['zoom'], 15, 0.6, 19, 1.6],
-        'line-dasharray': [2, 2.5],
-      },
-    },
-    {
-      id: 'ghost-road', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 11,
-      filter: ['all', ['in', ['get', 'class'], ['literal', [...MINOR, ...MAJOR]]], ['!=', ['get', 'brunnel'], 'tunnel']],
-      layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: {
-        'line-color': m.ghost,
-        'line-opacity': ['interpolate', ['linear'], ['zoom'], 11, m.ghostRoadOpacity * 0.6, 15, m.ghostRoadOpacity],
-        'line-width': [
-          'interpolate', ['linear'], ['zoom'],
-          11, ['match', ['get', 'class'], MAJOR, 0.8, 0.3],
-          15, ['match', ['get', 'class'], MAJOR, 1.6, 0.9],
-          19, ['match', ['get', 'class'], MAJOR, 3, 2],
-        ],
-      },
-    },
     {
       // Landmarks you have seen: a dot and the name under it. Important ones win the space.
       id: SEEN_PLACES_LAYER, type: 'symbol', source: SEEN_PLACES_SOURCE, minzoom: 15.5,
@@ -192,9 +201,8 @@ export function buildStyle(t: Theme): StyleSpecification {
       },
       paint: {
         'text-color': m.landmark,
-        'text-halo-color': m.landmarkHalo,
-        'text-halo-width': 1.3,
-        'text-halo-blur': 0.4,
+        'text-halo-color': m.paper,
+        'text-halo-width': 1.4,
       },
     },
     {
@@ -211,9 +219,9 @@ export function buildStyle(t: Theme): StyleSpecification {
       },
       paint: {
         'text-color': m.place,
-        'text-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.75, 16, 0.45],
-        'text-halo-color': m.placeHalo,
-        'text-halo-width': 1.2,
+        'text-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.9, 16, 0.6],
+        'text-halo-color': m.paper,
+        'text-halo-width': 1.4,
       },
     },
     {
@@ -221,23 +229,22 @@ export function buildStyle(t: Theme): StyleSpecification {
       layout: {
         'symbol-placement': 'line',
         'text-field': ['get', 'n'],
-        // In italic, as on the summary: walked streets in gold italic, seen ones in plain moonlight.
         // The first entry only carries the weight of the phone's fallback serif (MapLibre reads it
         // from the first name); the shipped files carry their own.
         'text-font': ['Semibold', ...t.font.walked],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 15, 13.5, 17, 16, 19, 19],
-        'text-letter-spacing': 0.04,
+        'text-size': ['interpolate', ['linear'], ['zoom'], 15, 14, 17, 17, 19, 20],
+        'text-letter-spacing': 0.02,
         'text-max-angle': 28,
-        // Beside the street, not on it: the gold line stays whole and you never cover the name.
+        // Beside the street, not on it: the colored street stays whole and you never cover the name.
         'text-offset': [0, -1.25],
         'symbol-spacing': 280,
         'text-padding': 8,
       },
       paint: {
-        'text-color': m.name,
-        'text-halo-color': m.nameHalo,
-        'text-halo-width': 1.6,
-        'text-halo-blur': 0.6,
+        // Each name in its street's pencil, pressed hard (names.ts).
+        'text-color': ['coalesce', ['get', 'c'], m.ink],
+        'text-halo-color': m.paper,
+        'text-halo-width': 1.8,
       },
     },
   ];

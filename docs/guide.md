@@ -14,8 +14,8 @@ In the repository's *Settings → Pages*, set *Source* to **GitHub Actions** onc
 
 ## The iPhone app
 
-The iPhone app is the same web app (same start screen, map, fog and gestures) in a native [Capacitor](https://capacitorjs.com) shell, with native GPS that keeps recording in the background.
-Lock the phone, put it in your pocket, and when you look again the streets you walked light up at once.
+The iPhone app is the same web app (same start screen, map and gestures) in a native [Capacitor](https://capacitorjs.com) shell, with native GPS that keeps recording in the background.
+Lock the phone, put it in your pocket, and when you look again the streets you walked are colored in at once.
 Real GPS is tested here, in the app run from Xcode or installed from TestFlight.
 
 ### Run it from Xcode
@@ -90,7 +90,8 @@ The app asks only for *While Using* permission: a walk you started counts as usi
   A tiny boot script picks the real walk in the iPhone app or the demo in a browser, and starts downloading the map tiles around where you were last and MapLibre's worker right away, alongside the app.
   A tap on Start before the app has loaded starts the walk as soon as it is up.
   The app (~340 KB gzipped, most of it MapLibre) loads behind the start screen; the iPhone app carries it inside.
-  The type ships with the app (OFL, `public/fonts/`): Nunito for everything you read and tap, preloaded (39 KB); Instrument Serif for the summary's numbers and the street names, and Instrument Sans for the map's place names.
+  The type ships with the app (OFL, `public/fonts/`): Instrument Sans for everything you read and tap and the map's place names, Instrument Serif for titles, the summary's numbers and the street names; both latin files are preloaded (44 KB).
+  A first-time walker sees `public/cover.svg` behind the start screen, a drawing of the demo city; it is an image, so it never holds up the first paint.
   Accented letters such as ő load from small extra files only when a name needs them.
   The map's labels draw with the same files.
 - **One download per tile.**
@@ -109,27 +110,28 @@ The app asks only for *While Using* permission: a walk you started counts as usi
   Each ~20 m piece lights as soon as 40% of it (at least 6 m) is walked, so a street you walk only part of still shows where you went.
 - **Whole-block unlocks.**
   Once about half a block (and at least 8 m) has been walked, the rest of the block lights too.
-  Houses within 20 m of anything lit light their windows.
+  Houses within 20 m of anything lit are colored in too.
   Each piece keeps a visit count (once per walk) for future heat colouring.
   If streets load late (offline), the walk's track is kept and replayed once they arrive.
   Streets lit before a map update are matched again by their shape.
 - **Smooth walker.**
   GPS fixes go through a small Kalman filter, and the walker glides between them on a damped spring, so it never hops; the camera follows it every frame.
   Standing still, the walker (and so the camera) holds still until GPS noise puts its target more than a pixel away.
-  Drawing runs on every display frame while something moves fast, 30 fps at walking pace and 15 fps standing still, when the fog also reuses its light and seen masks while nothing in them changed.
-- **The fog** is drawn on the GPU as one MapLibre custom layer.
-  A half-resolution light mask holds the lit streets, the unlock waves, the pool of light around you and your beam.
-  It is composited as night fog with slow mist, a thin warm rim, lamplight along lit streets with a gold line down the middle, and lit houses whose windows come on one by one.
-  Every street shows faintly through the fog, so you can see where you could go.
+  Drawing runs on every display frame while something moves fast, 30 fps at walking pace and 15 fps standing still, when the fog layer also reuses its light, pencil and seen masks while nothing in them changed.
+- **Paper and pencil** are drawn on the GPU as one MapLibre custom layer over an ink drawing of the city (`src/map/style.ts`).
+  A half-resolution light mask holds the lit streets, the unlock waves, the clear disc around you and your view ahead; it clears a paper wash that hides most of the ink where you have not been, so every street shows faintly and you can see where you could go.
+  A second half-resolution target holds the colored pencil: each lit street in its own pencil of ten (`pencilOf` in `src/theme.ts`, a hash of its name), the houses beside it in one soft house pencil.
+  It is multiplied over the map with the paper's tooth and diagonal strokes, so ink lines stay black under the color.
+  The walker, Mr Sparkles, is a colored pencil in the pencil of the street you follow.
 - **Line of sight.**
   The walls of the houses within ~140 m are gathered around you, and gathered again only after you moved 25 m.
   On the GPU, every wall facing your light casts an instanced shadow wedge into the lantern channels of the mask, hard where two walls meet and soft at the corners you see round, so the light falls between houses and down side streets, not through them.
   If GPS puts you inside a house, the light steps out to the street first.
 - **What you have seen** is kept apart from what you walked.
   A few times a second an angular sweep on the CPU computes what your light reaches (disc around you, cone ahead) and paints it into a persistent raster (zoom-17 tiles, ~0.7 m a texel, in IndexedDB).
-  The fog reads it back as moonlight: thinner fog, a cold tint.
-  Houses the light reached get dim blue roofs with a moonlit outline, walls facing your lantern glow warm, street names show faintly under the fog, and landmarks (shops, cafés, churches from the tiles' `poi` layer) visible from where you stood get their name.
-  Walked still means gold; seen never lights a street.
+  The fog layer reads it back as clear paper: the wash lifts and the ink prints in full.
+  Houses your view reached print again in ink, street names show in full, and landmarks (shops, cafés, churches from the tiles' `poi` layer) visible from where you stood get their name.
+  Walked still means colored pencil; seen never colors a street.
 - **Look around.**
   The beam follows the compass (`deviceorientation`; in Safari on iPhone the Start tap asks for motion access) while you stand or turn the phone, and the way you walk while you walk.
   Stretches recorded with the screen locked are looked at the way you walked them.

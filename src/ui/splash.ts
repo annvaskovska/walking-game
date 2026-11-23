@@ -18,9 +18,9 @@ export interface WalkSummary {
 
 /**
  * The one screen besides the map: a question, one line on Mr Sparkles, and Start, over your map or,
- * before your first walk, over Mr Sparkles in the fog. Its markup and that scene live in index.html
- * so they paint before any script loads; this drives the screen once the app is up.
- * After a walk it shows, over the map, how far you went and what the walk lit.
+ * before your first walk, over a drawing of the demo city. Its markup and that drawing live in
+ * index.html and public/ so they paint before any script loads; this drives the screen once the
+ * app is up. After a walk it shows, over the map, how far you went and what the walk colored in.
  */
 export class Splash {
   private go = byId<HTMLButtonElement>('wl-go');
@@ -70,7 +70,7 @@ export class Splash {
       this.stats.hidden = true;
       return;
     }
-    this.stats.innerHTML = `<b>${l.streets}</b> street${l.streets === 1 ? '' : 's'} lit · <b>${l.km}</b> km walked`;
+    this.stats.innerHTML = `<b>${l.streets}</b> street${l.streets === 1 ? '' : 's'} colored in · <b>${l.km}</b> km walked`;
     this.stats.hidden = false;
   }
 
@@ -80,7 +80,7 @@ export class Splash {
     this.go.textContent = this.sim ? 'Start the demo walk' : 'Start walking';
   }
 
-  /** How far the walk that just ended went, and what it lit. */
+  /** How far the walk that just ended went, and what it colored in. */
   summary({ walk, newHouses }: WalkSummary): void {
     const d = distanceParts(walk.distanceM);
     byId('wl-sum-dist').textContent = d.value;

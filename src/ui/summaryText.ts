@@ -1,18 +1,18 @@
 /** Street names shown by name after a walk; the rest are counted. */
 const MAX_NAMES = 3;
-/** Under this distance (m) a walk with nothing new was too short to light anything. */
+/** Under this distance (m) a walk with nothing new was too short to color anything in. */
 const SHORT_WALK_M = 60;
 /** Names longer than this, all together, are set a size down so they fit in two lines. */
 const LONG_NAMES = 28;
 
 export interface NewOnMap {
-  /** The gold names line, or null when the walk lit no named street. */
+  /** The names line, or null when the walk colored in no named street. */
   names: string | null;
   /** Set the names a size down. */
   long: boolean;
-  /** The quiet line under them, or under nothing when the walk lit nothing new. */
+  /** The quiet line under them, or under nothing when the walk colored in nothing new. */
   more: string;
-  /** The walk lit nothing new. */
+  /** The walk colored in nothing new. */
   empty: boolean;
 }
 
@@ -38,8 +38,8 @@ export function newOnMap(
     long: false,
     more:
       walk.distanceM < SHORT_WALK_M
-        ? 'Walk along a street to light it.'
-        : 'All of it was lit already. Try a new street next time.',
+        ? 'Walk along a street to color it in.'
+        : 'All of it was colored in already. Try a new street next time.',
     empty: true,
   };
 }

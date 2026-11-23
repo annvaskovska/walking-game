@@ -30,12 +30,12 @@ describe('newOnMap', () => {
     expect(newOnMap(walk(['Nieuwezijds Voorburgwal', 'Oudezijds Achterburgwal']), 0).long).toBe(true);
   });
 
-  it('speaks of stretches when no new street was lit whole', () => {
+  it('speaks of stretches when no new street was colored in whole', () => {
     expect(newOnMap(walk([], 6), 3)).toEqual({ names: 'Stretches of street', long: false, more: 'and 3 houses', empty: false });
   });
 
-  it('says why nothing lit up', () => {
-    expect(newOnMap(walk([], 0, 20), 0)).toMatchObject({ names: null, empty: true, more: 'Walk along a street to light it.' });
-    expect(newOnMap(walk([], 0, 900), 0)).toMatchObject({ names: null, empty: true, more: 'All of it was lit already. Try a new street next time.' });
+  it('says why nothing was colored in', () => {
+    expect(newOnMap(walk([], 0, 20), 0)).toMatchObject({ names: null, empty: true, more: 'Walk along a street to color it in.' });
+    expect(newOnMap(walk([], 0, 900), 0)).toMatchObject({ names: null, empty: true, more: 'All of it was colored in already. Try a new street next time.' });
   });
 });

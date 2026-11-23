@@ -3,13 +3,13 @@ import { distanceM } from '../../geo/geo';
 import { EARTH_CIRCUMFERENCE_M } from '../gl';
 
 /**
- * CPU side of the fog: turns lit streets and houses into the flat arrays the shaders read.
+ * CPU side of the wash and the pencil: turns walked streets and houses into the flat arrays the shaders read.
  * Positions are "local units": mercator metres east and south of an origin near the data, small
  * enough for float32 to stay exact to a millimetre across a whole city.
  */
 
-/** Per street segment: a.x, a.y, b.x, b.y, along a, along b (m), sweep from (m), sweep t0 (s), kind. */
-export const SEG_FLOATS = 9;
+/** Per street segment: a.x, a.y, b.x, b.y, along a, along b (m), sweep from (m), sweep t0 (s), kind, pencil. */
+export const SEG_FLOATS = 10;
 /** Per house vertex: x, y, frame x, frame y (m, along the longest wall), seed, time on (s). */
 export const HOUSE_FLOATS = 6;
 export const KIND_ROAD = 0;
@@ -59,7 +59,7 @@ export function localY(o: Origin, lat: number): number {
   return (mercY(lat) - o.oy) * EARTH_CIRCUMFERENCE_M;
 }
 
-/** How a newly lit street lights up: a wave from where you stood, along the block. */
+/** How a newly walked street colors in: from where you stood, out along the block. */
 export interface Sweep {
   /** Where this piece starts along its block (m). */
   offsetM: number;
@@ -69,8 +69,10 @@ export interface Sweep {
   t0: number;
 }
 
-/** Push the segments of one lit street piece. */
-export function pushPiece(out: number[], o: Origin, coords: ArrayLike<number>, kind: number, sweep: Sweep | null): void {
+/** Push the segments of one walked street piece, colored with pencil number `tone`. */
+export function pushPiece(
+  out: number[], o: Origin, coords: ArrayLike<number>, kind: number, sweep: Sweep | null, tone = 0,
+): void {
   let along = sweep ? sweep.offsetM : 0;
   const from = sweep ? sweep.fromM : 0;
   const t0 = sweep ? sweep.t0 : LONG_AGO;
@@ -79,7 +81,7 @@ export function pushPiece(out: number[], o: Origin, coords: ArrayLike<number>, k
     const bx = localX(o, coords[i]), by = localY(o, coords[i + 1]);
     const len = distanceM(coords[i - 2], coords[i - 1], coords[i], coords[i + 1]);
     if (len > 0.01) {
-      out.push(ax, ay, bx, by, along, along + len, from, t0, kind);
+      out.push(ax, ay, bx, by, along, along + len, from, t0, kind, tone);
       along += len;
     }
     ax = bx;
@@ -87,7 +89,7 @@ export function pushPiece(out: number[], o: Origin, coords: ArrayLike<number>, k
   }
 }
 
-/** A small stable number for a house id, so its windows always come out the same. */
+/** A small stable number for a house id, so its pencil always comes out the same. */
 export function houseSeed(id: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < id.length; i++) {
@@ -107,9 +109,9 @@ function ringLocal(o: Origin, flat: ArrayLike<number>): number[] {
 }
 
 /**
- * Push one lit house: its triangles (for the warm fill and the windows) and its outline as
- * segments (for the soft halo the fog clears around it). Windows sit on a grid along the
- * house's longest wall, so they line up with the facade.
+ * Push one walked house: its triangles (for its pencil) and its outline as segments (for the
+ * margin the wash clears around it). Each vertex also carries a frame along the house's longest
+ * wall.
  */
 export function pushHouse(
   verts: number[], index: number[], segs: number[], o: Origin,
@@ -164,7 +166,7 @@ export function pushHouse(
   for (const t of tri) index.push(base + t);
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
-    segs.push(outer[2 * i], outer[2 * i + 1], outer[2 * j], outer[2 * j + 1], 0, 0, 0, tOn, KIND_HOUSE);
+    segs.push(outer[2 * i], outer[2 * i + 1], outer[2 * j], outer[2 * j + 1], 0, 0, 0, tOn, KIND_HOUSE, 0);
   }
   return true;
 }

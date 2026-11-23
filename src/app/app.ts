@@ -21,7 +21,7 @@ import { createSimLocation, simFactor } from '../platform/simLocation';
 import { SIM_ROUTE } from '../platform/simRoute';
 import { openStorage, persistStorage } from '../platform/storage';
 import { WakeLockKeeper } from '../platform/wakeLock';
-import { nightTheme } from '../theme';
+import { paperTheme, pencilKey, pencilOf } from '../theme';
 import { Hud } from '../ui/hud';
 import { Splash } from '../ui/splash';
 import { Toasts } from '../ui/toast';
@@ -104,7 +104,7 @@ function centroid(flat: ArrayLike<number>): [number, number] {
 
 /** Location refused in the iPhone app: the demo walk asks for none. */
 const LOCATION_OFF =
-  '<b>Location is off for Mr Sparkles.</b> It lights up the streets you walk, so it needs to know where you are; that never leaves this iPhone.<br>' +
+  '<b>Location is off for Mr Sparkles.</b> It colors in the streets you walk, so it needs to know where you are; that never leaves this iPhone.<br>' +
   '<a href="app-settings:"><b>Open Settings</b></a> → Location → <b>While Using the App</b>, and keep Precise Location on.';
 
 export async function startApp(): Promise<void> {
@@ -119,7 +119,7 @@ export async function startApp(): Promise<void> {
   const provider: LocationProvider = sim
     ? createSimLocation(simFactor(params.get('sim')))
     : (await import('../platform/nativeLocation')).createNativeLocation();
-  const theme = nightTheme;
+  const theme = paperTheme;
 
   const splash = new Splash(sim);
   const hud = new Hud(() => void endWalk());
@@ -146,6 +146,8 @@ export async function startApp(): Promise<void> {
   let namesTimer = 0;
   let seenTimer = 0;
   let posSavedAt = 0;
+  /** Mr Sparkles' pencil: the one of the street he walks, colored in now or on an earlier walk. */
+  let tone = 0;
 
   const lastPos = readJson<{ lon: number; lat: number }>(key(POS_KEY));
   const known = lastPos && Number.isFinite(lastPos.lon) && Number.isFinite(lastPos.lat) ? lastPos : null;
@@ -181,9 +183,9 @@ export async function startApp(): Promise<void> {
   progress.load(litRecords);
   progress.loadHouses(houseRecords);
   walks = walkRecords.sort((a, b) => a.startedAt - b.startedAt);
-  for (const p of progress.lit.values()) view.fog.addPiece(p.coords, p.kind);
+  for (const p of progress.lit.values()) view.fog.addPiece(p);
   for (const h of progress.houses.values()) view.fog.addHouse(h, LONG_AGO);
-  // What you have seen from the streets you walked, moonlit.
+  // What you have seen from the streets you walked, in ink.
   const sight = new SightController(theme, view, graph, tiles, (id) => progress.houses.has(id));
   await sight.load(storage);
   refreshNames(true);
@@ -276,7 +278,7 @@ export async function startApp(): Promise<void> {
     splash.setLifetime(l);
   }
 
-  /** Gold names follow the lit streets; rebuilt at most about once a second. */
+  /** Street names in their pencils follow the walked streets; rebuilt at most about once a second. */
   function refreshNames(now = false): void {
     if (!now) {
       if (!namesTimer) namesTimer = window.setTimeout(() => refreshNames(true), 700);
@@ -285,7 +287,7 @@ export async function startApp(): Promise<void> {
     clearTimeout(namesTimer);
     namesTimer = 0;
     view.setNames(nameLines(progress.lit.values()));
-    // Moonlit names under the fog, except where the gold one is.
+    // Ink names under the wash, except where the pencil one is.
     view.setLitStreetNames(progress.streetNames());
   }
 
@@ -367,6 +369,7 @@ export async function startApp(): Promise<void> {
 
   /** What a walked step (or the walk so far, replayed) lit. */
   function light(walked: Walked): void {
+    if (walked.on) tone = pencilOf(pencilKey(walked.on), theme.pencils.length);
     if (walked.pieces.length) lightPieces(walked.pieces);
     if (walked.blocks.length) unlockBlocks(walked.blocks);
   }
@@ -392,7 +395,7 @@ export async function startApp(): Promise<void> {
       if (!res.newPieces.length && !res.newHouses.length) continue;
       changed = true;
       const fromM = pos ? projectOnPolylineM(pos.lon, pos.lat, piece.coords).alongM : 0;
-      if (res.newPieces.length) view.fog.addPiece(piece.coords, piece.kind, { offsetM: 0, fromM, t0 });
+      if (res.newPieces.length) view.fog.addPiece(piece, { offsetM: 0, fromM, t0 });
       for (const h of res.newHouses) view.fog.addHouse(h, t0 + 0.15 + Math.random() * 0.4);
       sight.housesLit(res.newHouses);
       session.newPieces += res.newPieces.length;
@@ -406,8 +409,8 @@ export async function startApp(): Promise<void> {
   }
 
   /**
-   * Blocks completed: each lights up as a wave running out from where you are along it, its
-   * houses switch on as the wave passes them, and its name is written in gold.
+   * Blocks completed: each colors in from where you are, out along it, in its own pencil; its
+   * houses color in as the pencil passes them, and its name is written in that pencil.
    */
   function unlockBlocks(blocks: Block[]): void {
     if (!session) return;
@@ -429,7 +432,7 @@ export async function startApp(): Promise<void> {
       const fresh = new Set(res.newPieces.map((p) => p.id));
       let offsetM = 0;
       for (const p of block.pieces) {
-        if (fresh.has(p.id)) view.fog.addPiece(p.coords, p.kind, { offsetM, fromM, t0 });
+        if (fresh.has(p.id)) view.fog.addPiece(p, { offsetM, fromM, t0 });
         offsetM += p.len;
       }
       for (const h of res.newHouses) {
@@ -468,7 +471,7 @@ export async function startApp(): Promise<void> {
     if (verdict.kind === 'reject' && verdict.reason === 'accuracy') {
       weakSince ||= Date.now();
       if (Date.now() - weakSince > 8000) {
-        toasts.show('weak', `Weak GPS (±${Math.round(fix.acc)} m). Streets light up again once it sharpens.`, 'warn');
+        toasts.show('weak', `Weak GPS (±${Math.round(fix.acc)} m). Streets color in again once it sharpens.`, 'warn');
       }
     } else if (verdict.kind !== 'reject') {
       weakSince = 0;
@@ -706,7 +709,7 @@ export async function startApp(): Promise<void> {
       fast ||= view.camera.settling;
       // The light comes from you and points where you look (compass), else where you walk.
       const light = sight.frame(now, f);
-      view.puck.set({ lon: f.lon, lat: f.lat });
+      view.puck.set({ lon: f.lon, lat: f.lat, tone });
       view.fog.setLantern(light);
       moving = f.moving || light.settling;
       // Turning to look around: the beam and its shadows follow at full speed.

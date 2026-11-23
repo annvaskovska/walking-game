@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { bboxOfCoords } from '../geo/geo';
 import { wmX, wmY } from '../map/fog/geometry';
 import { EARTH_CIRCUMFERENCE_M as C } from '../map/gl';
-import { nightTheme } from '../theme';
+import { paperTheme } from '../theme';
 import { gatherOccluders, wmPerMetre } from './occluders';
 import { SeenMemory, type Look } from './seenMemory';
 import type { Building, Place } from './types';
@@ -42,7 +42,7 @@ const ids = (r: { id: string }[]) => r.map((h) => h.id).sort();
 
 describe('SeenMemory.look', () => {
   it('sees the houses and landmarks within reach that sight reaches', () => {
-    const m = new SeenMemory(nightTheme);
+    const m = new SeenMemory(paperTheme);
     const r = m.look(look(0, 0, 90), occOf(), places, 1000);
     expect(ids(r.houses)).toEqual(['ahead', 'near']);
     expect(ids(r.places)).toEqual(['kiosk', 'shop']);
@@ -56,14 +56,14 @@ describe('SeenMemory.look', () => {
   });
 
   it('sees only close by without a heading', () => {
-    const m = new SeenMemory(nightTheme);
+    const m = new SeenMemory(paperTheme);
     const r = m.look(look(0, 0, null), occOf(), places, 1);
     expect(ids(r.houses)).toEqual(['near']);
     expect(ids(r.places)).toEqual(['kiosk']);
   });
 
   it('returns only what is new, and skips a look from the same spot', () => {
-    const m = new SeenMemory(nightTheme);
+    const m = new SeenMemory(paperTheme);
     const occ = occOf();
     m.look(look(0, 0, 90), occ, places, 1);
     const again = m.look(look(0.5, 0.5, 93), occ, places, 2);
@@ -80,7 +80,7 @@ describe('SeenMemory.look', () => {
   });
 
   it('does not see again what was loaded', () => {
-    const m = new SeenMemory(nightTheme);
+    const m = new SeenMemory(paperTheme);
     m.loadHouses([{ ...houses[0], seenAt: 5 }]);
     m.loadPlaces([{ ...places[0], seenAt: 5 }]);
     const r = m.look(look(0, 0, 90), occOf(), places, 9);
@@ -89,7 +89,7 @@ describe('SeenMemory.look', () => {
   });
 
   it('steps out of a house GPS put you in', () => {
-    const m = new SeenMemory(nightTheme);
+    const m = new SeenMemory(paperTheme);
     // 1 m inside the south wall of `near`: you are on the street in front of it.
     const r = m.look(look(0, 21, 90), occOf(), places, 1);
     expect(ids(r.houses)).toContain('near');

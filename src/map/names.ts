@@ -1,5 +1,6 @@
 import type { Feature, LineString } from 'geojson';
 import { distanceM } from '../geo/geo';
+import { paperTheme, pencilOf } from '../theme';
 
 interface NamedPiece {
   way: string | number;
@@ -13,11 +14,12 @@ interface NamedPiece {
 const JOIN_M = 3;
 
 /**
- * Lines for the gold street names: the lit pieces of each named street, joined into the longest
- * runs they form, so a name is written along a whole lit stretch rather than squeezed onto each
- * 20 m piece (where it would not fit and would never show).
+ * Lines for the names of walked streets: the walked pieces of each named street, joined into the
+ * longest runs they form, so a name is written along a whole walked stretch rather than squeezed
+ * onto each 20 m piece (where it would not fit and would never show). Each carries its street's
+ * pencil, pressed hard, as `c`.
  */
-export function nameLines(pieces: Iterable<NamedPiece>): Feature<LineString, { n: string }>[] {
+export function nameLines(pieces: Iterable<NamedPiece>): Feature<LineString, { n: string; c: string }>[] {
   // 1. Contiguous runs within each way.
   const byWay = new Map<string, NamedPiece[]>();
   for (const p of pieces) {
@@ -45,12 +47,14 @@ export function nameLines(pieces: Iterable<NamedPiece>): Feature<LineString, { n
     }
   }
   // 2. Join runs of the same name whose ends meet (the next block, or the next tile).
-  const out: Feature<LineString, { n: string }>[] = [];
+  const out: Feature<LineString, { n: string; c: string }>[] = [];
+  const { pencils } = paperTheme;
   for (const [name, lines] of runs) {
+    const c = pencils[pencilOf(name, pencils.length)].press;
     for (const line of mergeLines(lines)) {
       const coordinates: [number, number][] = [];
       for (let i = 0; i < line.length; i += 2) coordinates.push([line[i], line[i + 1]]);
-      out.push({ type: 'Feature', properties: { n: name }, geometry: { type: 'LineString', coordinates } });
+      out.push({ type: 'Feature', properties: { n: name, c }, geometry: { type: 'LineString', coordinates } });
     }
   }
   return out;

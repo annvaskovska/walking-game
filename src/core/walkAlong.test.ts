@@ -92,6 +92,19 @@ describe('WalkAlong', () => {
     expect(out.some((b) => b.name === 'Other')).toBe(false);
   });
 
+  it('names the street a step follows, also one colored in on an earlier walk', () => {
+    const { blocks } = city([
+      { id: 1, name: 'Main', from: [0, 0], to: [100, 0] },
+      { id: 2, name: 'Other', from: [0, 12], to: [100, 12] },
+    ]);
+    const wa = new WalkAlong(blocks, (b) => b.name === 'Main');
+    const w = wa.add(lon(10), lat(1), lon(20), lat(1), 12);
+    expect(w.blocks).toHaveLength(0);
+    expect(w.pieces).toHaveLength(0);
+    expect(w.on?.name).toBe('Main');
+    expect(wa.add(lon(20), lat(30), lon(20), lat(40), 12).on).toBeUndefined();
+  });
+
   it('lights the road under a tagged sidewalk, never the sidewalk itself', () => {
     const { blocks } = city([
       { id: 1, name: 'Main', from: [0, 0], to: [100, 0] },

@@ -27,6 +27,8 @@ export interface Walked {
   blocks: Block[];
   /** Pieces it lit on their own, in blocks that are not complete yet. */
   pieces: Piece[];
+  /** The street the step followed, whether it lit anything or was colored in long ago. */
+  on?: Block;
 }
 
 /**
@@ -102,6 +104,7 @@ export class WalkAlong {
       if (b.hw !== 'footway' && b.hw !== 'path' && b.hw !== 'steps') return true;
       return !roads.some((r) => Math.abs(r.distM - c.distM) <= this.cfg.sideNearRoadM);
     });
+    out.on = walked.reduce<Candidate | undefined>((a, c) => (a && a.distM <= c.distM ? a : c), undefined)?.block;
 
     for (const c of walked) {
       const block = c.block;
@@ -136,14 +139,16 @@ export class WalkAlong {
   replay(segs: ArrayLike<number>): Walked {
     const blocks = new Map<string, Block>();
     const pieces = new Map<string, Piece>();
+    let on: Block | undefined;
     for (let i = 0; i + SEG_STRIDE <= segs.length; i += SEG_STRIDE) {
       const w = this.add(segs[i], segs[i + 1], segs[i + 2], segs[i + 3], segs[i + 4]);
       for (const b of w.blocks) blocks.set(b.id, b);
       for (const p of w.pieces) pieces.set(p.id, p);
+      on = w.on ?? on;
     }
     // A piece of a block that completed later comes with the block.
     for (const b of blocks.values()) for (const p of b.pieces) pieces.delete(p.id);
-    return { blocks: [...blocks.values()], pieces: [...pieces.values()] };
+    return { blocks: [...blocks.values()], pieces: [...pieces.values()], on };
   }
 
   private neededM(block: Block): number {

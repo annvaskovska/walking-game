@@ -24,34 +24,34 @@ export interface MapStart {
   zoom: number;
 }
 
-export type NameFeature = Feature<LineString, { n: string }>;
+export type NameFeature = Feature<LineString, { n: string; c: string }>;
 type PlaceFeature = Feature<Point, { name: string; cls: string; rank: number }>;
 
 /**
- * The landmark dot: a pale core in a dark ring, so it reads on the fog and on a lit street alike.
- * Drawn here at 2x rather than taken from a sprite, which would be one more download.
+ * The landmark dot: an ink dot in a paper ring, so it reads on the wash and on a colored street
+ * alike. Drawn here at 2x rather than taken from a sprite, which would be one more download.
  */
 function landmarkDot(t: Theme): ImageData {
   const size = 14;
   const ctx = document.createElement('canvas').getContext('2d')!;
   ctx.canvas.width = ctx.canvas.height = size;
   const c = size / 2;
-  ctx.fillStyle = t.map.landmarkHalo;
-  ctx.globalAlpha = 0.8;
+  ctx.fillStyle = t.map.paper;
+  ctx.globalAlpha = 0.9;
   ctx.beginPath();
   ctx.arc(c, c, c, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = t.map.landmark;
   ctx.globalAlpha = 1;
   ctx.beginPath();
-  ctx.arc(c, c, 3.5, 0, Math.PI * 2);
+  ctx.arc(c, c, 3, 0, Math.PI * 2);
   ctx.fill();
   return ctx.getImageData(0, 0, size, size);
 }
 
 /**
- * The map: the night basemap, the fog with everything you lit, the gold names of your streets
- * and you, all in one WebGL canvas. Tiles come from the shared TileSource through a custom
+ * The map: the pen drawing of the city, the paper wash with everything you colored in, the names
+ * of your streets in their pencils and you, all in one WebGL canvas. Tiles come from the shared TileSource through a custom
  * protocol; until a position is known none are downloaded.
  */
 export class MapView {
@@ -84,7 +84,7 @@ export class MapView {
       zoom: start?.zoom ?? 11,
       minZoom: 11,
       maxZoom: 19,
-      // Three device pixels per CSS pixel cost 2.25x the fill of two and look the same under fog.
+      // Three device pixels per CSS pixel cost 2.25x the fill of two and look much the same on paper.
       pixelRatio: Math.min(2, window.devicePixelRatio || 1),
       fadeDuration: 200,
       validateStyle: false,
@@ -131,7 +131,7 @@ export class MapView {
     return this.armed;
   }
 
-  /** The gold names along your lit streets. */
+  /** The names along your walked streets, each in its pencil. */
   setNames(features: NameFeature[]): void {
     if (!this.loaded) {
       this.pendingNames = features;
@@ -141,8 +141,8 @@ export class MapView {
   }
 
   /**
-   * Streets named in gold: their moon names under the fog are left out, so a walked street shows
-   * one name. A new filter makes MapLibre lay the map tiles out again, so only when the list changed.
+   * Streets named in their pencil: their ink names under the wash are left out, so a walked street
+   * shows one name. A new filter makes MapLibre lay the map tiles out again, so only when the list changed.
    */
   setLitStreetNames(names: string[]): void {
     const sorted = [...new Set(names)].sort();
@@ -153,7 +153,7 @@ export class MapView {
     if (this.loaded) this.map.setFilter(MOON_NAMES_LAYER, moonNamesFilter(sorted));
   }
 
-  /** The landmarks you have seen, labelled over the fog. */
+  /** The landmarks you have seen, labelled over the wash. */
   setSeenPlaces(places: SeenPlace[]): void {
     if (!this.loaded) {
       this.pendingPlaces = places;

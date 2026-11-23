@@ -5,7 +5,7 @@
 <h1 align="center">Mr Sparkles</h1>
 
 <p align="center">
-  <b>Your city starts in fog. Every street you walk lights up, for good.</b><br>
+  <b>Your city starts as a pencil drawing. Every street you walk gets colored in, for good.</b><br>
   A walking motivator for your iPhone, with a demo walk in the browser.<br>
   No account, no server: your walks stay on your phone.
 </p>
@@ -25,44 +25,44 @@
 ## What is Mr Sparkles?
 
 Mr Sparkles is a small walking motivator.
-Your city starts in fog, and every street you walk lights up with its houses and its name.
-The light stays, so each walk shows you where you have not been yet.
+Your city starts as an ink drawing on paper, and every street you walk is colored in with colored pencil, with its houses and its name.
+The color stays, so each walk shows you where you have not been yet.
 
 Open it and you get one start screen: a question, your streets so far, and **Start walking**.
-The first time, Mr Sparkles waits there in the fog: drag him around and the streets he passes light up.
-After that it is just the map: you, a beam of light ahead of you, and the fog.
+The first time, it shows a drawing of a few colored-in streets in Amsterdam; after your first walk, your own map.
+On the map you are Mr Sparkles, a colored pencil, with a clear view ahead of you and a paper wash over what you have not seen.
 
 ---
 
 # Core features
 
-## Walk a street, and it lights up
+## Walk a street, and it gets colored in
 
-Walk along a street and the whole block lights up in a wave.
-Its houses switch their windows on one by one, and its name is written in gold.
+Walk along a street and the whole block colors in from where you stand.
+Each street keeps one pencil of ten, and its name is written in that pencil; the houses beside it get a soft wash of color.
 A street you walk only part of still shows where you went.
 
-## Your light stops at walls
+## Your view stops at walls
 
-Your light stops at walls and spills between houses.
-Whatever it touches, such as a square at the end of the street or a shop on the corner, stays **moonlit**: blue roofs, a faint name, the landmark's label.
-Turn the phone to look around: the beam follows the compass.
+Your view stops at walls and spills between houses.
+Whatever it reaches, such as a square at the end of the street or a shop on the corner, stays **inked**: its outlines, its street names, the landmark's label.
+Turn the phone to look around: the view follows the compass.
 
 ## Only real walking counts
 
 There is no tap-to-explore.
 Fixes that are too inaccurate, glitchy jumps, and anything faster than a brisk walk, such as a bike, a tram or a car, are ignored.
-A step lights only the street it follows, so walking past a side street does not light it.
+A step colors only the street it follows, so walking past a side street does not color it.
 
 ## Walk with the screen locked
 
 The iPhone app keeps recording with the screen locked.
-Put the phone in your pocket, and when you look again, the streets you walked light up at once.
+Put the phone in your pocket, and when you look again, the streets you walked are colored in at once.
 
 ## Your walk in three numbers
 
 Tap the map for the time, the distance, and an estimate of your steps, and to end the walk.
-The summary shows the same three numbers and the streets you lit.
+The summary shows the same three numbers and the streets you colored in.
 
 ---
 
@@ -76,7 +76,7 @@ The summary shows the same three numbers and the streets you lit.
 # Use
 
 1. Tap **Start walking** and allow location.
-2. Walk: each street lights as you follow it.
+2. Walk: each street colors in as you follow it.
 3. Turn the phone to look around.
 4. Tap the map for your time, distance and steps, and to end the walk.
 
@@ -84,16 +84,16 @@ The summary shows the same three numbers and the streets you lit.
 
 # Private by design
 
-Your walks, your lit streets and what your light has seen stay on your phone, in the app's own storage.
+Your walks, your colored streets and what you have seen stay on your phone, in the app's own storage.
 There is no account, no server and no analytics.
 Apart from the app itself, the only downloads are the map tiles from [OpenFreeMap](https://openfreemap.org), which sees the rough area you walk in but not your track.
 The iPhone app asks for location only *While Using the App*.
 
 # How it works
 
-- **Real walking only.** GPS fixes pass a filter, and a step lights only the street it runs along.
+- **Real walking only.** GPS fixes pass a filter, and a step colors only the street it runs along.
 - **One download per tile.** The vector tiles that draw the map are also parsed into the street graph and the houses.
-- **Fog on the GPU.** One MapLibre layer draws the fog, the lit streets, and the shadows every wall casts in your light.
+- **Pencil on the GPU.** One MapLibre layer draws the paper wash, the colored pencil, and the shadows every wall casts on your view.
 
 The stack: TypeScript and Vite, MapLibre GL with custom WebGL layers, OpenFreeMap vector tiles, and a Capacitor shell with Swift GPS for iPhone.
 [More under the hood](docs/guide.md#under-the-hood), and why it is built this way in the [decision records](docs/adr/README.md).

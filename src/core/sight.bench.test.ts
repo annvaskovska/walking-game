@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { bboxOfCoords, bearingDeg, distanceM } from '../geo/geo';
 import { GridIndex } from '../geo/spatialIndex';
 import { wmX, wmY } from '../map/fog/geometry';
-import { nightTheme } from '../theme';
+import { paperTheme } from '../theme';
 import { OccluderCache, stepOutside, wmPerMetre } from './occluders';
 import { SeenGrid, type LightShape } from './seen';
 import { SeenMemory } from './seenMemory';
@@ -36,7 +36,7 @@ describe.skipIf(!AREA.length || !SIM.length)('sight benchmark', () => {
       spots.push({ lon: a[0] + (b[0] - a[0]) * f, lat: a[1] + (b[1] - a[1]) * f, heading: bearingDeg(a[0], a[1], b[0], b[1]) });
     }
 
-    const { fog } = nightTheme;
+    const { fog } = paperTheme;
     const cache = new OccluderCache();
     const sight = newSight(4096);
     const ms = { gather: 0, sight: 0, paint: 0, repaint: 0, look: 0 };
@@ -46,7 +46,7 @@ describe.skipIf(!AREA.length || !SIM.length)('sight benchmark', () => {
       // The first rounds warm up the JIT; the last one is measured.
       const measure = round === rounds - 1;
       const grid = new SeenGrid();
-      const memory = new SeenMemory(nightTheme);
+      const memory = new SeenMemory(paperTheme);
       for (const p of spots) {
         const t0 = performance.now();
         // A new houses version forces a fresh gather at every spot.

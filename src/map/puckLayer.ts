@@ -1,22 +1,23 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MlMap } from 'maplibre-gl';
 import type { Theme } from '../theme';
 import { mercX, mercY } from './fog/geometry';
-import { pageTime } from './fog/fogLayer';
 import { hex3, localMatrix, program, type Program } from './gl';
 import { PUCK_FS, PUCK_VS } from './fog/shaders';
 
 export interface PuckState {
   lon: number;
   lat: number;
+  /** The pencil he colors with: the one of the street he colored last. */
+  tone: number;
 }
 
-/** Half-size of the quad the walker is drawn in, CSS px: his wide glow at its fullest, and his drift. */
-const SIZE = 76;
+/** Half-size of the quad the walker is drawn in, CSS px: the pencil, up and right of you, and its shadow. */
+const SIZE = 60;
 
 /**
- * You on the map, as Mr Sparkles (ADR 0012), drawn on the GPU in the same frame as the map itself
- * (a DOM marker trails the map by a frame while the camera follows you, which reads as jitter).
- * Where you look shows in the fog's beam, not on him.
+ * You on the map, as Mr Sparkles (ADR 0014): a colored pencil whose lead is where you are, drawn
+ * on the GPU in the same frame as the map itself (a DOM marker trails the map by a frame while the
+ * camera follows you, which reads as jitter).
  */
 export class PuckLayer implements CustomLayerInterface {
   readonly id = 'wl-puck';
@@ -28,11 +29,16 @@ export class PuckLayer implements CustomLayerInterface {
   private vao: WebGLVertexArrayObject | null = null;
   private broken = false;
   private state: PuckState | null = null;
-  private col: Record<keyof Theme['puck'], [number, number, number]>;
+  private wood: [number, number, number];
+  private ink: [number, number, number];
+  private lay: [number, number, number][];
+  private press: [number, number, number][];
 
   constructor(theme: Theme) {
-    const p = theme.puck;
-    this.col = { core: hex3(p.core), edge: hex3(p.edge), shine: hex3(p.shine), glow: hex3(p.glow) };
+    this.wood = hex3(theme.puck.wood);
+    this.ink = hex3(theme.puck.ink);
+    this.lay = theme.pencils.map((p) => hex3(p.lay));
+    this.press = theme.pencils.map((p) => hex3(p.press));
   }
 
   set(s: PuckState | null): void {
@@ -91,13 +97,13 @@ export class PuckLayer implements CustomLayerInterface {
     gl.useProgram(this.prog.p);
     gl.bindVertexArray(this.vao);
     gl.uniformMatrix4fv(u.u_matrix, false, new Float32Array(m));
+    const k = Math.min(this.lay.length - 1, Math.max(0, s.tone | 0));
     gl.uniform1f(u.u_size, SIZE);
-    gl.uniform1f(u.u_time, pageTime());
     gl.uniform1f(u.u_scale, this.map.getPixelRatio());
-    gl.uniform3fv(u.u_core, this.col.core);
-    gl.uniform3fv(u.u_edge, this.col.edge);
-    gl.uniform3fv(u.u_shine, this.col.shine);
-    gl.uniform3fv(u.u_glow, this.col.glow);
+    gl.uniform3fv(u.u_lay, this.lay[k]);
+    gl.uniform3fv(u.u_press, this.press[k]);
+    gl.uniform3fv(u.u_wood, this.wood);
+    gl.uniform3fv(u.u_ink, this.ink);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
   }
