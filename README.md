@@ -25,7 +25,7 @@
 ## What is Mr Sparkles?
 
 Mr Sparkles is a small walking motivator.
-Your city starts as an ink drawing on paper, and every street you walk is colored in with colored pencil, with its houses and its name.
+Your city starts as a black ink drawing on white paper, and every street you walk is colored in with crayon, with its houses and its name.
 The color stays, so each walk shows you where you have not been yet.
 
 Open it and you get one start screen: a question, your streets so far, and **Start walking**.
@@ -39,7 +39,7 @@ On the map you are Mr Sparkles, a colored pencil, with a clear view ahead of you
 ## Walk a street, and it gets colored in
 
 Walk along a street and the whole block colors in from where you stand.
-Each street keeps one pencil of ten, and its name is written in that pencil; the houses beside it get a soft wash of color.
+Each street keeps one crayon of 13, scribbled in a little past its lines, and its name is written in that crayon; the houses beside it are colored in too, many in the street's crayon and the rest in crayons of their own.
 A street you walk only part of still shows where you went.
 
 ## Your view stops at walls
@@ -93,7 +93,7 @@ The iPhone app asks for location only *While Using the App*.
 
 - **Real walking only.** GPS fixes pass a filter, and a step colors only the street it runs along.
 - **One download per tile.** The vector tiles that draw the map are also parsed into the street graph and the houses.
-- **Pencil on the GPU.** One MapLibre layer draws the paper wash, the colored pencil, and the shadows every wall casts on your view.
+- **Crayon on the GPU.** One MapLibre layer draws the paper wash, the crayon, and the shadows every wall casts on your view.
 
 The stack: TypeScript and Vite, MapLibre GL with custom WebGL layers, OpenFreeMap vector tiles, and a Capacitor shell with Swift GPS for iPhone.
 [More under the hood](docs/guide.md#under-the-hood), and why it is built this way in the [decision records](docs/adr/README.md).

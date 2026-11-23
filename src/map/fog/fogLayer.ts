@@ -42,12 +42,13 @@ export interface FogPiece {
 interface HouseRec {
   house: { id: string; coords: ArrayLike<number>; holes?: ArrayLike<number>[] };
   tOn: number;
+  tone: number;
 }
 
 /** Rebase the local origin once the view is this far from it (float32 stays mm-exact well past it). */
 const REBASE_M = 200_000;
 const NOISE_SIZE = 128;
-/** The paper's grain: one texel a CSS pixel, tiled. */
+/** The paper's tooth: one texel a device pixel, tiled. */
 const TOOTH_SIZE = 256;
 /** Below this zoom the seen memory is not drawn (a tile would be a few pixels). */
 const SEEN_MIN_ZOOM = 14;
@@ -111,21 +112,21 @@ export class FogLayer implements CustomLayerInterface {
   private seenFbo: WebGLFramebuffer | null = null;
   private noiseTex: WebGLTexture | null = null;
   private toothTex: WebGLTexture | null = null;
-  /** Same size as the mask: what the pencils absorb, RGB, and how covered, A. */
+  /** The canvas' size, so the scribble stays crisp: what the pencils absorb, RGB, and how covered, A. */
   private paintTex: WebGLTexture | null = null;
   private paintFbo: WebGLFramebuffer | null = null;
+  private paintW = 0;
+  private paintH = 0;
 
   /** `masks`: frames that drew the masks; `kept`: frames that kept them, as nothing had changed. */
   readonly stats = { segments: 0, houses: 0, frames: 0, masks: 0, kept: 0 };
   private paper: [number, number, number];
   /** The pencils' lay colours, flat, for the u_pencils array. */
   private pencils: Float32Array;
-  private houseLay: Float32Array;
 
   constructor(private theme: Theme) {
     this.paper = hex3(theme.fog.color);
     this.pencils = new Float32Array(theme.pencils.flatMap((p) => hex3(p.lay)));
-    this.houseLay = new Float32Array(hex3(theme.pencil.houseLay));
   }
 
   // ---- Data ----
@@ -151,14 +152,20 @@ export class FogLayer implements CustomLayerInterface {
     this.map?.triggerRepaint();
   }
 
-  /** A walked house; it colors in from page time `tOn` (at once for houses walked long ago). */
-  addHouse(house: HouseRec['house'], tOn: number): void {
-    const rec: HouseRec = { house, tOn };
+  /**
+   * A walked house; it colors in from page time `tOn` (at once for houses walked long ago). Some take
+   * the pencil of `street`, the pencilKey of the street that colored it in, and the rest one of
+   * their own, as a child colors a page.
+   */
+  addHouse(house: HouseRec['house'], tOn: number, street?: string): void {
+    const n = this.theme.pencils.length;
+    const match = street !== undefined && pencilOf(`match ${house.id}`, 100) < this.theme.pencil.houseMatch * 100;
+    const rec: HouseRec = { house, tOn, tone: pencilOf(match ? street : `house ${house.id}`, n) };
     this.houses.push(rec);
     if (!this.origin) this.setOrigin(house.coords[0], house.coords[1]);
     this.pushHouse(rec);
     this.animUntil = Math.max(this.animUntil, tOn + 3);
-    // Its footprint clears the wash and colors in over 0.6 s.
+    // Its footprint clears the wash and colors in over 0.4 s.
     this.maskUntil = Math.max(this.maskUntil, tOn + 0.7);
     this.version++;
     this.map?.triggerRepaint();
@@ -226,7 +233,7 @@ export class FogLayer implements CustomLayerInterface {
     const v: number[] = [], idx: number[] = [], seg: number[] = [];
     // Indices are absolute: offset them by the vertices already stored.
     const base = this.hverts.length / HOUSE_FLOATS;
-    if (!pushHouse(v, idx, seg, this.origin!, r.house, houseSeed(r.house.id), r.tOn)) return;
+    if (!pushHouse(v, idx, seg, this.origin!, r.house, houseSeed(r.house.id), r.tOn, r.tone)) return;
     this.hverts.push(v);
     this.hidx.push(idx.map((i) => i + base));
     this.segs.push(seg);
@@ -301,7 +308,7 @@ export class FogLayer implements CustomLayerInterface {
       houseMask: program(gl, S.HOUSE_MASK_VS, S.HOUSE_MASK_FS, ['a_pos', 'a_frame', 'a_house']),
       lamp: program(gl, S.LAMP_VS, S.LAMP_FS, ['a_corner']),
       paintSeg: program(gl, S.SEG_VS, S.PAINT_SEG_FS(n), ['a_corner', 'i_ab', 'i_along', 'i_sweep', 'i_kind', 'i_tone']),
-      paintHouse: program(gl, S.PAINT_HOUSE_VS, S.PAINT_HOUSE_FS, ['a_pos', 'a_frame', 'a_house']),
+      paintHouse: program(gl, S.PAINT_HOUSE_VS, S.PAINT_HOUSE_FS(n), ['a_pos', 'a_frame', 'a_house', 'a_tone']),
       comp: program(gl, S.COMP_VS, S.COMP_FS, ['a_corner']),
       pencil: program(gl, S.COMP_VS, S.PENCIL_FS, ['a_corner']),
     };
@@ -336,9 +343,9 @@ export class FogLayer implements CustomLayerInterface {
     gl.bindVertexArray(this.vaoHouse);
     this.hverts.sync(gl, gl.ARRAY_BUFFER);
     const hs = HOUSE_FLOATS * 4;
-    for (const [loc, off] of [[0, 0], [1, 8], [2, 16]]) {
+    for (const [loc, size, off] of [[0, 2, 0], [1, 2, 8], [2, 2, 16], [3, 1, 24]]) {
       gl.enableVertexAttribArray(loc);
-      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, hs, off);
+      gl.vertexAttribPointer(loc, size, gl.FLOAT, false, hs, off);
     }
     this.hidx.sync(gl, gl.ELEMENT_ARRAY_BUFFER);
 
@@ -356,7 +363,7 @@ export class FogLayer implements CustomLayerInterface {
     gl.bindVertexArray(null);
 
     this.noiseTex = repeating(gl, NOISE_SIZE, makeNoise(NOISE_SIZE));
-    this.toothTex = repeating(gl, TOOTH_SIZE, makeNoise(TOOTH_SIZE, 1, 0));
+    this.toothTex = repeating(gl, TOOTH_SIZE, makeTooth(TOOTH_SIZE));
 
     // Without shadows or the seen memory the fog still works: those parts just stay out.
     for (const part of [this.shadows, this.seen, this.moon]) {
@@ -373,11 +380,14 @@ export class FogLayer implements CustomLayerInterface {
   private resizeMask(gl: WebGL2RenderingContext): void {
     const w = Math.max(1, Math.ceil(gl.drawingBufferWidth / 2));
     const h = Math.max(1, Math.ceil(gl.drawingBufferHeight / 2));
-    if (w === this.maskW && h === this.maskH && this.maskTex) return;
+    const pw = Math.max(1, gl.drawingBufferWidth), ph = Math.max(1, gl.drawingBufferHeight);
+    if (w === this.maskW && h === this.maskH && pw === this.paintW && ph === this.paintH && this.maskTex) return;
+    this.paintW = pw;
+    this.paintH = ph;
     for (const t of [this.maskTex, this.seenTex, this.paintTex]) if (t) gl.deleteTexture(t);
     for (const f of [this.maskFbo, this.seenFbo, this.paintFbo]) if (f) gl.deleteFramebuffer(f);
     [this.maskTex, this.maskFbo] = target(gl, w, h, gl.RGBA8, gl.RGBA);
-    [this.paintTex, this.paintFbo] = target(gl, w, h, gl.RGBA8, gl.RGBA);
+    [this.paintTex, this.paintFbo] = target(gl, this.paintW, this.paintH, gl.RGBA8, gl.RGBA);
     // Only one channel: the seen memory.
     [this.seenTex, this.seenFbo] = target(gl, w, h, gl.R8, gl.RED);
     this.seenClear = false;
@@ -476,12 +486,13 @@ export class FogLayer implements CustomLayerInterface {
       );
     }
 
-    // The pencils: every walked street in its own and the houses in the soft house pencil, into the
-    // paint target. MAX keeps a street's overlapping capsules from coloring twice; where two pencils
-    // cross, the darker wins.
+    // The pencils: every walked street and house in its own, into the paint target. MAX keeps a
+    // street's overlapping capsules from coloring twice; where two pencils cross, the darker wins.
     gl.bindVertexArray(null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.paintFbo);
-    gl.viewport(0, 0, this.maskW, this.maskH);
+    gl.viewport(0, 0, this.paintW, this.paintH);
+    // Map units per device pixel.
+    const devUnits = f.cssPxUnits / f.dpr;
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.blendEquation(gl.MAX);
     gl.blendFunc(gl.ONE, gl.ONE);
@@ -495,10 +506,13 @@ export class FogLayer implements CustomLayerInterface {
       gl.uniform1f(u.u_m2u, f.o.m2u);
       // Never thinner than this (CSS px), so a whole walk on one screen (the summary) still shows.
       gl.uniform1f(u.u_minr, 2.4 * f.cssPxUnits);
-      gl.uniform1f(u.u_edge, 0.9 * f.cssPxUnits);
+      // Room for the scribble past the lines: its widest turn and half a stroke, on the narrowest path.
+      gl.uniform1f(u.u_grow, 1.6 + (0.5 * pen.strokeWidthM) / pen.pathM);
+      gl.uniform1f(u.u_edge, devUnits);
+      gl.uniform1f(u.u_pxUnits, devUnits);
+      gl.uniform2f(u.u_stroke, pen.strokeM, pen.strokeWidthM);
       gl.uniform1f(u.u_time, t);
       gl.uniform1f(u.u_speed, fog.sweepMps);
-      gl.uniform1f(u.u_amount, pen.street);
       gl.uniform3fv(u.u_pencils, this.pencils);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nSeg);
     }
@@ -507,11 +521,10 @@ export class FogLayer implements CustomLayerInterface {
       gl.useProgram(p.paintHouse.p);
       gl.bindVertexArray(this.vaoHouse);
       gl.uniformMatrix4fv(u.u_matrix, false, f.matrix);
-      // A pixel off register, as a hand colors in.
-      gl.uniform2f(u.u_shift, 1.2 / this.maskW, -1.2 / this.maskH);
+      gl.uniform1f(u.u_m2u, f.o.m2u);
       gl.uniform1f(u.u_time, t);
       gl.uniform1f(u.u_amount, pen.house);
-      gl.uniform3fv(u.u_lay, this.houseLay);
+      gl.uniform3fv(u.u_pencils, this.pencils);
       gl.drawElements(gl.TRIANGLES, nIdx, gl.UNSIGNED_INT, 0);
     }
 
@@ -647,7 +660,7 @@ export class FogLayer implements CustomLayerInterface {
       gl.uniform1i(u.u_tooth, 1);
       gl.uniformMatrix4fv(u.u_inv, false, invM);
       gl.uniform1f(u.u_ndcZ, ndcZ);
-      gl.uniform1f(u.u_pxUnits, f.cssPxUnits);
+      gl.uniform1f(u.u_pxUnits, f.cssPxUnits / f.dpr);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, null);
@@ -701,8 +714,45 @@ function repeating(gl: WebGL2RenderingContext, n: number, data: Uint8Array): Web
 }
 
 /**
+ * The paper's tooth, as the coloring book design draws it: a seamless n×n mask, 1 where the wax
+ * takes and 0 in the tiny pits it skips, so about a quarter of the paper shows through.
+ */
+export function makeTooth(n: number): Uint8Array {
+  // xorshift32, seeded as the design's rng(7).
+  let s = Math.imul(8, 2654435761) >>> 0 || 1;
+  const r = () => {
+    s ^= s << 13;
+    s >>>= 0;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    s >>>= 0;
+    return s / 4294967296;
+  };
+  const lattice = (p: number) => Float32Array.from({ length: p * p }, r);
+  const l1 = lattice(64), l2 = lattice(128), l3 = lattice(32);
+  // Value noise on a p×p lattice that wraps, so the tile does too.
+  const at = (l: Float32Array, p: number, x: number, y: number) => {
+    const fx = (x * p) / n, fy = (y * p) / n, ix = Math.floor(fx), iy = Math.floor(fy);
+    const tx = fx - ix, ty = fy - iy, sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+    const x0 = ix % p, y0 = iy % p, x1 = (x0 + 1) % p, y1 = (y0 + 1) % p;
+    const a = l[y0 * p + x0] + (l[y0 * p + x1] - l[y0 * p + x0]) * sx;
+    const b = l[y1 * p + x0] + (l[y1 * p + x1] - l[y1 * p + x0]) * sx;
+    return a + (b - a) * sy;
+  };
+  const out = new Uint8Array(n * n);
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const v = 0.5 * at(l1, 64, x, y) + 0.32 * at(l2, 128, x, y) + 0.18 * r();
+      const wax = v > 0.64 ? 0 : v > 0.58 ? (0.64 - v) / 0.06 : 1;
+      out[y * n + x] = Math.round(wax * (0.8 + 0.2 * at(l3, 32, x, y)) * 255);
+    }
+  }
+  return out;
+}
+
+/**
  * Tileable noise: white noise blurred with wrap-around, a coarse octave (blur radius `big`) and a
- * fine one (`small`). The defaults make the wash's soft edges; small radii, the paper's grain.
+ * fine one (`small`): the wash's soft edges.
  */
 export function makeNoise(n: number, big = 9, small = 3): Uint8Array {
   let seed = 1234567;

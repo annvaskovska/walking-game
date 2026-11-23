@@ -9,14 +9,14 @@ const config: CapacitorConfig = {
   appName: 'Mr Sparkles',
   webDir: 'dist',
   // The paper the start screen is drawn on, so nothing flashes before the first paint.
-  backgroundColor: '#f6f2e9',
+  backgroundColor: '#fffefb',
   ios: {
     // index.html places everything around the notch itself, as in Safari (viewport-fit=cover).
     contentInset: 'never',
     // The page never scrolls; without this the web view rubber-bands under a two-finger drag.
     scrollEnabled: false,
     allowsLinkPreview: false,
-    backgroundColor: '#f6f2e9',
+    backgroundColor: '#fffefb',
     preferredContentMode: 'mobile',
   },
   plugins: {

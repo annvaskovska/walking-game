@@ -54,7 +54,7 @@ function fontFaces(): FontFacesSpecification {
  * [zoom, pixels per metre, pen lines added]. Its paper inside, and the ink casing it is cut from.
  */
 const INSIDE = [[12, 1 / 12.8, 0], [16, 1 / 0.8, 0], [20, 1 / 0.05, 0]];
-const CASED = [[12, 1 / 12.8, 0.5], [14, 1 / 3.2, 1], [16, 1 / 0.8, 1.8], [18, 1 / 0.2, 2.4], [20, 1 / 0.05, 3]];
+const CASED = [[12, 1 / 12.8, 0.5], [14, 1 / 3.2, 1], [16, 1 / 0.8, 2.4], [18, 1 / 0.2, 3.2], [20, 1 / 0.05, 4]];
 
 /**
  * Pen lines thin out as the map zooms out, so a whole walk on one screen (the summary) reads as a
@@ -119,12 +119,18 @@ export function buildStyle(t: Theme): StyleSpecification {
       },
     },
     {
-      // Houses in outline, a hairline that fades in as they get big enough to draw.
+      // Houses: paper over the gardens behind them, then their outline in pen, fading in as they
+      // get big enough to draw.
       id: 'building', type: 'fill', source: 'omt', 'source-layer': 'building', minzoom: 14,
+      paint: { 'fill-color': m.paper, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 14, 0, 16.5, 1] },
+    },
+    {
+      id: 'building-edge', type: 'line', source: 'omt', 'source-layer': 'building', minzoom: 14,
+      layout: { 'line-join': 'round' },
       paint: {
-        'fill-color': m.paper,
-        'fill-outline-color': m.ink,
-        'fill-opacity': ['interpolate', ['linear'], ['zoom'], 14, 0, 15, 0.55, 16.5, 1],
+        'line-color': m.ink,
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 14, 0, 15, 0.55, 16.5, 1],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 14, 0.4, 16, 0.7, 18, 1.1],
       },
     },
     {

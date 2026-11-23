@@ -1,7 +1,7 @@
 /**
- * The look of the map (ADR 0014): a pencil drawing of the city on warm paper. Streets you have not
- * walked are faint outlines under a paper wash; what you have seen prints in full ink; every street
- * you walk is colored in with a colored pencil, for good, with its houses and its name. The start
+ * The look of the map (ADR 0014): a coloring page of the city, black ink on white paper. Streets you
+ * have not walked are faint outlines under a paper wash; what you have seen prints in full ink; every
+ * street you walk is colored in, in waxy pencil, for good, with its houses and its name. The start
  * screen, the walk stats and the summary read the same palette as CSS custom properties from the
  * inline style in index.html, which has to paint before any script loads; keep the two in step.
  */
@@ -58,20 +58,22 @@ export interface Theme {
     /** Speed at which a street colors in along its block, m/s. */
     sweepMps: number;
   };
-  /** The box of colored pencils; a street keeps one for good (pencilOf). */
+  /** The box of pencils; a street keeps one for good (pencilOf). */
   pencils: Pencil[];
   pencil: {
-    /** Half-width colored along a street and a path, ground metres (never under a pixel or two). */
+    /**
+     * Half-width of the street a pencil colors in, ground metres (never under a pixel or two). Its
+     * scribble swings 1.2 times as far, a little past the lines, as a hand colors in.
+     */
     roadM: number;
     pathM: number;
-    /** How hard a street and a house are colored, 0..1. */
-    street: number;
+    /** The scribble: metres along the street per stroke across it, and its width (m). */
+    strokeM: number;
+    strokeWidthM: number;
+    /** How hard a house is colored, 0..1. */
     house: number;
-    /**
-     * Every walked house gets the same soft pencil, so the streets carry the colors and a walked
-     * block reads as one warm patch, not confetti.
-     */
-    houseLay: string;
+    /** Share of walked houses colored with their street's pencil; the others take one of their own. */
+    houseMatch: number;
   };
   /** What you have seen but not walked: it stays printed in full ink, for good. */
   seen: {
@@ -103,18 +105,18 @@ export const paperTheme: Theme = {
     places: ['Instrument Sans', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
   },
   map: {
-    paper: '#f6f2e9',
-    ink: '#24221f',
-    water: '#e2eaec',
-    park: '#ebeedd',
-    road: '#fbf9f4',
-    place: '#6b665d',
-    name: '#5c5750',
-    landmark: '#3d3a35',
+    paper: '#fffefb',
+    ink: '#111111',
+    water: '#eaf5f9',
+    park: '#f1f6e6',
+    road: '#fffefb',
+    place: '#5e5e5e',
+    name: '#4a4a4a',
+    landmark: '#2b2b2b',
   },
   fog: {
-    color: '#f6f2e9',
-    opacity: 0.8,
+    color: '#fffefb',
+    opacity: 0.6,
     roadM: 17,
     pathM: 11,
     houseM: 7,
@@ -126,28 +128,32 @@ export const paperTheme: Theme = {
     sweepMps: 50,
   },
   pencils: [
-    { lay: '#3f78b5', press: '#1f4f86' }, // Prussian blue
-    { lay: '#e2603f', press: '#a8361c' }, // vermilion
-    { lay: '#e3a634', press: '#7c5508' }, // ochre
-    { lay: '#7aa654', press: '#3f6322' }, // sap green
-    { lay: '#d0628a', press: '#9a2f57' }, // rose madder
-    { lay: '#8a70c6', press: '#56409a' }, // violet
-    { lay: '#3fa196', press: '#1d645c' }, // teal
-    { lay: '#c27646', press: '#83461d' }, // burnt sienna
-    { lay: '#5aaed8', press: '#22668d' }, // cerulean
-    { lay: '#a9a03e', press: '#5e5a12' }, // olive
+    { lay: '#1fa2e8', press: '#0b6eaa' }, // cerulean
+    { lay: '#ff8a1f', press: '#ad4e00' }, // orange
+    { lay: '#ee3e9e', press: '#c0157a' }, // magenta
+    { lay: '#ffd02e', press: '#836300' }, // sunflower
+    { lay: '#c0763e', press: '#97521e' }, // raw sienna
+    { lay: '#ff5a6e', press: '#c81e42' }, // watermelon
+    { lay: '#8c5cf0', press: '#6c3ed8' }, // violet
+    { lay: '#a6d93a', press: '#4a720b' }, // inchworm
+    { lay: '#13bfb0', press: '#06756b' }, // turquoise
+    { lay: '#be95ff', press: '#7f43e0' }, // lavender
+    { lay: '#ffa27f', press: '#b5470f' }, // peach
+    { lay: '#3557e6', press: '#2c4ad1' }, // royal blue
+    { lay: '#e3256b', press: '#c7185a' }, // razzmatazz
   ],
   pencil: {
-    roadM: 4.2,
-    pathM: 2,
-    street: 0.92,
-    house: 0.42,
-    houseLay: '#c98f5a',
+    roadM: 3.4,
+    pathM: 1.6,
+    strokeM: 1.3,
+    strokeWidthM: 1.4,
+    house: 0.64,
+    houseMatch: 0.45,
   },
   seen: {
     clear: 0.92,
-    fill: '#f6f2e9',
-    edge: '#24221f',
+    fill: '#fffefb',
+    edge: '#111111',
     fillOpacity: 1,
     edgeOpacity: 0.45,
     beamM: 88,
@@ -155,17 +161,17 @@ export const paperTheme: Theme = {
   },
   puck: {
     wood: '#e9cfa6',
-    ink: '#24221f',
+    ink: '#111111',
   },
 };
 
 /**
  * The pencil a street keeps for good: a hash of its name, or of its way when it has none, so it
- * comes out the same on every walk and every device. FNV-1a, with a basis picked so the demo walk's
- * first eight streets each get a pencil of their own, and no two of like hue follow each other.
+ * comes out the same on every walk and every device. FNV-1a, with a basis picked so each street of
+ * the demo walk gets a pencil of its own, and no two of like hue follow each other.
  */
 export function pencilOf(key: string, n = paperTheme.pencils.length): number {
-  let h = 0x67f26257;
+  let h = 0x952002b7;
   for (let i = 0; i < key.length; i++) {
     h ^= key.charCodeAt(i);
     h = Math.imul(h, 0x01000193);

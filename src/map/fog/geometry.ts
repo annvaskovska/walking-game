@@ -10,8 +10,8 @@ import { EARTH_CIRCUMFERENCE_M } from '../gl';
 
 /** Per street segment: a.x, a.y, b.x, b.y, along a, along b (m), sweep from (m), sweep t0 (s), kind, pencil. */
 export const SEG_FLOATS = 10;
-/** Per house vertex: x, y, frame x, frame y (m, along the longest wall), seed, time on (s). */
-export const HOUSE_FLOATS = 6;
+/** Per house vertex: x, y, frame x, frame y (m, along the longest wall), seed, time on (s), pencil. */
+export const HOUSE_FLOATS = 7;
 export const KIND_ROAD = 0;
 export const KIND_PATH = 1;
 export const KIND_HOUSE = 2;
@@ -109,13 +109,13 @@ function ringLocal(o: Origin, flat: ArrayLike<number>): number[] {
 }
 
 /**
- * Push one walked house: its triangles (for its pencil) and its outline as segments (for the
- * margin the wash clears around it). Each vertex also carries a frame along the house's longest
+ * Push one walked house: its triangles (for pencil number `tone`) and its outline as segments (for
+ * the margin the wash clears around it). Each vertex also carries a frame along the house's longest
  * wall.
  */
 export function pushHouse(
   verts: number[], index: number[], segs: number[], o: Origin,
-  house: { coords: ArrayLike<number>; holes?: ArrayLike<number>[] }, seed: number, tOn: number,
+  house: { coords: ArrayLike<number>; holes?: ArrayLike<number>[] }, seed: number, tOn: number, tone = 0,
 ): boolean {
   const outer = ringLocal(o, house.coords);
   if (outer.length < 6) return false;
@@ -161,7 +161,7 @@ export function pushHouse(
   const base = verts.length / HOUSE_FLOATS;
   for (let i = 0; i < flat.length; i += 2) {
     const px = flat[i] - ax, py = flat[i + 1] - ay;
-    verts.push(flat[i], flat[i + 1], (px * ux + py * uy) * inv, (px * vx + py * vy) * inv, seed, tOn);
+    verts.push(flat[i], flat[i + 1], (px * ux + py * uy) * inv, (px * vx + py * vy) * inv, seed, tOn, tone);
   }
   for (const t of tri) index.push(base + t);
   for (let i = 0; i < n; i++) {

@@ -4,7 +4,7 @@ import UIKit
 /// The web app in a full-screen web view, on the same paper colour as its start screen, with the
 /// native GPS plugin registered.
 class AppViewController: CAPBridgeViewController {
-    static let paper = UIColor(red: 0xf6 / 255, green: 0xf2 / 255, blue: 0xe9 / 255, alpha: 1)
+    static let paper = UIColor(red: 0xff / 255, green: 0xfe / 255, blue: 0xfb / 255, alpha: 1)
 
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(WalkTrackerPlugin())

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
     <meta name="color-scheme" content="light" />
-    <meta name="theme-color" content="#f6f2e9" />
+    <meta name="theme-color" content="#fffefb" />
     <meta name="description" content="Your city starts as a faint pencil drawing. Every street you walk gets colored in, with its houses and its name, for good." />
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
@@ -113,12 +113,12 @@
       }
       /* Paper and ink, as in src/theme.ts (paperTheme.map); keep the two in step. */
       :root {
-        --paper: #f6f2e9;
-        --ink: #24221f;
-        --text: #3d3a35;
-        --muted: #5c5750;
-        --faint: #6b665d;
-        --line: rgba(36, 34, 31, 0.14);
+        --paper: #fffefb;
+        --ink: #111111;
+        --text: #2b2b2b;
+        --muted: #555555;
+        --faint: #666666;
+        --line: rgba(17, 17, 17, 0.14);
         /* Vermilion, pressed hard: for what ends or warns. */
         --stop: #a8361c;
         --serif: 'Instrument Serif', ui-serif, 'New York', Georgia, serif;
@@ -199,7 +199,7 @@
         top: -110px;
         bottom: calc(-1 * (var(--bottom) + 22px));
         transform: translateX(-50%);
-        background: linear-gradient(180deg, rgba(246, 242, 233, 0) 0, rgba(246, 242, 233, 0.86) 70px, var(--paper) 118px);
+        background: linear-gradient(180deg, rgba(255, 254, 251, 0) 0, rgba(255, 254, 251, 0.86) 70px, var(--paper) 118px);
         transition: opacity 0.9s ease;
       }
       .wl-title { margin: 0; font: 400 36px/1.05 var(--serif); letter-spacing: -0.01em; color: var(--ink); text-wrap: balance; }
@@ -239,11 +239,11 @@
         color: var(--paper);
         font-size: 16px;
         font-weight: 600;
-        box-shadow: 0 10px 24px -14px rgba(36, 34, 31, 0.7);
+        box-shadow: 0 10px 24px -14px rgba(17, 17, 17, 0.7);
         transition: transform 0.12s ease, background 0.2s ease;
       }
       .wl-summary .wl-go { margin-top: 24px; }
-      .wl-go:hover { background: #3d3a35; }
+      .wl-go:hover { background: #2b2b2b; }
       .wl-go:active { transform: scale(0.98); }
       .wl-go:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
       .wl-go[aria-busy='true'] { color: transparent; }
@@ -256,7 +256,7 @@
         height: 22px;
         margin: -11px 0 0 -11px;
         border-radius: 50%;
-        border: 2.5px solid rgba(246, 242, 233, 0.25);
+        border: 2.5px solid rgba(255, 254, 251, 0.25);
         border-top-color: var(--paper);
         animation: wl-spin 0.8s linear infinite;
       }
@@ -300,7 +300,7 @@
         border-radius: 999px;
         background: rgba(251, 249, 244, 0.94);
         border: 1px solid var(--line);
-        box-shadow: 0 12px 30px -14px rgba(36, 34, 31, 0.45);
+        box-shadow: 0 12px 30px -14px rgba(17, 17, 17, 0.45);
         -webkit-backdrop-filter: blur(10px);
         backdrop-filter: blur(10px);
         white-space: nowrap;
@@ -319,7 +319,7 @@
         padding: 0 16px;
         border: 0;
         border-radius: 999px;
-        background: rgba(36, 34, 31, 0.07);
+        background: rgba(17, 17, 17, 0.07);
         color: var(--ink);
         font-size: 14px;
         font-weight: 600;
@@ -353,7 +353,7 @@
         border-radius: 14px;
         background: rgba(251, 249, 244, 0.95);
         border: 1px solid var(--line);
-        box-shadow: 0 10px 26px -14px rgba(36, 34, 31, 0.45);
+        box-shadow: 0 10px 26px -14px rgba(17, 17, 17, 0.45);
         -webkit-backdrop-filter: blur(10px);
         backdrop-filter: blur(10px);
         font-size: 14px;

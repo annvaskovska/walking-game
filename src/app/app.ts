@@ -183,8 +183,16 @@ export async function startApp(): Promise<void> {
   progress.load(litRecords);
   progress.loadHouses(houseRecords);
   walks = walkRecords.sort((a, b) => a.startedAt - b.startedAt);
-  for (const p of progress.lit.values()) view.fog.addPiece(p);
-  for (const h of progress.houses.values()) view.fog.addHouse(h, LONG_AGO);
+  // A house takes the pencil of the street whose block colored it in (its id starts with the way's).
+  const wayKey = new Map<string, string>();
+  for (const p of progress.lit.values()) {
+    view.fog.addPiece(p);
+    wayKey.set(String(p.way), pencilKey(p));
+  }
+  for (const h of progress.houses.values()) {
+    const b = String(h.block);
+    view.fog.addHouse(h, LONG_AGO, wayKey.get(b.slice(0, b.lastIndexOf(':'))));
+  }
   // What you have seen from the streets you walked, in ink.
   const sight = new SightController(theme, view, graph, tiles, (id) => progress.houses.has(id));
   await sight.load(storage);
@@ -336,21 +344,21 @@ export async function startApp(): Promise<void> {
   /** Houses in a tile that loaded after the block beside them unlocked on this walk. */
   function lightLateHouses(houses: Building[]): void {
     if (!walkBlocks.size) return;
-    const byBlock = new Map<string, Building[]>();
+    const byBlock = new Map<Block, Building[]>();
     for (const h of houses) {
       if (progress.houses.has(h.id)) continue;
       for (const b of graph.blocks.index.query(expandBBox(h.bbox, CONFIG.houseRadiusM))) {
         if (!walkBlocks.has(b.id) || polylineDistanceM(h.coords, b.coords) > CONFIG.houseRadiusM) continue;
-        const list = byBlock.get(b.id);
+        const list = byBlock.get(b);
         if (list) list.push(h);
-        else byBlock.set(b.id, [h]);
+        else byBlock.set(b, [h]);
         break;
       }
     }
     const t0 = pageTime();
-    for (const [id, hs] of byBlock) {
-      const lit = progress.applyHouses(hs, id, Date.now());
-      for (const h of lit) view.fog.addHouse(h, t0 + Math.random() * 0.8);
+    for (const [b, hs] of byBlock) {
+      const lit = progress.applyHouses(hs, b.id, Date.now());
+      for (const h of lit) view.fog.addHouse(h, t0 + Math.random() * 0.8, pencilKey(b));
       sight.housesLit(lit);
       queue([], lit);
       if (session) session.newHouses = (session.newHouses ?? 0) + lit.length;
@@ -396,7 +404,7 @@ export async function startApp(): Promise<void> {
       changed = true;
       const fromM = pos ? projectOnPolylineM(pos.lon, pos.lat, piece.coords).alongM : 0;
       if (res.newPieces.length) view.fog.addPiece(piece, { offsetM: 0, fromM, t0 });
-      for (const h of res.newHouses) view.fog.addHouse(h, t0 + 0.15 + Math.random() * 0.4);
+      for (const h of res.newHouses) view.fog.addHouse(h, t0 + 0.15 + Math.random() * 0.4, pencilKey(piece));
       sight.housesLit(res.newHouses);
       session.newPieces += res.newPieces.length;
       session.newLenM += res.newPieces.reduce((s, p) => s + p.len, 0);
@@ -438,7 +446,7 @@ export async function startApp(): Promise<void> {
       for (const h of res.newHouses) {
         const [cx, cy] = centroid(h.coords);
         const along = projectOnPolylineM(cx, cy, block.coords).alongM;
-        view.fog.addHouse(h, t0 + Math.abs(along - fromM) / speed + 0.15);
+        view.fog.addHouse(h, t0 + Math.abs(along - fromM) / speed + 0.15, pencilKey(block));
       }
       sight.housesLit(res.newHouses);
       session.newPieces += res.newPieces.length;

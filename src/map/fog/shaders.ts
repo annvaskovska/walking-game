@@ -1,5 +1,5 @@
 /**
- * GLSL for the paper wash and the colored pencil (ADR 0014). Three passes:
+ * GLSL for the paper wash and the crayon (ADR 0014). Three passes:
  *
  * 1. Mask (offscreen, half resolution, MAX blending), one channel per kind of sight:
  *    R = how walked each spot is: 1 on a walked street's centre line, falling to 0 at its corridor
@@ -8,11 +8,12 @@
  *    A = your sight ahead of you while you walk.
  *    B and A then go dark behind every wall that faces you (shadows.ts): sight stops at walls.
  *    A second mask of the same size holds what you have seen (seenLayer.ts), in R.
- * 2. Paint (offscreen, the mask's size, MAX blending): what the pencils absorb on each spot, RGB,
- *    from every walked street and house, each in its own pencil; A is how covered it is.
+ * 2. Paint (offscreen, the canvas' size, MAX blending): what the crayons absorb on each spot, RGB,
+ *    from every walked street (a soft band under a scribble) and house, each in its crayon; A is
+ *    how covered it is.
  * 3. On screen: the wash, paper laid over the line art wherever the masks are dark, so what you
  *    have not seen shows as a faint outline; then seen houses (seenLayer.ts); then the pencil,
- *    multiplied over the paper and the ink, with the paper's grain and the strokes of a hand.
+ *    multiplied over the paper and the ink, skipping the pits of the paper's tooth.
  */
 
 /** Capsule around each lit segment: a quad, with the exact distance worked out per fragment. */
@@ -27,6 +28,8 @@ uniform mat4 u_matrix;
 uniform vec3 u_radius;
 uniform float u_m2u;
 uniform float u_minr;
+// The quad reaches this many times the radius (the paint pass: the scribble runs past the lines).
+uniform float u_grow;
 out vec2 v_p;
 flat out vec4 v_ab;
 flat out vec2 v_along;
@@ -42,7 +45,8 @@ void main() {
   float len = length(d);
   vec2 dir = len > 1e-6 ? d / len : vec2(1.0, 0.0);
   vec2 nrm = vec2(-dir.y, dir.x);
-  vec2 p = (a + b) * 0.5 + dir * a_corner.x * (len * 0.5 + r) + nrm * a_corner.y * r;
+  float g = r * max(u_grow, 1.0);
+  vec2 p = (a + b) * 0.5 + dir * a_corner.x * (len * 0.5 + g) + nrm * a_corner.y * g;
   v_p = p;
   v_ab = i_ab;
   v_along = i_along;
@@ -83,8 +87,9 @@ vec3 pencil(float i) {
 }`;
 
 /**
- * A walked street colored in along the same capsules (SEG_VS, with the pencil's half-widths as
- * radii): what its pencil absorbs, coloring in from where you stood as fast as the wash clears.
+ * A walked street colored in along the same capsules (SEG_VS, the street's half-width as radius),
+ * as a hand colors in: a soft band at 30%, under a scribble at 78% that goes back and forth across
+ * the street and a little past its lines. It colors in from where you stood as the wash clears.
  */
 export const PAINT_SEG_FS = (n: number) => `#version 300 es
 precision highp float;
@@ -98,47 +103,88 @@ flat in float v_tone;
 uniform float u_time;
 uniform float u_speed;
 uniform float u_edge;
-uniform float u_amount;
+uniform float u_m2u;
+uniform float u_pxUnits;
+// Metres along the street per stroke across it, and the stroke's width (m).
+uniform vec2 u_stroke;
 ${PENCILS_GLSL(n)}
 out vec4 o;
+// A stable 0..1 per stroke of this pencil (a fract hash: sin loses its precision far along a street).
+float hash(float k) {
+  float p = fract((k + v_tone * 97.0) * 0.1031);
+  p *= p + 33.33;
+  return fract(p * (p + p));
+}
+// Where stroke k turns: alternately either side, 1.2 half-widths out, give or take.
+float turn(float k, float hw) { return (mod(k, 2.0) < 0.5 ? -1.0 : 1.0) * hw * (1.2 + (hash(k) - 0.5) * 0.64); }
+// Distance (m) from q (along, across) to the stroke from turn k to turn k + 1.
+float strokeDist(vec2 q, float k, float hw) {
+  vec2 a = vec2(k * u_stroke.x, turn(k, hw));
+  vec2 ab = vec2(u_stroke.x, turn(k + 1.0, hw) - a.y);
+  return length(q - a - ab * clamp(dot(q - a, ab) / dot(ab, ab), 0.0, 1.0));
+}
 void main() {
   if (v_kind > 1.5) discard;
   vec2 a = v_ab.xy, ab = v_ab.zw - v_ab.xy;
   float l2 = dot(ab, ab);
+  vec2 dir = l2 > 0.0 ? ab / sqrt(l2) : vec2(1.0, 0.0);
   float t = l2 > 0.0 ? clamp(dot(v_p - a, ab) / l2, 0.0, 1.0) : 0.0;
-  float d = length(v_p - (a + ab * t));
-  float cover = clamp((v_r - d) / u_edge, 0.0, 1.0);
+  // Metres: the half-width, distance to the street's line, and where this spot is along and across it.
+  float hw = v_r / u_m2u;
+  float d = length(v_p - (a + ab * t)) / u_m2u;
+  vec2 q = vec2(v_along.x + dot(v_p - a, dir) / u_m2u, dot(v_p - a, vec2(-dir.y, dir.x)) / u_m2u);
+  float aa = u_edge / u_m2u;
+  float band = 1.0 - smoothstep(0.95 * hw - aa, 0.95 * hw + aa, d);
+  float k = floor(q.x / u_stroke.x);
+  float sd = min(strokeDist(q, k - 1.0, hw), min(strokeDist(q, k, hw), strokeDist(q, k + 1.0, hw)));
+  float scribble = 1.0 - smoothstep(0.5 * u_stroke.y - aa, 0.5 * u_stroke.y + aa, sd);
+  // Past the segment's ends the next one goes on; a little overshoot rounds off a bend or a dead end.
+  float s = dot(v_p - a, dir) / u_m2u;
+  scribble *= 1.0 - smoothstep(0.5 * hw, 1.0 * hw, max(-s, s - sqrt(l2) / u_m2u));
+  // Strokes only a pixel or two apart (zoomed far out) blur into an even 70%.
+  float sharp = smoothstep(2.0, 4.0, u_stroke.x * u_m2u / u_pxUnits);
+  scribble = mix(0.7 * (1.0 - smoothstep(1.1 * hw - aa, 1.1 * hw + aa, d)), scribble, sharp);
+  float cover = 1.0 - (1.0 - 0.3 * band) * (1.0 - 0.78 * scribble);
   float reach = (u_time - v_sweep.y) * u_speed - abs(mix(v_along.x, v_along.y, t) - v_sweep.x);
   cover *= clamp(reach / 3.0 + 0.5, 0.0, 1.0);
-  if (cover <= 0.0) discard;
-  o = vec4((1.0 - pencil(v_tone)) * cover * u_amount, cover);
+  if (cover <= 0.004) discard;
+  o = vec4((1.0 - pencil(v_tone)) * cover, cover);
 }`;
 
-/** A walked house colored in: its footprint, a pixel off register, in a pencil of its own. */
+/**
+ * A walked house colored in: its footprint in its pencil, a metre or so off register (mostly down
+ * and right, now and then up and left), as a hand colors in. The design hatches it in one stroke
+ * whose lines overlap, so it comes out even.
+ */
 export const PAINT_HOUSE_VS = `#version 300 es
 in vec2 a_pos;
 in vec2 a_frame;
 in vec2 a_house;
+in float a_tone;
 uniform mat4 u_matrix;
-uniform vec2 u_shift;
+uniform float u_m2u;
 flat out vec2 v_house;
+flat out float v_tone;
 void main() {
   v_house = a_house;
-  gl_Position = u_matrix * vec4(a_pos, 0.0, 1.0);
-  gl_Position.xy += u_shift * gl_Position.w;
+  v_tone = a_tone;
+  // 0.6 to 1.35 m off register, down and right (local y runs south), about one in five up and left.
+  float off = (0.6 + 0.75 * fract(a_house.x * 7.13)) * (fract(a_house.x * 3.71) < 0.22 ? -1.0 : 1.0);
+  gl_Position = u_matrix * vec4(a_pos + vec2(0.7071) * off * u_m2u, 0.0, 1.0);
 }`;
 
-export const PAINT_HOUSE_FS = `#version 300 es
+export const PAINT_HOUSE_FS = (n: number) => `#version 300 es
 precision highp float;
 flat in vec2 v_house;
+flat in float v_tone;
 uniform float u_time;
 uniform float u_amount;
-uniform vec3 u_lay;
+${PENCILS_GLSL(n)}
 out vec4 o;
 void main() {
-  float on = clamp((u_time - v_house.y) / 0.6, 0.0, 1.0);
-  if (on <= 0.0) discard;
-  o = vec4((1.0 - u_lay) * on * u_amount, on);
+  float a = u_amount * clamp((u_time - v_house.y) / 0.4, 0.0, 1.0);
+  if (a <= 0.0) discard;
+  o = vec4((1.0 - pencil(v_tone)) * a, a);
 }`;
 
 /** House footprints into the mask (R), so a lit house shows through the fog. */
@@ -240,8 +286,8 @@ void main() {
 
 /**
  * The pencil, multiplied over everything under it (blend DST_COLOR, ZERO): what the paint pass
- * says it absorbs, broken up by the paper's grain, which it skips, and by the strokes of a hand
- * coloring in, always at one slant. Both are tied to the map, so they never crawl as it moves.
+ * says it absorbs, where the paper's tooth lets it (makeTooth: about a quarter of the paper shows
+ * through). The tooth is in device pixels, tied to the map, so it never crawls as the map moves.
  */
 export const PENCIL_FS = `#version 300 es
 precision highp float;
@@ -249,20 +295,14 @@ in vec2 v_uv;
 in vec2 v_world;
 uniform sampler2D u_paint;
 uniform sampler2D u_tooth;
+// Map units per device pixel.
 uniform float u_pxUnits;
 out vec4 o;
 void main() {
   vec4 p = texture(u_paint, v_uv);
   if (p.a <= 0.004) discard;
-  // CSS pixels, tied to the map.
-  vec2 q = v_world / u_pxUnits;
-  float grain = texture(u_tooth, q / 256.0).r;
-  float drift = texture(u_tooth, q / 4096.0).r;
-  float stroke = 0.5 + 0.5 * sin(6.2831853 * (dot(q, vec2(0.8, -0.6)) / 2.3 + drift * 4.0));
-  // The paper's tooth: the pencil catches its peaks and skips its pits, in specks a pixel or two wide.
-  float keep = 1.0 - 0.8 * smoothstep(0.6, 0.72, grain);
-  vec3 t = 1.0 - p.rgb * keep * mix(0.6, 1.0, stroke);
-  o = vec4(t, 1.0);
+  float keep = texture(u_tooth, v_world / u_pxUnits / 256.0).r;
+  o = vec4(1.0 - p.rgb * keep, 1.0);
 }`;
 
 /** You: Mr Sparkles, drawn in a quad around your position. */

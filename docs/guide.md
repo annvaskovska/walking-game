@@ -120,9 +120,9 @@ The app asks only for *While Using* permission: a walk you started counts as usi
   Drawing runs on every display frame while something moves fast, 30 fps at walking pace and 15 fps standing still, when the fog layer also reuses its light, pencil and seen masks while nothing in them changed.
 - **Paper and pencil** are drawn on the GPU as one MapLibre custom layer over an ink drawing of the city (`src/map/style.ts`).
   A half-resolution light mask holds the lit streets, the unlock waves, the clear disc around you and your view ahead; it clears a paper wash that hides most of the ink where you have not been, so every street shows faintly and you can see where you could go.
-  A second half-resolution target holds the colored pencil: each lit street in its own pencil of ten (`pencilOf` in `src/theme.ts`, a hash of its name), the houses beside it in one soft house pencil.
-  It is multiplied over the map with the paper's tooth and diagonal strokes, so ink lines stay black under the color.
-  The walker, Mr Sparkles, is a colored pencil in the pencil of the street you follow.
+  A second target, the canvas' size, holds the crayon: each lit street in its own crayon of 13 (`pencilOf` in `src/theme.ts`, a hash of its name), as a soft band under a scribble that runs a little past its lines, and the houses beside it, some in their street's crayon and the rest in one of their own.
+  It is multiplied over the map through the paper's tooth (`makeTooth`), so ink lines stay black under the color and specks of paper show through.
+  The walker, Mr Sparkles, is a colored pencil in the crayon of the street you follow.
 - **Line of sight.**
   The walls of the houses within ~140 m are gathered around you, and gathered again only after you moved 25 m.
   On the GPU, every wall facing your light casts an instanced shadow wedge into the lantern channels of the mask, hard where two walls meet and soft at the corners you see round, so the light falls between houses and down side streets, not through them.
