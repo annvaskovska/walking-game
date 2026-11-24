@@ -115,7 +115,7 @@ export class Fridge {
     const again = this.q('.again');
     if (!again.style.getPropertyValue('--tex')) again.style.setProperty('--tex', `url(${waxURL(paperTheme.pencils[0].lay)})`);
     const mr = this.q<SVGSVGElement>('.mr-fridge svg');
-    mr.innerHTML = mrInner(Math.max(0.55, wearAfter(walk.distanceM)), false, true);
+    mr.innerHTML = mrInner(Math.max(0.55, wearAfter(walk.distanceM)), true);
     setWax(mr, last);
 
     // The sheet waits for its page to be drawn, or a moment at most, then drops on.

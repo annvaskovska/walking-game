@@ -67,7 +67,7 @@ Every change keeps these invariants:
 - `src/data/`: tile decoder and parser, tile source, street graph. `tileUrl.ts` is the one place the tile URL lives.
 - `src/platform/`: the iPhone app's location, the demo walk, wake lock, storage, compass.
 - `src/map/`: ink style and pictograms, GPU crayon, seen memory, Mr Sparkles, follow camera, street names in their crayons.
-- `src/ui/`: Mr Sparkles' art and the crayon texture, the crayon box, new-street lettering and his speech bubble, the fridge summary, notices.
+- `src/ui/`: Mr Sparkles' art, his faces and the crayon texture, the crayon box, new-street lettering and his speech bubble, the fridge summary, notices.
 - `src/app/`: the controller.
 - `index.html`: the yellow cover, its CSS and its scripts, inline, and the shared crayon button and wax filters.
 - `ios/`: the Xcode project and the native GPS plugin.

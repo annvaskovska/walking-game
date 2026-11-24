@@ -3,37 +3,39 @@
  * colors come from the CSS custom properties `--wax` and `--press` on an ancestor (setWax).
  */
 import type { Pencil } from '../theme';
+import { marksSVG, restPose } from './face';
 
 /**
- * Mr Sparkles: a stubby, well-used crayon in a viewBox of 0 0 60 100, his tip at (30, 96). He
- * wears down as you walk: `wear` 1 is new; his body is max(24, 50 × wear) tall.
+ * Mr Sparkles: a stubby, well-used crayon in a viewBox of 0 0 60 100, his tip at (30, 96), at rest:
+ * arms, body and face (face.ts). He wears down as you walk: `wear` 1 is new; his body is
+ * max(24, 50 × wear) tall.
  */
-export function mrInner(wear: number, waving = false, shadow = false): string {
-  const H = Math.max(24, 50 * wear), yt = 75 - H, fy = yt + H * 0.52 + 1;
+export function mrInner(wear: number, shadow = false): string {
+  const { arms, face } = restPose(wear);
+  return (shadow ? '<ellipse cx="30" cy="97" rx="11" ry="2.6" fill="#000" opacity=".14"/>' : '') + marksSVG(arms) + mrBody(wear) + marksSVG(face);
+}
+
+/** His body alone, without arms or face. */
+function mrBody(wear: number): string {
+  const H = Math.max(24, 50 * wear), yt = 75 - H;
   const zig = H > 31 ? `<path d="M20 ${yt + 11} l2.5 -1.6 2.5 1.6 2.5 -1.6 2.5 1.6 2.5 -1.6 2.5 1.6 2.5 -1.6 2.5 1.6" fill="none" stroke-width="1.2"/>` : '';
   const low = H > 34 ? '<path d="M20 69 H40" stroke-width="1.3"/>' : '';
-  return (shadow ? '<ellipse cx="30" cy="97" rx="11" ry="2.6" fill="#000" opacity=".14"/>' : '') +
-    `<g stroke="#000" stroke-width="2.1" stroke-linejoin="round" stroke-linecap="round">
-      <path d="M21 ${fy + 6} Q14 ${fy + 8} 11.6 ${fy + 2}" fill="none"/>
-      <circle cx="11" cy="${fy + 1}" r="2.5" fill="#fff"/>
-      <g class="${waving ? 'arm-wave' : ''}"><path d="M39 ${fy + 5} Q46 ${fy + 3} 47.6 ${fy - 4}" fill="none"/><circle cx="48" cy="${fy - 5.2}" r="2.5" fill="#fff"/></g>
+  return `<g stroke="#000" stroke-width="2.1" stroke-linejoin="round" stroke-linecap="round">
       <path d="M20.5 79 L26.8 94.4 Q30.4 96.6 33.8 95.2 L39.5 79 Z" style="fill:var(--wax)"/>
       <rect x="20" y="72" width="20" height="7" style="fill:var(--wax)"/>
       <path d="M20 ${yt} H40 V74.5 l-2.5 2.2 -2.9 -2.1 -2.9 2.3 -2.9 -2.1 -2.9 2.3 -2.9 -2.1 L20 75.6 Z" fill="#fff"/>
       <path d="M20 ${yt + 3.5} H40 V${yt + 8.5} H20 Z" style="fill:var(--wax)" stroke-width="1.5"/>
       ${zig}${low}
       <ellipse cx="30" cy="${yt}" rx="10" ry="3" style="fill:var(--press)"/>
-    </g>
-    <ellipse cx="25.6" cy="${fy}" rx="2.1" ry="3" fill="#000"/><ellipse cx="34.4" cy="${fy}" rx="2.1" ry="3" fill="#000"/>
-    <circle cx="26.3" cy="${fy - 1.1}" r=".8" fill="#fff"/><circle cx="35.1" cy="${fy - 1.1}" r=".8" fill="#fff"/>
-    <ellipse cx="22.4" cy="${fy + 4}" rx="1.9" ry="1.1" fill="#ff8fb3"/><ellipse cx="37.6" cy="${fy + 4}" rx="1.9" ry="1.1" fill="#ff8fb3"/>
-    <path d="M26.4 ${fy + 4.2} Q30 ${fy + 9.4} 33.6 ${fy + 4.2} Z" fill="#000" stroke="#000" stroke-width="1" stroke-linejoin="round"/>
-    <path d="M28.2 ${fy + 6.6} Q30 ${fy + 5.6} 31.8 ${fy + 6.6} Q30 ${fy + 8.3} 28.2 ${fy + 6.6} Z" fill="#ff6f91"/>`;
+    </g>`;
 }
 
-/** Mr Sparkles as a standalone SVG document in his crayon, e.g. to rasterize into a texture. */
+/**
+ * His body as a standalone SVG document in his crayon, to rasterize into a texture: the walker
+ * layer draws his arms and face over it for each moment (face.ts).
+ */
 export function mrDocument(wear: number, c: Pencil, w: number, h: number): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 100" width="${w}" height="${h}" style="--wax:${c.lay};--press:${c.press}" overflow="visible">${mrInner(wear)}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 100" width="${w}" height="${h}" style="--wax:${c.lay};--press:${c.press}" overflow="visible">${mrBody(wear)}</svg>`;
 }
 
 /** A crayon `len` units long (62 is new, shorter is worn down), drawn `w` px wide. */

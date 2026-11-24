@@ -175,10 +175,14 @@ export async function startApp(): Promise<void> {
     distanceM: session?.distanceM ?? 0,
   }));
   // He talks over his head; a new street is written across the top, he pops, its crayon comes out.
-  const bubble = new Bubble(() => {
-    const p = motion.position;
-    return p && view.map.project([p.lon, p.lat]);
-  });
+  // Naming a landmark, his eyes turn to hearts.
+  const bubble = new Bubble(
+    () => {
+      const p = motion.position;
+      return p && view.map.project([p.lon, p.lat]);
+    },
+    (prio) => prio === 2 && view.puck.spot(),
+  );
   const claims = new Claims((name, i) => {
     view.puck.pop();
     hud.pop(name);
@@ -769,6 +773,7 @@ export async function startApp(): Promise<void> {
         walking: !!prev && distanceM(prev.lon, prev.lat, f.lon, f.lat) / Math.max(1e-3, (walkT - prevT) / 1000) > 0.5,
       });
       prevT = walkT;
+      bubble.sleep(view.puck.asleep);
       if (bubble.up) bubble.place(view.map.project([f.lon, f.lat]));
       moving = f.moving || light.settling;
       // Turning to look around: the beam and its shadows follow at full speed.
@@ -790,10 +795,15 @@ export async function startApp(): Promise<void> {
   };
   requestAnimationFrame(frame);
 
-  // A tap on the map colors nothing (ADR 0004); it shows whose map it is.
-  view.map.on('click', () => {
-    if (session && !splash.visible) hud.showCredit(4000);
+  // A tap on the map colors nothing (ADR 0004); it shows whose map it is. A tap on him makes him
+  // dizzy, and he watches a finger or a mouse near him.
+  view.map.on('click', (e) => {
+    if (!session || splash.visible) return;
+    if (!view.puck.hit(e.point)) return hud.showCredit(4000);
+    view.puck.tap();
+    bubble.react('Wheee… dizzy!', 1300);
   });
+  for (const type of ['mousemove', 'touchstart', 'touchmove'] as const) view.map.on(type, (e) => view.puck.lookAt(e.point));
 
   // ---- Start ----
   splash.onStart(() => startWalk());

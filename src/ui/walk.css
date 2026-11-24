@@ -25,6 +25,35 @@
   transform: rotate(45deg) skew(8deg, 8deg); border-bottom-right-radius: 3px;
 }
 
+/* Asleep: a Zzz floats up from his head (bubble.ts), three z's a third of a cycle apart. */
+.wl-zzz {
+  position: fixed; left: 0; top: 0; z-index: 4; pointer-events: none; opacity: 0; transition: opacity .4s ease;
+  font: 700 10px/1 var(--hand); color: #000;
+}
+.wl-zzz.on { opacity: 1; }
+.wl-zzz span { position: absolute; left: 0; top: -10px; transform-origin: 0 100%; opacity: 0; animation: wl-z 1.82s linear infinite; }
+.wl-zzz span:nth-child(2) { animation-delay: -.61s; }
+.wl-zzz span:nth-child(3) { animation-delay: -1.21s; }
+.wl-zzz:not(.on) span { animation-play-state: paused; }
+@keyframes wl-z {
+  0% { transform: translate(9.0px, -37.5px) scale(0.50); opacity: 0.00; }
+  10% { transform: translate(11.6px, -39.7px) scale(0.55); opacity: 0.31; }
+  20% { transform: translate(12.9px, -41.9px) scale(0.60); opacity: 0.59; }
+  30% { transform: translate(12.9px, -44.1px) scale(0.65); opacity: 0.81; }
+  40% { transform: translate(12.1px, -46.3px) scale(0.70); opacity: 0.95; }
+  50% { transform: translate(12.0px, -48.5px) scale(0.75); opacity: 1.00; }
+  60% { transform: translate(13.5px, -50.7px) scale(0.80); opacity: 0.95; }
+  70% { transform: translate(16.0px, -52.9px) scale(0.85); opacity: 0.81; }
+  80% { transform: translate(18.6px, -55.1px) scale(0.90); opacity: 0.59; }
+  90% { transform: translate(19.9px, -57.3px) scale(0.95); opacity: 0.31; }
+  100% { transform: translate(19.8px, -59.5px) scale(1.00); opacity: 0.00; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wl-zzz span { animation: none; opacity: .8; transform: translate(13px, -43px) scale(.62); }
+  .wl-zzz span:nth-child(2) { transform: translate(17px, -50px) scale(.78); }
+  .wl-zzz span:nth-child(3) { transform: translate(21px, -57px) scale(.94); }
+}
+
 /* The crayon box: the walk's readout, and End (hud.ts). */
 .wl-tray {
   position: fixed; z-index: 5; display: flex; align-items: flex-end; gap: 12px; pointer-events: none;

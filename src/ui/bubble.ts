@@ -37,10 +37,11 @@ type Point = { x: number; y: number };
 /**
  * Mr Sparkles talks (ADR 0014): a speech bubble over his head. New streets (priority 3) and
  * attractions (2) wait their turn, up to 3 of them, for at most 4 s; a passing cafe (1) is only
- * mentioned when he is free and has been quiet for 1.6 s.
+ * mentioned when he is free and has been quiet for 1.6 s. Asleep, a Zzz floats up from his head.
  */
 export class Bubble {
   private el = document.createElement('div');
+  private zzz = document.createElement('div');
   private until = 0;
   private prio = 0;
   private quietUntil = 0;
@@ -49,16 +50,36 @@ export class Bubble {
   private bw = 160;
   private bh = 40;
 
-  /** `locate`: where his tip is on the screen now, CSS px. */
-  constructor(private locate: () => Point | null) {
+  /**
+   * `locate`: where his tip is on the screen now, CSS px. `onLine`: a line of this priority went up
+   * (he looks the part: hearts for a landmark, priority 2).
+   */
+  constructor(private locate: () => Point | null, private onLine: (prio: number) => void = () => {}) {
     this.el.className = 'wl-bubble';
-    this.el.setAttribute('aria-hidden', 'true');
-    document.body.append(this.el);
+    this.zzz.className = 'wl-zzz';
+    this.zzz.innerHTML = '<span>z</span><span>z</span><span>z</span>';
+    for (const e of [this.el, this.zzz]) e.setAttribute('aria-hidden', 'true');
+    document.body.append(this.el, this.zzz);
   }
 
-  /** Is it up? The frame loop then keeps it over his head (place). */
+  /** Is it or the Zzz up? The frame loop then keeps them over his head (place). */
   get up(): boolean {
-    return this.el.classList.contains('on');
+    return this.el.classList.contains('on') || this.zzz.classList.contains('on');
+  }
+
+  /** He is asleep, or awake again. */
+  sleep(on: boolean): void {
+    if (on === this.zzz.classList.contains('on')) return;
+    this.zzz.classList.toggle('on', on);
+    const p = this.locate();
+    if (on && p) this.place(p);
+  }
+
+  /** What he says when you tap him: at once, over anything but a new street, and never queued. */
+  react(text: string, hold: number): void {
+    if (performance.now() < this.until && this.prio >= 3) return;
+    this.until = 0;
+    this.say(text, 2.5, hold);
   }
 
   street(name: string, i: number, hold = 2000): void {
@@ -86,6 +107,7 @@ export class Bubble {
     this.timer = window.setTimeout(this.done, hold);
     const p = this.locate();
     if (p) this.place(p);
+    this.onLine(prio);
   }
 
   /** Above his head, the tail pointing down at him, 12 px inside the screen's edges. */
@@ -94,6 +116,7 @@ export class Bubble {
     const bx = Math.max(12, Math.min(innerWidth - bw - 12, x - 26)), by = Math.max(bh + 60, y - 48);
     this.el.style.transform = `translate(${bx.toFixed(0)}px, ${(by - bh).toFixed(0)}px)`;
     this.el.style.setProperty('--tail', `${Math.max(10, Math.min(bw - 24, x - bx - 7)).toFixed(0)}px`);
+    this.zzz.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px)`;
   }
 
   /** The walk is over. */
@@ -102,6 +125,7 @@ export class Bubble {
     this.waiting = [];
     this.until = this.prio = this.quietUntil = 0;
     this.el.classList.remove('on');
+    this.zzz.classList.remove('on');
   }
 
   private done = () => {

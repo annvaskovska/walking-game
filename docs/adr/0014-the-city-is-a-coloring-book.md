@@ -25,9 +25,16 @@ The app keeps its rules: the first paint needs no script (ADR 0007), only real w
   Each street keeps one crayon by a hash of its name (`pencilOf`), and a house takes its street's crayon 45% of the time and otherwise one by its own id.
   The fog layer draws it on the GPU, multiplied over the ink through the paper's tooth: a street as a soft band under a back-and-forth scribble, a house as diagonal hatching off register, the walk's own line in press color, and the canal beside you as you pass.
 - **Mr Sparkles** is the stubby crayon of the prototype (`mrInner` in `src/ui/art.ts`), in the crayon of the street he colors.
-  The walker layer rasterizes him into a texture only when his crayon or his wear changes, and leans, strokes and pops him on the GPU (`src/map/puckLayer.ts`).
+  The walker layer rasterizes his body only when his crayon or his wear changes, draws his arms and face over it on a canvas only when they change, and leans, strokes and pops him on the GPU (`src/map/puckLayer.ts`).
   Walking, he does not bob as in the prototype, which read as hopping: he colors in as a hand does, left and right across the page, his top leading each stroke.
   He wears down over a walk, `1 − 0.42 × min(1, distance / 5 km)`, and is new again on the next one.
+- **His face** is the emoji-eyes design (`src/ui/face.ts`), one set of marks for the walker's canvas and for the cover and the fridge.
+  Coloring, his big eyes sit on his tip and follow each stroke.
+  A new street gives him star eyes and a wave, a landmark he names heart eyes.
+  Standing still, he blinks and looks around, and after 4.6 s he dozes off, with a Zzz floating up from his head.
+  A tap on him spins his eyes and he says he is dizzy; a finger or a mouse near him draws his eyes to it and keeps him awake.
+  A tap and a look change only his face, so ADR 0004 holds.
+  With reduced motion his eyes still change shape, but nothing pulses, spins or waves.
 - **A new street** is written big across the top in its crayon, letter by letter, Mr Sparkles pops and says a line, and a crayon pops up out of the box.
   He also names the landmarks he sees, in a speech bubble.
 - **The crayon box** is the walk readout: time, distance, steps and End, at the bottom for the whole walk, with one crayon per street colored in on this walk.
@@ -45,8 +52,9 @@ The app keeps its rules: the first paint needs no script (ADR 0007), only real w
   The seen memory still records the ground and the houses you see, so a later look can show them again without new walks.
 - ADR 0004 and ADR 0005 hold: what colors is exactly what lit before; the canal and the walk's own line are decoration along real walked steps.
 - ADR 0007 holds: the cover is static markup, and the shipped fonts swap in.
-- ADR 0008 holds: the crayon layer keeps its paint while nothing in it changes (`maskMemo.ts`), and Mr Sparkles' texture changes only with his crayon or his wear, and he holds still when you do.
+- ADR 0008 holds: the crayon layer keeps its paint while nothing in it changes (`maskMemo.ts`), Mr Sparkles' body is drawn again only with his crayon or his wear, and standing still he redraws a few marks of his face at the still frame rate, only when they change.
+  Only spinning eyes and his pop ask for every frame.
 - A crayon a street or a house once got must stay its crayon: changing the box, its order or the hash recolors every walk.
 - Two streets side by side can get the same crayon in a real city; only the demo walk is tuned.
-- `src/theme.test.ts` checks the crayon picker, `src/map/fog/tooth.test.ts` the tooth, `src/map/fog/geometry.test.ts` the crayon's strokes, `src/map/puckLayer.test.ts` the easing of his pop and his stroke, `src/map/style.test.ts` that MapLibre accepts the style, `src/map/names.test.ts` one name per street, `src/ui/bubble.test.ts` his lines and `src/ui/summaryText.test.ts` the fridge's words.
+- `src/theme.test.ts` checks the crayon picker, `src/map/fog/tooth.test.ts` the tooth, `src/map/fog/geometry.test.ts` the crayon's strokes, `src/map/puckLayer.test.ts` the easing of his pop and his stroke, `src/ui/face.test.ts` his face for each moment, `src/map/style.test.ts` that MapLibre accepts the style, `src/map/names.test.ts` one name per street, `src/ui/bubble.test.ts` his lines and `src/ui/summaryText.test.ts` the fridge's words.
   Nothing checks the look itself; side by side with the prototype at 390×844, review holds it.

@@ -1,6 +1,7 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MlMap } from 'maplibre-gl';
 import type { Pencil, Theme } from '../theme';
 import { mrDocument } from '../ui/art';
+import { CLAIM_S, drawMarks, faceY, marksSVG, poseAt, SPOT_S, TAP_S, type Moment } from '../ui/face';
 import { mercX, mercY } from './fog/geometry';
 import { localMatrix, program, type Program } from './gl';
 
@@ -13,7 +14,7 @@ export interface PuckState {
   wear: number;
   /** Where he goes, degrees clockwise from north, or null before he has moved. */
   heading: number | null;
-  /** Walking, he colors in, scrubbing left and right; standing still, he holds still. */
+  /** Walking, he colors in, scrubbing left and right; standing still, he blinks, looks around and dozes off. */
   walking: boolean;
 }
 
@@ -34,6 +35,11 @@ const STROKE_TILT = 7;
 /** He colors while he went at walking pace this recently (ms): a slow frame does not stop him. */
 const WALKED_MS = 400;
 const POP_MS = 450;
+/** He looks at a finger (or the mouse) this close to his eyes (CSS px), for this long after it moved (ms). */
+const LOOK_PX = 80;
+const LOOK_MS = 2500;
+/** His units (0 0 60 100) in CSS px. */
+const UNIT = W / 60;
 const DEG = Math.PI / 180;
 
 /** CSS cubic-bezier(x1, y1, x2, y2) as a function of progress 0..1. */
@@ -101,9 +107,10 @@ void main() {
 
 /**
  * You on the map, as Mr Sparkles (ADR 0014): the crayon of the design, his tip where you are, in the
- * crayon of the street he colors. His drawing is rasterized into a texture only when his crayon or
- * wear changes; his stroke, lean, pop and shadow are drawn on the GPU in the same frame as the map (a
- * DOM marker trails the map by a frame while the camera follows you, which reads as jitter).
+ * crayon of the street he colors. His body is rasterized only when his crayon or wear changes; his
+ * arms and face (face.ts) are drawn over it on a canvas only when they change, which goes to the GPU
+ * as his texture. His stroke, lean, pop and shadow are drawn on the GPU in the same frame as the map
+ * (a DOM marker trails the map by a frame while the camera follows you, which reads as jitter).
  */
 export class PuckLayer implements CustomLayerInterface {
   readonly id = 'wl-puck';
@@ -117,10 +124,16 @@ export class PuckLayer implements CustomLayerInterface {
   private broken = false;
   private state: PuckState | null = null;
   private pencils: Pencil[];
-  private still = matchMedia('(prefers-reduced-motion: reduce)');
-  /** The drawing wanted, the one drawn, and whether it still has to go to the GPU. */
+  private calm = matchMedia('(prefers-reduced-motion: reduce)');
+  /**
+   * The body wanted and the one drawn, at its device scale; his whole drawing, the pose in it, and
+   * whether it still has to go to the GPU.
+   */
   private want = '';
+  private body: HTMLCanvasElement | null = null;
+  private bodyScale = 1;
   private img: HTMLCanvasElement | null = null;
+  private posed = '';
   private box: [number, number] = [W, H];
   private fresh = false;
   private lean = 0;
@@ -130,7 +143,14 @@ export class PuckLayer implements CustomLayerInterface {
   private walkedAt = -Infinity;
   /** How much he colors, 0..1: eased in and out, so starting and stopping never jolt him. */
   private stroke = 0;
+  private shift = 0;
   private popAt = -Infinity;
+  private spotAt = -Infinity;
+  private tapAt = -Infinity;
+  private shownAt = -Infinity;
+  private finger: { x: number; y: number; at: number } | null = null;
+  /** Asleep (standing still a while): the bubble floats a Zzz up from his head. */
+  asleep = false;
 
   constructor(theme: Theme) {
     this.pencils = theme.pencils;
@@ -138,18 +158,93 @@ export class PuckLayer implements CustomLayerInterface {
 
   set(s: PuckState | null): void {
     if (s?.walking) this.walkedAt = performance.now();
-    if (!s) this.snap = true;
+    if (s && !this.state) this.shownAt = performance.now();
+    if (!s) {
+      this.snap = true;
+      this.asleep = false;
+    }
     this.state = s;
   }
 
-  /** A new street: he pops (squashes and springs back). */
+  /** A new street: he pops (squashes and springs back), with stars in his eyes. */
   pop(): void {
     this.popAt = performance.now();
   }
 
-  /** Is he in motion that needs every frame drawn (a pop)? */
+  /** He names a landmark he spotted: hearts in his eyes. */
+  spot(): void {
+    this.spotAt = performance.now();
+  }
+
+  /** You tapped him: his eyes spin. */
+  tap(): void {
+    this.tapAt = performance.now();
+  }
+
+  /** A finger (or the mouse) at this screen point, CSS px: he looks at it while it is near. */
+  lookAt(p: { x: number; y: number }): void {
+    this.finger = { x: p.x, y: p.y, at: performance.now() };
+  }
+
+  /** Is this screen point (CSS px) on him, give or take a fingertip? */
+  hit(p: { x: number; y: number }): boolean {
+    const s = this.state;
+    if (!s || !this.map) return false;
+    const t = this.map.project([s.lon, s.lat]);
+    const dx = p.x - t.x - this.shift, dy = p.y - t.y;
+    return Math.abs(dx) < W / 2 + 8 && dy > -OY - 8 && dy < 10;
+  }
+
+  /** Is he in motion that needs every frame drawn (a pop, spinning eyes)? */
   animating(now: number): boolean {
-    return now - this.popAt < POP_MS && !this.still.matches;
+    return (now - this.popAt < POP_MS || now - this.tapAt < TAP_S * 1000) && !this.calm.matches;
+  }
+
+  /** The moment he is in: the latest of a tap, a new street or a place, else coloring or standing still. */
+  private moment(now: number, s: PuckState, map: MlMap): Moment {
+    const fy = faceY(s.wear);
+    let look: Moment['look'] = null;
+    if (this.finger && now - this.finger.at < LOOK_MS) {
+      const t = map.project([s.lon, s.lat]);
+      const dx = this.finger.x - t.x - this.shift, dy = this.finger.y - t.y + (96 - fy) * UNIT;
+      const l = Math.hypot(dx, dy) || 1, m = Math.min(1, l / 12);
+      if (l < LOOK_PX) look = { x: (dx / l) * m, y: (dy / l) * m * 0.8 };
+    }
+    const base = { now: now / 1000, fy, sx: this.shift / STROKE_PX, look, calm: this.calm.matches };
+    const at = (kind: Moment['kind'], since: number): Moment => ({ ...base, kind, t: (now - since) / 1000 });
+    if (now - this.tapAt < TAP_S * 1000) return at('tap', this.tapAt);
+    if (this.popAt >= this.spotAt && now - this.popAt < CLAIM_S * 1000) return at('claim', this.popAt);
+    if (this.spotAt > this.popAt && now - this.spotAt < SPOT_S * 1000) return at('spot', this.spotAt);
+    if (now - this.walkedAt < WALKED_MS) return at('color', this.walkedAt);
+    return at('still', Math.max(this.walkedAt + WALKED_MS, this.shownAt, this.tapAt));
+  }
+
+  /** His arms, body and face for this moment, drawn again only when they change. */
+  private pose(now: number): void {
+    const s = this.state, body = this.body, map = this.map;
+    if (!s || !body || !map) return;
+    const { arms, face, asleep } = poseAt(this.moment(now, s, map));
+    this.asleep = asleep;
+    const key = marksSVG(arms) + marksSVG(face);
+    if (key === this.posed && this.img) return;
+    this.posed = key;
+    const img = (this.img ??= document.createElement('canvas'));
+    if (img.width !== body.width || img.height !== body.height) {
+      img.width = body.width;
+      img.height = body.height;
+    }
+    const c = img.getContext('2d');
+    if (!c) return;
+    const k = UNIT * this.bodyScale, top = ((H - W / 0.6) / 2) * this.bodyScale;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, img.width, img.height);
+    c.setTransform(k, 0, 0, k, 0, top);
+    drawMarks(c, arms);
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.drawImage(body, 0, 0);
+    c.setTransform(k, 0, 0, k, 0, top);
+    drawMarks(c, face);
+    this.fresh = true;
   }
 
   onAdd(map: MlMap): void {
@@ -171,7 +266,7 @@ export class PuckLayer implements CustomLayerInterface {
     this.fresh = !!this.img;
   };
 
-  /** Rasterizes him at the canvas' device scale; the old drawing stays up until this one is ready. */
+  /** Rasterizes his body at the canvas' device scale; the old one stays up until this one is ready. */
   private async draw(key: string, wear: number, c: Pencil, s: number): Promise<void> {
     const img = new Image();
     // The viewBox fits the box's width; the box is a little taller, so it sits centred, as in the design.
@@ -187,9 +282,10 @@ export class PuckLayer implements CustomLayerInterface {
     cv.width = Math.ceil(W * s);
     cv.height = Math.ceil(H * s);
     cv.getContext('2d')?.drawImage(img, 0, ((H - fit) / 2) * s, W * s, fit * s);
-    this.img = cv;
+    this.body = cv;
+    this.bodyScale = s;
     this.box = [cv.width / s, cv.height / s];
-    this.fresh = true;
+    this.posed = '';
     this.map?.triggerRepaint();
   }
 
@@ -216,6 +312,7 @@ export class PuckLayer implements CustomLayerInterface {
         return;
       }
     }
+    this.pose(performance.now());
     if (this.fresh && this.img) {
       this.tex ??= gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, this.tex);
@@ -252,15 +349,15 @@ export class PuckLayer implements CustomLayerInterface {
     if (s.heading !== null) this.leanTo = 15 * Math.sin((s.heading - bearing) * DEG);
     this.lean = this.snap ? this.leanTo : this.lean + (this.leanTo - this.lean) * (1 - Math.exp(-dt * 6));
     // Walking, he colors in (strokeAt), eased in and out.
-    const strokeTo = now - this.walkedAt < WALKED_MS && !this.still.matches ? 1 : 0;
+    const strokeTo = now - this.walkedAt < WALKED_MS && !this.calm.matches ? 1 : 0;
     this.stroke = this.snap ? strokeTo : this.stroke + (strokeTo - this.stroke) * (1 - Math.exp(-dt * 10));
     this.snap = false;
     const [x, a] = strokeAt(now);
-    const shift = this.stroke * x;
+    const shift = (this.shift = this.stroke * x);
     const tilt = this.stroke * a;
     // The pop: scale(1.3, .78) back to none over 0.45 s.
     const p = (now - this.popAt) / POP_MS;
-    const e = p < 1 && !this.still.matches ? popEase(Math.max(0, p)) : 1;
+    const e = p < 1 && !this.calm.matches ? popEase(Math.max(0, p)) : 1;
     const turn = -(this.lean + tilt) * DEG;
 
     const ws = 512 * 2 ** map.getZoom();
