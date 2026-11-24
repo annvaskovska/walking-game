@@ -1,6 +1,6 @@
 # 0012 - Mr Sparkles is a firefly you meet on the first screen
 
-Status: superseded by 0014
+Status: superseded by 0015
 
 ## Context
 

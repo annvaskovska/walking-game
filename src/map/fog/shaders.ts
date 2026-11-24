@@ -1,5 +1,5 @@
 /**
- * GLSL for the crayon (ADR 0014), as the coloring book design draws it, in its units (1 unit is
+ * GLSL for the crayon (ADR 0015), as the coloring book design draws it, in its units (1 unit is
  * KC CSS px at the walk zoom, about 1.5 m). Two passes:
  *
  * 1. Paint (offscreen, the canvas' size): what the crayons absorb on each spot, RGB, and how

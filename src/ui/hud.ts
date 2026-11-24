@@ -37,7 +37,7 @@ const TRAY = `<div class="wl-box">
 <button class="wl-end crayon-btn" type="button"><span>End</span></button>`;
 
 /**
- * The walk's readout and its only control (ADR 0014): a crayon box at the bottom, up for the whole
+ * The walk's readout and its only control (ADR 0015): a crayon box at the bottom, up for the whole
  * walk, with time, distance and steps on its front. Each street colored in on this walk pops a
  * crayon up out of it, in that street's crayon. End asks for a second tap, so a stray touch in a
  * pocket can't end a walk. The perforated left edge of the page and the map credits come with it.

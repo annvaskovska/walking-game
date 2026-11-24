@@ -1,5 +1,5 @@
 /**
- * Mr Sparkles' face and arms for each moment of a walk (ADR 0014), as the emoji-eyes design draws
+ * Mr Sparkles' face and arms for each moment of a walk (ADR 0015), as the emoji-eyes design draws
  * them: big eyes on his tip while he colors, stars for a new street, hearts for a landmark he names,
  * a blink and a look around when you stand still and then sleep, spinning eyes when you tap him.
  * Marks are in his 60 × 100 units; the same marks become SVG (art.ts) and a canvas (puckLayer.ts).

@@ -1,6 +1,6 @@
 import { makeTooth } from '../map/fog/fogLayer';
 
-/** The paper's tooth: a seamless 256 px mask the crayon skips over (ADR 0014). */
+/** The paper's tooth: a seamless 256 px mask the crayon skips over (ADR 0015). */
 const TN = 256;
 let tooth: Uint8Array | null = null;
 const canvases = new Map<string, HTMLCanvasElement>();

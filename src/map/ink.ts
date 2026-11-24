@@ -3,7 +3,7 @@ import { waxPattern } from '../ui/wax';
 
 /**
  * The printed parts of the coloring page that are drawings, not lines: the place pictograms, the
- * Westertoren, the waves in the water and the cloud trees in the parks (ADR 0014). Ported from the
+ * Westertoren, the waves in the water and the cloud trees in the parks (ADR 0015). Ported from the
  * design's drawIcon, drawTower, drawPlace, wave and cloud, in its units: 1 unit is 1.495 m in
  * Amsterdam, KC CSS px at the walk zoom. Drawn on a canvas at style load and added to the map as
  * images, since there is no sprite to download (ADR 0007).

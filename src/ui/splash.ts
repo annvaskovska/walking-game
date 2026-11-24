@@ -8,7 +8,7 @@ export interface Lifetime {
 }
 
 /**
- * The cover: the start screen, a coloring book's yellow cover with Start (ADR 0014). Its markup and
+ * The cover: the start screen, a coloring book's yellow cover with Start (ADR 0015). Its markup and
  * art live in index.html so they paint before any script loads; this drives it once the app is up.
  * Hiding it turns it like a book page onto the map drawn under it; showing it turns it back.
  */

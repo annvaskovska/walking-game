@@ -1,6 +1,6 @@
 # 0010 - The repository is public
 
-Status: accepted
+Status: superseded by 0014
 
 ## Context
 

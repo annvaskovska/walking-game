@@ -89,7 +89,7 @@ function append(m: GpuMesh, add: Mesh, stride: number): void {
 }
 
 /**
- * The crayon walking leaves on the coloring page (ADR 0014), drawn on the GPU as one MapLibre
+ * The crayon walking leaves on the coloring page (ADR 0015), drawn on the GPU as one MapLibre
  * custom layer right above the basemap: the streets you walked colored in, each in its own crayon,
  * their houses hatched in, his trail, and the canal colored as he passes it, all as the design
  * draws them (see shaders.ts). The page itself prints in full ink everywhere.

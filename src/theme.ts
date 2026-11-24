@@ -1,5 +1,5 @@
 /**
- * The look of the app (ADR 0014): a coloring book of the city, black ink on white paper, every street
+ * The look of the app (ADR 0015): a coloring book of the city, black ink on white paper, every street
  * you walk colored in with crayon for good, with its houses and its name. The cover in index.html,
  * which has to paint before any script loads, repeats the type and the crayons it needs inline; keep
  * the two in step.

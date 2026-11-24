@@ -49,7 +49,7 @@ interface Writing {
 }
 
 /**
- * The new-street moment (ADR 0014): a street colored in for the first time gets its name written
+ * The new-street moment (ADR 0015): a street colored in for the first time gets its name written
  * big across the top of the map, letter by letter, in its crayon, with a wavy underline. Names
  * close together wait their turn. Each name, as it is written, is also said to a screen reader and
  * handed to `onClaim` (he pops, a crayon comes out of the box, he says his line).

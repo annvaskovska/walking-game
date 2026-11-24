@@ -28,7 +28,7 @@ const COVER_TURN_MS = 900;
 const PAGE_WAIT_MS = 1200;
 
 /**
- * After a walk: its page, colored in, stuck on the fridge with a magnet (ADR 0014). The page is
+ * After a walk: its page, colored in, stuck on the fridge with a magnet (ADR 0015). The page is
  * the map itself: the app frames the walk behind the fridge and hands its canvas to paint().
  */
 export class Fridge {

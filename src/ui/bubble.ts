@@ -35,7 +35,7 @@ interface Line {
 type Point = { x: number; y: number };
 
 /**
- * Mr Sparkles talks (ADR 0014): a speech bubble over his head. New streets (priority 3) and
+ * Mr Sparkles talks (ADR 0015): a speech bubble over his head. New streets (priority 3) and
  * attractions (2) wait their turn, up to 3 of them, for at most 4 s; a passing cafe (1) is only
  * mentioned when he is free and has been quiet for 1.6 s. Asleep, a Zzz floats up from his head.
  */

@@ -1,5 +1,5 @@
 /**
- * Mr Sparkles and his crayons as SVG markup (ADR 0014), drawn as in the design. His wax and press
+ * Mr Sparkles and his crayons as SVG markup (ADR 0015), drawn as in the design. His wax and press
  * colors come from the CSS custom properties `--wax` and `--press` on an ancestor (setWax).
  */
 import type { Pencil } from '../theme';

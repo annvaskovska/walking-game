@@ -1,4 +1,4 @@
-/* The summary: the page on the fridge (ADR 0014), as the design draws it. */
+/* The summary: the page on the fridge (ADR 0015), as the design draws it. */
 .fridge {
   position: fixed; inset: 0; z-index: 9; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto;
   /* A phone's width of fridge at most; safe areas on top of the design's margins. */
