@@ -1,0 +1,1529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mr Sparkles, your city's coloring book</title>
+<style>
+:root {
+  --paper: #fffefb;
+  --cover: #ffd23f;
+  --hand: "Marker Felt", "Chalkboard SE", "Noteworthy", "Comic Sans MS", cursive;
+  --kid: "Chalkboard SE", "Chalkboard", "Noteworthy", "Comic Sans MS", cursive;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  overflow: hidden;
+  color: #000;
+  font-family: var(--kid);
+  -webkit-font-smoothing: antialiased;
+  /* the kitchen table: a blue gingham oilcloth */
+  background-color: #fff;
+  background-image:
+    linear-gradient(90deg, rgba(31, 162, 232, .15) 50%, transparent 50%),
+    linear-gradient(rgba(31, 162, 232, .15) 50%, transparent 50%);
+  background-size: 46px 46px;
+}
+.defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+
+/* loose crayons on the table */
+.desk { position: fixed; inset: 0; pointer-events: none; }
+.desk-crayon { position: absolute; left: 0; top: 0; width: 22px; height: 104px; filter: drop-shadow(2px 5px 3px rgba(20, 60, 90, .18)); }
+.desk-crayon svg { display: block; width: 100%; height: 100%; }
+
+/* the phone */
+.stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+.phone { position: relative; flex: none; width: 390px; height: 844px; transform: scale(var(--s, 1)); }
+.phone::before {
+  content: ""; position: absolute; inset: -10px; z-index: -1;
+  background: #fff; border: 3px solid #000; border-radius: 54px;
+}
+.phone::after {
+  content: ""; position: absolute; inset: -14px -12px -13px -15px; z-index: -1; pointer-events: none;
+  border: 1.5px solid #000; border-radius: 58px 55px 60px 56px; transform: rotate(-.35deg); opacity: .5;
+}
+.screen { position: absolute; inset: 0; overflow: hidden; border-radius: 44px; background: var(--paper); isolation: isolate; }
+.screen > section { position: absolute; inset: 0; }
+.screen > section[hidden] { display: none; }
+button { font: inherit; color: #000; }
+:focus-visible { outline: 3px dashed #000; outline-offset: 4px; }
+.instant, .instant * { transition: none !important; animation: none !important; }
+
+/* chunky crayon-colored buttons */
+.crayon-btn {
+  appearance: none; cursor: pointer;
+  border: 2.8px solid #000;
+  border-radius: 22px 30px 20px 28px / 28px 20px 30px 22px;
+  background: #fff var(--tex, none) 0 0 / 128px 128px;
+  box-shadow: 0 4px 0 #000;
+  font: 700 20px/1 var(--kid);
+  transition: transform .14s ease, box-shadow .14s ease;
+}
+.crayon-btn:hover { transform: rotate(-1.6deg) translateY(-1px); }
+.crayon-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #000; }
+
+/* ---------- the walk: a coloring book page ---------- */
+.walk { z-index: 1; background: var(--paper); }
+#map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.perf {
+  position: absolute; left: 7px; top: 0; bottom: 0; width: 5px; pointer-events: none;
+  background: radial-gradient(circle, rgba(0, 0, 0, .28) 1.1px, transparent 1.5px) 50% 0 / 5px 10px repeat-y;
+}
+#claim { position: absolute; left: 0; top: 56px; width: 100%; height: 150px; pointer-events: none; transition: opacity .45s ease; }
+#claim.gone { opacity: 0; }
+.walker { position: absolute; left: 0; top: 0; width: 32px; height: 53.4px; z-index: 3; pointer-events: none; will-change: transform; }
+.walker .lean, .walker .bob { width: 100%; height: 100%; transform-origin: 16px 51.2px; }
+.walker svg { display: block; width: 100%; height: 100%; overflow: visible; transform-origin: 50% 96%; }
+.walking .walker .bob { animation: scribble .36s ease-in-out infinite alternate; }
+@keyframes scribble { from { transform: rotate(-5deg); } to { transform: rotate(5deg) translateY(-2.5px); } }
+.walker.pop svg { animation: pop .45s cubic-bezier(.3, 1.7, .5, 1); }
+@keyframes pop { 0% { transform: scale(1.3, .78); } 100% { transform: none; } }
+
+.bubble {
+  position: absolute; left: 0; top: 0; z-index: 4; max-width: 214px; pointer-events: none;
+  padding: 8px 12px 9px; background: #fff; border: 2px solid #000;
+  border-radius: 18px 22px 20px 16px / 20px 16px 22px 18px;
+  font: 400 15px/1.25 var(--kid); opacity: 0; transition: opacity .18s ease; will-change: transform;
+}
+.bubble.on { opacity: 1; }
+.bubble::after {
+  content: ""; position: absolute; left: var(--tail, 16px); bottom: -8px; width: 13px; height: 13px;
+  background: #fff; border-right: 2px solid #000; border-bottom: 2px solid #000;
+  transform: rotate(45deg) skew(8deg, 8deg); border-bottom-right-radius: 3px;
+}
+
+/* the crayon box readout */
+.tray { position: absolute; left: 14px; right: 14px; bottom: 24px; z-index: 5; display: flex; align-items: flex-end; gap: 12px; pointer-events: none; }
+.box { position: relative; flex: none; width: 238px; height: 132px; }
+.box > svg { position: absolute; left: 0; top: 0; width: 238px; height: 132px; overflow: visible; }
+.crayons { position: absolute; left: 0; top: 0; width: 238px; height: 132px; }
+.cr { position: absolute; top: 2px; width: 13px; height: 62px; transform: translateY(66px); transition: transform .55s cubic-bezier(.3, 1.55, .5, 1); }
+.cr.out { transform: translateY(0) rotate(var(--r, 0deg)); }
+.cr svg { display: block; }
+.readout { position: absolute; left: 14px; right: 12px; bottom: 9px; margin: 0; display: flex; justify-content: space-between; }
+.readout div { display: flex; flex-direction: column-reverse; align-items: flex-start; }
+.readout dt { margin-top: 3px; font: 400 12px/1 var(--kid); }
+.readout dd { margin: 0; font: 700 21px/1 var(--kid); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.end {
+  pointer-events: auto; flex: 1; height: 62px; margin-bottom: 4px; padding: 0 6px;
+  font: 700 23px/1 var(--hand); transform: rotate(1.4deg);
+}
+.end:hover { transform: rotate(-.6deg) translateY(-1px); }
+.end.armed { font-size: 19px; animation: wiggle .38s ease; }
+@keyframes wiggle { 25% { transform: rotate(-4deg); } 60% { transform: rotate(3deg); } 100% { transform: rotate(1.4deg); } }
+
+/* ---------- the cover ---------- */
+.cover {
+  z-index: 3; display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 52px 24px 26px; background: var(--cover); overflow-x: hidden; overflow-y: auto;
+  transform-origin: 0 50%; backface-visibility: hidden;
+  transition: transform .9s cubic-bezier(.55, .06, .3, 1), opacity .2s ease;
+}
+.cover.open { transition: transform .9s cubic-bezier(.55, .06, .3, 1), opacity .3s ease .62s; }
+.cover::before {
+  content: ""; position: absolute; inset: 12px; pointer-events: none;
+  border: 2.6px solid #000; border-radius: 30px 34px 28px 36px / 34px 28px 36px 30px;
+}
+.cover.open { transform: perspective(1400px) rotateY(-112deg); opacity: 0; pointer-events: none; }
+.title { position: relative; width: 100%; margin: 0; line-height: 1; }
+.title .mr { display: block; width: max-content; margin: 0 0 -14px 26px; font: 700 34px/1 var(--hand); transform: rotate(-8deg); }
+.title svg { display: block; width: 100%; max-width: 334px; height: auto; margin: 0 auto; overflow: visible; }
+.tagline { margin: 2px 0 12px; font: 400 19px/1.2 var(--hand); }
+.scene {
+  position: relative; flex: 0 1 auto; width: 100%; min-height: 0;
+  background: var(--paper); border: 2.6px solid #000;
+  border-radius: 16px 20px 14px 22px / 20px 14px 22px 16px; overflow: hidden;
+}
+.scene svg { display: block; width: 100%; height: auto; max-height: 32vh; }
+.scene .hi {
+  position: absolute; top: 7px; right: 9px; width: 172px; text-align: left;
+  padding: 7px 10px 8px; background: #fff; border: 2px solid #000;
+  border-radius: 16px 20px 18px 14px / 18px 14px 20px 16px; font: 400 14px/1.22 var(--kid);
+}
+.scene .hi::after {
+  content: ""; position: absolute; left: 30px; bottom: -8px; width: 12px; height: 12px;
+  background: #fff; border-right: 2px solid #000; border-bottom: 2px solid #000; transform: rotate(45deg) skew(8deg, 8deg);
+}
+.arm-wave { transform-box: fill-box; transform-origin: 0% 100%; animation: wave 2.2s ease-in-out infinite; }
+@keyframes wave { 0%, 55%, 100% { transform: rotate(0); } 65% { transform: rotate(-22deg); } 75% { transform: rotate(6deg); } 85% { transform: rotate(-16deg); } }
+.ask { margin: 18px 4px 8px; max-width: 20ch; font: 700 23px/1.18 var(--kid); text-wrap: balance; }
+.lede { margin: 0 6px 18px; max-width: 32ch; font: 400 15.5px/1.42 var(--kid); text-wrap: pretty; }
+.go { padding: 15px 26px 16px; transform: rotate(-1.2deg); }
+.fine { margin: 14px 0 0; font: 400 13px/1.3 var(--kid); color: #2b2300; }
+
+/* ---------- the summary: the page on the fridge ---------- */
+.fridge {
+  z-index: 2; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto;
+  padding: 58px 0 26px;
+  background: linear-gradient(90deg, #e3e9ec 0, #f2f5f6 16%, #fbfcfc 52%, #eef2f3 84%, #dde4e7 100%);
+}
+.fridge::before { content: ""; position: absolute; left: 0; right: 0; top: 30px; height: 2px; background: #cbd4d8; box-shadow: 0 1px 0 #fff; }
+.handle {
+  position: absolute; right: 9px; top: 130px; width: 12px; height: 320px; border-radius: 7px;
+  background: linear-gradient(90deg, #c4ced3, #f8fafb 45%, #b9c4c9); box-shadow: -2px 3px 6px rgba(30, 50, 60, .2);
+}
+.sheet-wrap { position: relative; flex: none; margin: 0 28px 0 22px; filter: drop-shadow(0 9px 9px rgba(25, 45, 55, .2)); }
+.sheet {
+  padding: 22px 18px 18px 26px; background: var(--paper); transform: rotate(-1.8deg);
+  -webkit-mask: radial-gradient(circle at 0 50%, transparent 3.2px, #000 3.7px) 0 0 / 7px 11px repeat-y, linear-gradient(#000, #000) 7px 0 / calc(100% - 7px) 100% no-repeat;
+  mask: radial-gradient(circle at 0 50%, transparent 3.2px, #000 3.7px) 0 0 / 7px 11px repeat-y, linear-gradient(#000, #000) 7px 0 / calc(100% - 7px) 100% no-repeat;
+}
+.magnet {
+  position: absolute; left: 52%; top: -14px; z-index: 2; width: 38px; height: 38px; border-radius: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(circle at 34% 30%, #bdeaff 0, #4cbcf2 26%, #1a8fd0 60%, #0a5f94 100%);
+  box-shadow: 0 5px 6px rgba(10, 40, 60, .32), inset 0 -3px 4px rgba(0, 0, 0, .18);
+}
+.wow { margin: 0 0 10px; font: 700 44px/1 var(--hand); transform: rotate(-2.6deg); transform-origin: 0 50%; outline: none; }
+.wow > span:first-child { display: block; margin-left: -4px; font-size: 52px; }
+.wow span { display: inline-block; }
+.wow .wx { transform: translateY(var(--y, 0)) rotate(var(--r, 0deg)); color: var(--press); text-shadow: 2px 1.5px 0 var(--wax); }
+.pagemap { height: clamp(150px, 26vh, 212px); border: 2.4px solid #000; border-radius: 8px 12px 7px 10px; overflow: hidden; background: var(--paper); }
+.pagemap canvas { display: block; width: 100%; height: 100%; }
+.dist { margin: 12px 0 0; display: flex; align-items: baseline; gap: 6px; font: 700 64px/.95 var(--hand); }
+.dist small { font-size: 26px; }
+.dist .pt { display: inline-block; width: 11px; height: 11px; margin: 0 4px 0 3px; border-radius: 48% 52% 45% 55%; background: #000; }
+.meta { margin: 4px 0 0; font: 400 15px/1.3 var(--kid); }
+.newh { margin: 14px 0 3px; font: 700 16px/1.2 var(--kid); }
+.newl { list-style: none; margin: 0; padding: 0; }
+.newl li { display: flex; align-items: center; gap: 10px; font: 400 17px/1.45 var(--kid); }
+.newl svg { flex: none; width: 34px; height: 14px; }
+.more { margin: 3px 0 0; font: 400 15px/1.3 var(--kid); }
+.below { flex: none; position: relative; display: flex; align-items: flex-end; justify-content: space-between; margin: auto 22px 0; padding-top: 22px; }
+.again { padding: 15px 24px 16px; transform: rotate(-1.4deg); }
+.mr-fridge { position: relative; width: 50px; height: 84px; flex: none; margin-right: 8px; }
+.mr-fridge svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.mr-fridge .say {
+  position: absolute; right: 38px; bottom: 74px; white-space: nowrap;
+  padding: 6px 10px 7px; background: #fff; border: 2px solid #000;
+  border-radius: 16px 18px 14px 18px / 18px 14px 18px 16px; font: 400 14px/1.2 var(--kid);
+}
+.mr-fridge .say::after {
+  content: ""; position: absolute; right: 10px; bottom: -7px; width: 11px; height: 11px;
+  background: #fff; border-right: 2px solid #000; border-bottom: 2px solid #000; transform: rotate(45deg);
+}
+.fridge.drop .sheet-wrap { animation: drop .7s cubic-bezier(.2, .9, .3, 1.15) both; }
+@keyframes drop { from { transform: translateY(-140px) rotate(-10deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.fridge.drop .magnet { animation: clack .38s cubic-bezier(.3, 1.8, .5, 1) .6s both; }
+@keyframes clack { from { transform: translate(-50%, -34px) scale(1.5); opacity: 0; } to { transform: translateX(-50%); opacity: 1; } }
+
+@media (max-width: 499px) {
+  .phone { width: 100vw; height: 100vh; height: 100dvh; transform: none; }
+  .phone::before, .phone::after { display: none; }
+  .screen { border-radius: 0; }
+  .desk { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cover, .cover.open { transition: opacity .2s ease; }
+  .cover.open { transform: none; }
+  .walking .walker .bob, .walker.pop svg, .arm-wave, .end.armed, .fridge.drop .sheet-wrap, .fridge.drop .magnet { animation: none; }
+  .cr, .crayon-btn, #claim { transition: none; }
+}
+</style>
+</head>
+<body>
+<svg class="defs" aria-hidden="true" focusable="false">
+  <defs>
+    <filter id="wax" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -7 0 0 0 4.9" result="m"/>
+      <feComposite in="SourceGraphic" in2="m" operator="in"/>
+    </filter>
+    <filter id="wobble" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".03" numOctaves="2" seed="3" result="t"/>
+      <feDisplacementMap in="SourceGraphic" in2="t" scale="2.4" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+</svg>
+
+<div class="desk" id="desk" aria-hidden="true"></div>
+
+<main class="stage">
+  <div class="phone" id="phone">
+    <div class="screen" id="screen">
+
+      <section class="walk" id="walk" aria-label="The walk" tabindex="-1">
+        <canvas id="map" role="img" aria-label="A coloring-book map of the Jordaan. The streets you walk are colored in."></canvas>
+        <div class="perf" aria-hidden="true"></div>
+        <canvas id="claim" class="gone" aria-hidden="true"></canvas>
+        <div class="walker" id="walker" aria-hidden="true"><div class="lean" id="lean"><div class="bob"><svg id="mrWalk" viewBox="0 0 60 100"></svg></div></div></div>
+        <div class="bubble" id="bubble" aria-hidden="true"></div>
+        <div class="tray">
+          <div class="box">
+            <svg viewBox="0 0 238 132" aria-hidden="true"><rect x="5" y="30" width="228" height="100" rx="5" fill="#e9ad00" stroke="#000" stroke-width="2.6"/></svg>
+            <div class="crayons" id="crayons" aria-hidden="true"></div>
+            <svg viewBox="0 0 238 132" aria-hidden="true">
+              <path d="M2 52 Q119 78 236 52 L236 128 Q236 131 233 131 L5 131 Q2 131 2 128 Z" fill="#ffd23f" stroke="#000" stroke-width="2.6" stroke-linejoin="round"/>
+              <path d="M9 63 Q119 88 229 63" fill="none" stroke="#000" stroke-width="1.2" stroke-dasharray="3 3"/>
+            </svg>
+            <dl class="readout" aria-label="This walk">
+              <div><dt>time</dt><dd id="rTime">0:00</dd></div>
+              <div><dt>distance</dt><dd id="rDist">0 m</dd></div>
+              <div><dt>steps</dt><dd id="rSteps">0</dd></div>
+            </dl>
+          </div>
+          <button class="end crayon-btn" id="end" type="button"><span id="endLbl">End</span></button>
+        </div>
+      </section>
+
+      <section class="fridge" id="summary" aria-labelledby="wow" hidden>
+        <div class="handle" aria-hidden="true"></div>
+        <div class="sheet-wrap">
+          <div class="magnet" aria-hidden="true"></div>
+          <article class="sheet">
+            <h2 class="wow" id="wow" tabindex="-1"></h2>
+            <div class="pagemap"><canvas id="pagemap" role="img" aria-label="Your page of the Jordaan, colored in where you walked."></canvas></div>
+            <p class="dist"><span class="vh" id="sDistTxt"></span><span id="sDist" aria-hidden="true">0</span><small id="sUnit" aria-hidden="true">m</small></p>
+            <p class="meta" id="sMeta"></p>
+            <h3 class="newh">New on your map</h3>
+            <ul class="newl" id="sList"></ul>
+            <p class="more" id="sMore"></p>
+          </article>
+        </div>
+        <div class="below">
+          <button class="again crayon-btn" id="again" type="button">Walk again</button>
+          <div class="mr-fridge" aria-hidden="true"><span class="say">Fridge-worthy!</span><svg id="mrFridge" viewBox="0 0 60 100"></svg></div>
+        </div>
+      </section>
+
+      <section class="cover" id="cover" aria-labelledby="title">
+        <h1 class="title" id="title">
+          <span class="vh">Mr Sparkles</span>
+          <span class="mr" aria-hidden="true">Mr</span>
+          <svg viewBox="0 0 340 104" aria-hidden="true" id="titleArt"></svg>
+        </h1>
+        <p class="tagline">your city's coloring book</p>
+        <div class="scene" id="scene">
+          <p class="hi">Hi! I color in every street you walk.</p>
+        </div>
+        <h2 class="ask">How much of your city have you colored in?</h2>
+        <p class="lede">Every street stays a blank outline until you walk it. Then it's colored in for good, with its houses and its name. Tapping colors nothing. Walking does.</p>
+        <button class="go crayon-btn" id="go" type="button">Start the demo walk</button>
+        <p class="fine">A walk through Amsterdam, no location needed.</p>
+      </section>
+
+      <div id="live" class="vh" aria-live="polite" aria-atomic="true"></div>
+    </div>
+  </div>
+</main>
+
+<script src="city.js"></script>
+<script src="kit.js"></script>
+<script>
+(() => {
+'use strict';
+const $ = (s) => document.querySelector(s);
+const C = window.CITY, Kit = window.Kit;
+if (!C || !Kit || !C.route || !C.route.pts) {
+  const l = $('.lede');
+  if (l) l.textContent = 'The city did not load. Keep city.js and kit.js next to this page.';
+  return;
+}
+
+// ---------------------------------------------------------------- constants
+const RS = C.route.streets || [], RP = C.route.pts, MPU = C.metersPerUnit || 1.495;
+const mq = window.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+let RM = !!(mq && mq.matches);
+if (mq && mq.addEventListener) mq.addEventListener('change', (e) => { RM = e.matches; });
+const HAND = '"Marker Felt", "Chalkboard SE", Noteworthy, "Comic Sans MS", cursive';
+const PAPER = '#fffefb', WATER = '#55c4f0', RATE = 25, KC = 2.25, TILE = 512, ANCH = 0.42;
+
+// The crayon box: one crayon per street, in the order you claim them.
+// wax = how it colors; press = the same crayon pressed hard, dark enough to read (4.5:1 on white).
+const BOX = [
+  { wax: '#1fa2e8', press: '#0b6eaa' }, // Westermarkt, cerulean
+  { wax: '#ff8a1f', press: '#ad4e00' }, // Prinsengracht, orange (the Prince of Orange)
+  { wax: '#ee3e9e', press: '#c0157a' }, // Grachtenvlinder, magenta butterfly
+  { wax: '#ffd02e', press: '#836300' }, // Bloemgracht, sunflower
+  { wax: '#c0763e', press: '#97521e' }, // Lijnbaansgracht, raw sienna rope
+  { wax: '#ff5a6e', press: '#c81e42' }, // Egelantiersgracht, watermelon
+  { wax: '#8c5cf0', press: '#6c3ed8' }, // Westerstraat, violet
+  { wax: '#a6d93a', press: '#4a720b' }, // Lindengracht, inchworm (linden trees)
+  { wax: '#13bfb0', press: '#06756b' }, // Brouwersgracht, turquoise
+  { wax: '#be95ff', press: '#7f43e0' }, // Leliesluis, lavender
+  { wax: '#ffa27f', press: '#b5470f' }, // Leliegracht, peach
+  { wax: '#3557e6', press: '#2c4ad1' }, // Keizersgracht, royal blue
+  { wax: '#e3256b', press: '#c7185a' }, // Liefdesverklaring, razzmatazz
+];
+const BC = (i) => BOX[((i % BOX.length) + BOX.length) % BOX.length];
+const crayonOf = new Map(RS.map((s, i) => [s.name, i]));
+function crayonAt(m) { let k = 0; for (let i = 0; i < RS.length; i++) if (RS[i].m <= m) k = i; return k; }
+
+// ---------------------------------------------------------------- small helpers
+function rng(seed) {
+  let s = (Math.imul((seed | 0) + 1, 2654435761) >>> 0) || 1;
+  return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
+}
+function hash(i) {
+  let x = Math.imul((i | 0) + 1, 374761393);
+  x = Math.imul(x ^ (x >>> 13), 1274126177);
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
+}
+function bbox(p, pad) {
+  let a = 1e9, b = 1e9, c = -1e9, d = -1e9;
+  for (let i = 0; i + 1 < p.length; i += 2) {
+    const x = p[i], y = p[i + 1];
+    if (x < a) a = x; if (x > c) c = x; if (y < b) b = y; if (y > d) d = y;
+  }
+  pad = pad || 0;
+  return [a - pad, b - pad, c + pad, d + pad];
+}
+function unionBB(list, pad) {
+  const out = [1e9, 1e9, -1e9, -1e9];
+  list.forEach((r) => { const b = bbox(r, pad); out[0] = Math.min(out[0], b[0]); out[1] = Math.min(out[1], b[1]); out[2] = Math.max(out[2], b[2]); out[3] = Math.max(out[3], b[3]); });
+  return out;
+}
+
+// A uniform grid so a tile only touches the features it overlaps.
+function Grid(cell) { this.c = cell; this.m = new Map(); this.q = 0; }
+Grid.prototype.add = function (it) {
+  const c = this.c, b = it.bb;
+  for (let gx = Math.floor(b[0] / c); gx <= Math.floor(b[2] / c); gx++)
+    for (let gy = Math.floor(b[1] / c); gy <= Math.floor(b[3] / c); gy++) {
+      const k = (gx + 500) * 2048 + (gy + 500);
+      let a = this.m.get(k);
+      if (!a) this.m.set(k, (a = []));
+      a.push(it);
+    }
+};
+Grid.prototype.each = function (x0, y0, x1, y1, f) {
+  const c = this.c, q = ++this.q;
+  for (let gx = Math.floor(x0 / c); gx <= Math.floor(x1 / c); gx++)
+    for (let gy = Math.floor(y0 / c); gy <= Math.floor(y1 / c); gy++) {
+      const a = this.m.get((gx + 500) * 2048 + (gy + 500));
+      if (!a) continue;
+      for (let i = 0; i < a.length; i++) {
+        const it = a[i];
+        if (it.q === q) continue;
+        it.q = q;
+        const b = it.bb;
+        if (b[2] < x0 || b[0] > x1 || b[3] < y0 || b[1] > y1) continue;
+        f(it);
+      }
+    }
+};
+function pip(poly, x, y) {
+  let inside = false;
+  for (const r of poly.rings)
+    for (let i = 0, j = r.length - 2; i + 1 < r.length; j = i, i += 2) {
+      const xi = r[i], yi = r[i + 1], xj = r[j], yj = r[j + 1];
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+  return inside;
+}
+function inAny(g, x, y) { let hit = false; g.each(x, y, x, y, (p) => { if (!hit && pip(p, x, y)) hit = true; }); return hit; }
+
+// ---------------------------------------------------------------- crayon wax: paper tooth
+// A seamless 256 px mask of tiny holes where the crayon skips over the paper's grain.
+const TN = 256;
+const TOOTH = (() => {
+  const r = rng(7), a = new Float32Array(TN * TN);
+  const lat = (P) => { const l = new Float32Array(P * P); for (let i = 0; i < l.length; i++) l[i] = r(); return l; };
+  const L1 = lat(64), L2 = lat(128), L3 = lat(32);
+  const smp = (l, P, x, y) => {
+    const cs = TN / P, fx = x / cs, fy = y / cs, ix = Math.floor(fx), iy = Math.floor(fy);
+    const tx = fx - ix, ty = fy - iy, sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+    const x0 = ix % P, y0 = iy % P, x1 = (x0 + 1) % P, y1 = (y0 + 1) % P;
+    const a0 = l[y0 * P + x0] + (l[y0 * P + x1] - l[y0 * P + x0]) * sx;
+    const a1 = l[y1 * P + x0] + (l[y1 * P + x1] - l[y1 * P + x0]) * sx;
+    return a0 + (a1 - a0) * sy;
+  };
+  for (let y = 0; y < TN; y++)
+    for (let x = 0; x < TN; x++) {
+      const n = 0.5 * smp(L1, 64, x, y) + 0.32 * smp(L2, 128, x, y) + 0.18 * r();
+      const al = n > 0.64 ? 0 : n > 0.58 ? (0.64 - n) / 0.06 : 1;
+      a[y * TN + x] = al * (0.8 + 0.2 * smp(L3, 32, x, y));
+    }
+  return a;
+})();
+// Coloring uses the full tooth (about a quarter of the paper shows through).
+// Writing is pressed hard: at least 90% cover, so press colors stay above 4.5:1 on the paper.
+const waxCache = {}, urlCache = {};
+function waxCanvas(hex, dense) {
+  const key = hex + (dense ? 'd' : '');
+  if (waxCache[key]) return waxCache[key];
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = TN;
+  const x = cv.getContext('2d'), id = x.createImageData(TN, TN), d = id.data;
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  for (let i = 0; i < TN * TN; i++) { d[i * 4] = r; d[i * 4 + 1] = g; d[i * 4 + 2] = b; d[i * 4 + 3] = Math.round((dense ? 0.9 + 0.1 * TOOTH[i] : TOOTH[i]) * 255); }
+  x.putImageData(id, 0, 0);
+  return (waxCache[key] = cv);
+}
+function waxURL(hex) { if (!urlCache[hex]) { try { urlCache[hex] = waxCanvas(hex).toDataURL(); } catch (e) { urlCache[hex] = ''; } } return urlCache[hex]; }
+// A crayon "fill" in device pixels, whatever the world transform: kp = device px per world unit.
+function pat(ctx, hex, kp, dense) {
+  const cache = ctx.__p || (ctx.__p = {}), key = hex + (dense ? 'd' : '');
+  if (cache[key]) return cache[key];
+  let p = null;
+  try { p = ctx.createPattern(waxCanvas(hex, dense), 'repeat'); } catch (e) { p = null; }
+  if (p && p.setTransform && window.DOMMatrix) { try { p.setTransform(new DOMMatrix([1 / kp, 0, 0, 1 / kp, 0, 0])); } catch (e) { /* keep default */ } }
+  return (cache[key] = p || hex);
+}
+
+// ---------------------------------------------------------------- the city, indexed
+const gB = new Grid(40), gS = new Grid(40), gP = new Grid(40), gW = new Grid(60), gK = new Grid(60), gV = new Grid(40), gT = new Grid(40), gI = new Grid(40);
+(C.buildings || []).forEach((b) => { if (b && b.pts && b.pts.length >= 6) { b.bb = bbox(b.pts, 0); gB.add(b); } });
+const WCLS = { primary: 7, secondary: 6.4, tertiary: 5.6, minor: 4.4, service: 3.2, pedestrian: 3.8, busway: 4.6, track: 3, path: 2.2 };
+(C.streets || []).forEach((s) => { if (!s || s.named || !s.pts || s.pts.length < 4) return; gS.add({ pts: s.pts, w: WCLS[s.cls] || 4.2, bb: bbox(s.pts, 4) }); });
+(C.paths || []).forEach((p) => { if (p && p.pts && p.pts.length >= 4) gP.add({ pts: p.pts, bb: bbox(p.pts, 1) }); });
+const polys = (list) => (list || []).map((poly) => {
+  const rings = (Array.isArray(poly) ? poly : []).filter((r) => Array.isArray(r) && r.length >= 6);
+  return rings.length ? { rings, bb: unionBB(rings, 1) } : null;
+}).filter(Boolean);
+polys(C.water).forEach((p) => gW.add(p));
+polys(C.parks).forEach((p) => gK.add(p));
+
+// little waves inside the canals, little cloud-trees inside the parks
+{
+  const r = rng(11);
+  let row = 0;
+  for (let y = -30; y < 1030; y += 8.5, row++)
+    for (let x = 110 + (row & 1) * 5.5; x < 900; x += 11) {
+      const jx = x + (r() - 0.5) * 3, jy = y + (r() - 0.5) * 2;
+      if (inAny(gW, jx, jy) && inAny(gW, jx - 3.4, jy) && inAny(gW, jx + 3.4, jy) && inAny(gW, jx, jy - 2.2) && inAny(gW, jx, jy + 2.2))
+        gV.add({ x: jx, y: jy, bb: [jx - 3.2, jy - 1.6, jx + 3.2, jy + 1.6] });
+    }
+  row = 0;
+  for (let y = -30; y < 1030; y += 6.5, row++)
+    for (let x = 110 + (row & 1) * 3.6; x < 900; x += 7.2) {
+      const jx = x + (r() - 0.5) * 2, jy = y + (r() - 0.5) * 2, rr = 2.3 + r() * 0.7;
+      if (inAny(gK, jx, jy) && inAny(gK, jx - rr, jy) && inAny(gK, jx + rr, jy) && inAny(gK, jx, jy - rr) && inAny(gK, jx, jy + rr))
+        gT.add({ x: jx, y: jy, r: rr, bb: [jx - rr, jy - rr, jx + rr, jy + rr] });
+    }
+}
+
+// pictograms for places: route places first, so every place you pass has one
+function iconKind(cls, name) {
+  if (name === 'Westertoren') return 'tower';
+  switch (cls) {
+    case 'cafe': return 'cup';
+    case 'restaurant': case 'fast_food': case 'ice_cream': return 'plate';
+    case 'bar': case 'beer': case 'alcohol_shop': return 'mug';
+    case 'bakery': return 'bread';
+    case 'art_gallery': case 'museum': case 'theatre': return 'frame';
+    case 'hairdresser': return 'scissors';
+    case 'library': case 'school': case 'college': return 'book';
+    case 'attraction': return 'flag';
+    case 'place_of_worship': return 'church';
+    case 'shop': case 'clothing_store': case 'grocery': case 'butcher': case 'bicycle': case 'music': case 'car': case 'pharmacy': return 'bag';
+    default: return 'dot';
+  }
+}
+const ICONS = [];
+function addIcon(x, y, cls, name) {
+  const kind = iconKind(cls, name);
+  const bb = kind === 'tower' ? [x - 6, y - 30, x + 6, y + 7] : [x - 3.6, y - 3.6, x + 3.6, y + 3.6];
+  let clash = null;
+  gI.each(bb[0] - 1.5, bb[1] - 1.5, bb[2] + 1.5, bb[3] + 1.5, (ic) => { if (!clash) clash = ic; });
+  if (clash) return clash;
+  const ic = { x, y, kind, bb, first: false };
+  gI.add(ic); ICONS.push(ic);
+  return ic;
+}
+const PLACES = C.route.places || [];
+PLACES.filter((p) => p.name === 'Westertoren').forEach((p) => { p._ic = addIcon(p.x, p.y, p.cls, p.name); });
+PLACES.forEach((p) => { if (!p._ic && isFinite(p.x) && isFinite(p.y)) p._ic = addIcon(p.x, p.y, p.cls, p.name); });
+const NICE = new Set(['cafe', 'bakery', 'bar', 'beer', 'restaurant', 'art_gallery', 'museum', 'attraction', 'place_of_worship', 'library', 'ice_cream', 'theatre']);
+(C.pois || []).forEach((p) => { if (p && NICE.has(p.cls) && p.x > 120 && p.x < 900 && p.y > -20 && p.y < 1020) addIcon(p.x, p.y, p.cls, p.name); });
+
+// ---------------------------------------------------------------- what gets colored, and when
+// Unnamed lines are the network; their street name comes from the named layer's shared vertices.
+const vKey = (x, y) => x.toFixed(1) + ',' + y.toFixed(1);
+const vName = new Map();
+(C.streets || []).forEach((s) => { if (s && s.named && s.name && s.pts) for (let i = 0; i + 1 < s.pts.length; i += 2) vName.set(vKey(s.pts[i], s.pts[i + 1]), s.name); });
+function nameOf(pts) {
+  const cnt = {}; let best = null, bc = 0;
+  for (let i = 0; i + 1 < pts.length; i += 2) {
+    const n = vName.get(vKey(pts[i], pts[i + 1]));
+    if (n) { cnt[n] = (cnt[n] || 0) + 1; if (cnt[n] > bc) { bc = cnt[n]; best = n; } }
+  }
+  return best;
+}
+const ITEMS = [];
+(C.streets || []).forEach((s, i) => {
+  if (!s || s.named || s.litAt == null || !s.pts || s.pts.length < 4) return;
+  const nm = nameOf(s.pts);
+  ITEMS.push({ k: 'st', pts: s.pts, w: WCLS[s.cls] || 4.2, c: crayonOf.has(nm) ? crayonOf.get(nm) : crayonAt(s.litAt), at: s.litAt, seed: i, bb: bbox(s.pts, 5) });
+});
+(C.paths || []).forEach((p, i) => {
+  if (!p || p.litAt == null || !p.pts || p.pts.length < 4) return;
+  ITEMS.push({ k: 'st', pts: p.pts, w: 2.4, c: crayonAt(p.litAt), at: p.litAt, seed: 5000 + i, bb: bbox(p.pts, 3) });
+});
+(C.buildings || []).forEach((b, i) => {
+  if (!b || b.litAt == null || !b.pts || b.pts.length < 6) return;
+  const own = crayonAt(b.litAt);
+  const c = hash(i) < 0.45 ? own : Math.floor(hash(i * 7 + 3) * BOX.length);
+  ITEMS.push({ k: 'h', pts: b.pts, c, at: b.litAt, seed: 9000 + i, bb0: bbox(b.pts, 0), bb: bbox(b.pts, 2.4) });
+});
+{ // one handwritten label per street name, where it was first walked
+  const byName = new Map();
+  (C.streets || []).forEach((s) => {
+    if (!s || !s.named || !s.name || s.litAt == null || !s.pts) return;
+    let a = byName.get(s.name);
+    if (!a) byName.set(s.name, (a = []));
+    a.push(s);
+  });
+  byName.forEach((arr, name) => {
+    const first = Math.min.apply(null, arr.map((s) => s.litAt));
+    let best = null, bl = 0;
+    arr.forEach((s) => {
+      if (s.litAt > first + 90) return;
+      const p = s.pts;
+      for (let i = 2; i + 1 < p.length; i += 2) {
+        const l = Math.hypot(p[i] - p[i - 2], p[i + 1] - p[i - 1]);
+        if (l > bl) { bl = l; best = [p[i - 2], p[i - 1], p[i], p[i + 1]]; }
+      }
+    });
+    if (!best) return;
+    const own = crayonOf.has(name), fs = own ? 7.2 : 5.4;
+    let ang = Math.atan2(best[3] - best[1], best[2] - best[0]);
+    if (ang > Math.PI / 2) ang -= Math.PI;
+    if (ang < -Math.PI / 2) ang += Math.PI;
+    const x = (best[0] + best[2]) / 2, y = (best[1] + best[3]) / 2, hw = name.length * fs * 0.32 + fs;
+    ITEMS.push({ k: 'lb', name, x, y, ang, fs, c: own ? crayonOf.get(name) : crayonAt(first), at: first + 18, bb: [x - hw, y - hw, x + hw, y + hw], n: 1 });
+  });
+}
+PLACES.forEach((p) => {
+  const ic = p._ic;
+  if (!ic || ic.first) return;
+  ic.first = true;
+  ITEMS.push({ k: 'pl', ic, at: p.m, bb: [ic.bb[0] - 2, ic.bb[1] - 2, ic.bb[2] + 2, ic.bb[3] + 2], n: 1 });
+});
+ITEMS.sort((a, b) => a.at - b.at);
+
+// The route, sampled: Mr Sparkles' own line, and the canal he colors as he walks along it.
+const cumR = [0];
+for (let i = 2; i + 1 < RP.length; i += 2) cumR.push(cumR[cumR.length - 1] + Math.hypot(RP[i] - RP[i - 2], RP[i + 1] - RP[i - 1]) * MPU);
+function sampleRoute(step, fn) {
+  let carry = 0, k = 0;
+  for (let i = 2; i + 1 < RP.length; i += 2) {
+    const x0 = RP[i - 2], y0 = RP[i - 1], dx = RP[i] - x0, dy = RP[i + 1] - y0, L = Math.hypot(dx, dy);
+    if (L < 1e-6) continue;
+    const ux = dx / L, uy = dy / L;
+    let d = carry;
+    for (; d < L; d += step) fn(x0 + ux * d, y0 + uy * d, ux, uy, cumR[i / 2 - 1] + d * MPU, k++);
+    carry = d - L;
+  }
+  fn(RP[RP.length - 2], RP[RP.length - 1], 0, 0, cumR[cumR.length - 1], k++);
+}
+const WZ = [], WM = [], TZ = [], TM = [], TC = [];
+{
+  const r = rng(23);
+  sampleRoute(1.05, (x, y, ux, uy, m, k) => { const off = (k & 1 ? 1 : -1) * (21 + (r() - 0.5) * 6); WZ.push(x - uy * off, y + ux * off); WM.push(m); });
+  sampleRoute(1.3, (x, y, ux, uy, m) => { const w = (r() - 0.5) * 0.3; TZ.push(x - uy * w, y + ux * w); TM.push(m); TC.push(crayonAt(m)); });
+}
+
+// ---------------------------------------------------------------- ink: the printed coloring page
+function ring(ctx, p) { ctx.moveTo(p[0], p[1]); for (let i = 2; i + 1 < p.length; i += 2) ctx.lineTo(p[i], p[i + 1]); ctx.closePath(); }
+function line(ctx, p) { ctx.moveTo(p[0], p[1]); for (let i = 2; i + 1 < p.length; i += 2) ctx.lineTo(p[i], p[i + 1]); }
+function cloud(ctx, x, y, r) {
+  const n = 7;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2, bx = x + Math.cos(a) * r * 0.6, by = y + Math.sin(a) * r * 0.6;
+    if (i === 0) ctx.moveTo(bx + Math.cos(a - 1.3) * r * 0.45, by + Math.sin(a - 1.3) * r * 0.45);
+    ctx.arc(bx, by, r * 0.45, a - 1.3, a + 1.3);
+  }
+  ctx.closePath();
+}
+function wave(ctx, x, y) { ctx.moveTo(x - 3, y); ctx.quadraticCurveTo(x - 1.5, y - 1.5, x, y); ctx.quadraticCurveTo(x + 1.5, y + 1.5, x + 3, y); }
+function drawTower(ctx, x, y, L) {
+  const b = y + 5;
+  ctx.lineWidth = 0.5 * L; ctx.fillStyle = '#fff';
+  [[x - 4.4, b - 9, 8.8, 9], [x - 3.5, b - 15.5, 7, 6.5], [x - 2.7, b - 20.5, 5.4, 5], [x - 1.9, b - 24.2, 3.8, 3.7]].forEach((r) => {
+    ctx.beginPath(); ctx.rect(r[0], r[1], r[2], r[3]); ctx.fill(); ctx.stroke();
+  });
+  ctx.beginPath(); towerCrown(ctx, x, b); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x, b - 28.2); ctx.lineTo(x, b - 31.4); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, b - 32, 0.6, 0, 7); ctx.fill(); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x - 1.2, b); ctx.lineTo(x - 1.2, b - 3); ctx.arc(x, b - 3, 1.2, Math.PI, 0); ctx.lineTo(x + 1.2, b);
+  ctx.moveTo(x - 0.9, b - 10); ctx.lineTo(x - 0.9, b - 12.6); ctx.arc(x, b - 12.6, 0.9, Math.PI, 0); ctx.lineTo(x + 0.9, b - 10);
+  ctx.moveTo(x + 1.5, b - 18); ctx.arc(x, b - 18, 1.5, 0, Math.PI * 2);
+  ctx.moveTo(x, b - 18); ctx.lineTo(x, b - 19.1); ctx.moveTo(x, b - 18); ctx.lineTo(x + 0.8, b - 18);
+  ctx.stroke();
+}
+function towerCrown(ctx, x, b) {
+  ctx.moveTo(x - 2.3, b - 24.2); ctx.lineTo(x - 2.7, b - 27.4); ctx.lineTo(x - 1.2, b - 26.2); ctx.lineTo(x, b - 28.2);
+  ctx.lineTo(x + 1.2, b - 26.2); ctx.lineTo(x + 2.7, b - 27.4); ctx.lineTo(x + 2.3, b - 24.2); ctx.closePath();
+}
+function drawIcon(ctx, ic, L) {
+  const x = ic.x, y = ic.y;
+  if (ic.kind === 'tower') { drawTower(ctx, x, y, L); return; }
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(x, y, 3.3, 0, Math.PI * 2); ctx.fill();
+  ctx.lineWidth = 0.42 * L;
+  ctx.beginPath();
+  switch (ic.kind) {
+    case 'cup':
+      ctx.moveTo(x - 2.1, y - 1); ctx.lineTo(x + 1.5, y - 1); ctx.lineTo(x + 1.1, y + 1.9); ctx.lineTo(x - 1.7, y + 1.9); ctx.closePath();
+      ctx.moveTo(x + 1.4, y - 0.4); ctx.quadraticCurveTo(x + 2.7, y - 0.2, x + 1.25, y + 1.1);
+      ctx.moveTo(x - 0.8, y - 1.7); ctx.quadraticCurveTo(x - 1.4, y - 2.4, x - 0.6, y - 3);
+      ctx.moveTo(x + 0.4, y - 1.7); ctx.quadraticCurveTo(x - 0.2, y - 2.4, x + 0.6, y - 3);
+      break;
+    case 'plate':
+      ctx.moveTo(x + 2.6, y); ctx.arc(x + 0.4, y, 2.2, 0, Math.PI * 2);
+      ctx.moveTo(x + 1.5, y); ctx.arc(x + 0.4, y, 1.1, 0, Math.PI * 2);
+      ctx.moveTo(x - 2.6, y - 2.3); ctx.lineTo(x - 2.6, y + 2.4);
+      ctx.moveTo(x - 3.1, y - 2.3); ctx.lineTo(x - 3.1, y - 1); ctx.lineTo(x - 2.1, y - 1); ctx.lineTo(x - 2.1, y - 2.3);
+      break;
+    case 'mug':
+      ctx.rect(x - 1.9, y - 1.4, 3.2, 3.6);
+      ctx.moveTo(x + 1.3, y - 0.7); ctx.quadraticCurveTo(x + 2.9, y - 0.4, x + 1.3, y + 1.4);
+      ctx.moveTo(x - 1.9, y - 1.4); ctx.arc(x - 1.3, y - 1.6, 0.6, Math.PI, 0); ctx.arc(x - 0.1, y - 1.7, 0.65, Math.PI, 0); ctx.arc(x + 0.9, y - 1.6, 0.45, Math.PI, 0);
+      break;
+    case 'bread':
+      ctx.moveTo(x - 2.7, y + 1.5); ctx.quadraticCurveTo(x - 2.8, y - 2.2, x, y - 2); ctx.quadraticCurveTo(x + 2.8, y - 2.2, x + 2.7, y + 1.5); ctx.closePath();
+      ctx.moveTo(x - 1.3, y - 0.9); ctx.lineTo(x - 0.6, y + 0.3); ctx.moveTo(x + 0.2, y - 1.1); ctx.lineTo(x + 0.9, y + 0.1);
+      break;
+    case 'bag':
+      ctx.rect(x - 2, y - 0.9, 4, 3.2);
+      ctx.moveTo(x - 1, y - 0.9); ctx.quadraticCurveTo(x, y - 3.4, x + 1, y - 0.9);
+      break;
+    case 'frame':
+      ctx.rect(x - 2.5, y - 1.9, 5, 3.8);
+      ctx.moveTo(x - 1.8, y + 1.2); ctx.lineTo(x - 0.6, y - 0.4); ctx.lineTo(x + 0.2, y + 0.5); ctx.lineTo(x + 0.9, y - 0.2); ctx.lineTo(x + 1.8, y + 1.2);
+      ctx.moveTo(x + 1.5, y - 1); ctx.arc(x + 1.1, y - 1, 0.4, 0, Math.PI * 2);
+      break;
+    case 'scissors':
+      ctx.moveTo(x - 0.55, y + 1.7); ctx.arc(x - 1.3, y + 1.7, 0.75, 0, Math.PI * 2);
+      ctx.moveTo(x + 2.05, y + 1.7); ctx.arc(x + 1.3, y + 1.7, 0.75, 0, Math.PI * 2);
+      ctx.moveTo(x - 0.8, y + 1.1); ctx.lineTo(x + 1.2, y - 2.6); ctx.moveTo(x + 0.8, y + 1.1); ctx.lineTo(x - 1.2, y - 2.6);
+      break;
+    case 'book':
+      ctx.moveTo(x, y - 1.4); ctx.quadraticCurveTo(x - 1.4, y - 2.2, x - 2.7, y - 1.6); ctx.lineTo(x - 2.7, y + 1.9);
+      ctx.quadraticCurveTo(x - 1.4, y + 1.3, x, y + 2); ctx.quadraticCurveTo(x + 1.4, y + 1.3, x + 2.7, y + 1.9);
+      ctx.lineTo(x + 2.7, y - 1.6); ctx.quadraticCurveTo(x + 1.4, y - 2.2, x, y - 1.4); ctx.lineTo(x, y + 2);
+      break;
+    case 'flag':
+      ctx.moveTo(x - 1.6, y + 2.7); ctx.lineTo(x - 1.6, y - 2.7); ctx.lineTo(x + 2.5, y - 1.6); ctx.lineTo(x - 1.6, y - 0.5);
+      break;
+    case 'church':
+      ctx.moveTo(x - 2.2, y + 2.3); ctx.lineTo(x - 2.2, y - 0.2); ctx.lineTo(x, y - 1.8); ctx.lineTo(x + 2.2, y - 0.2); ctx.lineTo(x + 2.2, y + 2.3); ctx.closePath();
+      ctx.moveTo(x, y - 1.8); ctx.lineTo(x, y - 3.1); ctx.moveTo(x - 0.6, y - 2.6); ctx.lineTo(x + 0.6, y - 2.6);
+      ctx.moveTo(x - 0.6, y + 2.3); ctx.lineTo(x - 0.6, y + 0.9); ctx.lineTo(x + 0.6, y + 0.9); ctx.lineTo(x + 0.6, y + 2.3);
+      break;
+    default:
+      ctx.moveTo(x + 1.5, y); ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+      ctx.moveTo(x + 0.4, y); ctx.arc(x, y, 0.4, 0, Math.PI * 2);
+  }
+  ctx.stroke();
+}
+// Everything printed in black, once per tile (or once for the summary page).
+function drawInk(ctx, x0, y0, x1, y1, o) {
+  o = o || {};
+  const L = o.lw || 1;
+  ctx.save();
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = '#000'; ctx.fillStyle = '#fff';
+  ctx.beginPath(); gK.each(x0, y0, x1, y1, (p) => p.rings.forEach((r) => ring(ctx, r))); ctx.lineWidth = 0.5 * L; ctx.stroke();
+  ctx.beginPath(); gT.each(x0, y0, x1, y1, (t) => cloud(ctx, t.x, t.y, t.r)); ctx.fill(); ctx.lineWidth = 0.4 * L; ctx.stroke();
+  ctx.beginPath(); gW.each(x0, y0, x1, y1, (p) => p.rings.forEach((r) => ring(ctx, r))); ctx.lineWidth = 0.9 * L; ctx.stroke();
+  ctx.beginPath(); gV.each(x0, y0, x1, y1, (v) => wave(ctx, v.x, v.y)); ctx.lineWidth = 0.42 * L; ctx.stroke();
+  ctx.beginPath(); gB.each(x0, y0, x1, y1, (b) => ring(ctx, b.pts)); ctx.lineWidth = 0.46 * L; ctx.stroke();
+  // streets: a black casing, then the inside cut back to paper, so crossings stay open
+  const ss = [];
+  gS.each(x0, y0, x1, y1, (s) => ss.push(s));
+  const ws = Array.from(new Set(ss.map((s) => s.w)));
+  ws.forEach((w) => { ctx.beginPath(); ss.forEach((s) => { if (s.w === w) line(ctx, s.pts); }); ctx.lineWidth = w + 1.24 * L; ctx.stroke(); });
+  ctx.globalCompositeOperation = 'destination-out';
+  ws.forEach((w) => { ctx.beginPath(); ss.forEach((s) => { if (s.w === w) line(ctx, s.pts); }); ctx.lineWidth = w; ctx.stroke(); });
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.beginPath(); gP.each(x0, y0, x1, y1, (p) => line(ctx, p.pts));
+  ctx.setLineDash([1.5, 1.4]); ctx.lineWidth = 0.42 * L; ctx.stroke(); ctx.setLineDash([]);
+  if (o.icons !== false) gI.each(x0, y0, x1, y1, (ic) => drawIcon(ctx, ic, L));
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- crayon: what Mr Sparkles leaves behind
+function hatchZ(bb, ang, sp, r) {
+  const c = Math.cos(ang), s = Math.sin(ang);
+  let u0 = 1e9, u1 = -1e9, v0 = 1e9, v1 = -1e9;
+  [[bb[0], bb[1]], [bb[2], bb[1]], [bb[0], bb[3]], [bb[2], bb[3]]].forEach((q) => {
+    const u = q[0] * c + q[1] * s, v = -q[0] * s + q[1] * c;
+    u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v);
+  });
+  u0 -= 0.6; u1 += 0.6;
+  const out = [];
+  let k = 0;
+  for (let v = v0 + sp * 0.4; v <= v1 + sp * 0.5; v += sp, k++) {
+    const ua = (k & 1 ? u1 : u0) + (r() - 0.5) * 0.5, ub = (k & 1 ? u0 : u1) + (r() - 0.5) * 0.5, vb = v + sp * 0.5;
+    out.push(ua * c - v * s, ua * s + v * c, ub * c - vb * s, ub * s + vb * c);
+  }
+  return new Float32Array(out);
+}
+function strokeZ(ctx, z, a, b) {
+  const s = Math.max(0, a - 1);
+  if (b - s < 2) return;
+  ctx.beginPath(); ctx.moveTo(z[s * 2], z[s * 2 + 1]);
+  for (let i = s + 1; i < b; i++) ctx.lineTo(z[i * 2], z[i * 2 + 1]);
+  ctx.stroke();
+}
+function prep(it) {
+  if (it.n) return;
+  const r = rng(it.seed || 1);
+  if (it.k === 'st') {
+    // back-and-forth along the street, a little past its lines, starting at the end he walks in from
+    let p = it.pts;
+    const wk = Kit.at(it.at), n2 = p.length;
+    if (Math.hypot(wk.x - p[n2 - 2], wk.y - p[n2 - 1]) < Math.hypot(wk.x - p[0], wk.y - p[1])) {
+      const q = new Array(n2);
+      for (let i = 0; i < n2; i += 2) { q[i] = p[n2 - 2 - i]; q[i + 1] = p[n2 - 1 - i]; }
+      p = q;
+    }
+    const w = it.w, step = 0.85, A = w * 0.6, out = [];
+    let k = 0, carry = 0;
+    for (let i = 2; i + 1 < p.length; i += 2) {
+      const x0 = p[i - 2], y0 = p[i - 1], dx = p[i] - x0, dy = p[i + 1] - y0, L = Math.hypot(dx, dy);
+      if (L < 1e-6) continue;
+      const ux = dx / L, uy = dy / L;
+      let d = carry;
+      for (; d < L; d += step) {
+        const cx = x0 + ux * d, cy = y0 + uy * d, off = (k++ & 1 ? 1 : -1) * (A + (r() - 0.5) * w * 0.32), t = (r() - 0.5) * 0.5;
+        out.push(cx, cy, cx - uy * off + ux * t, cy + ux * off + uy * t);
+      }
+      carry = d - L;
+    }
+    out.push(p[p.length - 2], p[p.length - 1], p[p.length - 2], p[p.length - 1]);
+    it.z = new Float32Array(out); it.n = out.length / 4;
+  } else if (it.k === 'h') {
+    it.z = hatchZ(it.bb0, -0.62 + (r() - 0.5) * 0.5, 0.8, r);
+    it.n = it.z.length / 2;
+    const flip = r() < 0.22 ? -1 : 1;
+    it.ox = flip * (0.42 + r() * 0.5); it.oy = flip * (0.3 + r() * 0.42);
+    it.flick = r() < 0.2; it.fa = r() * Math.PI * 2;
+    it.dur = 300;
+  } else {
+    it.n = 1; it.dur = 0;
+  }
+}
+function drawStreet(ctx, it, a, b, kp) {
+  const z = it.z, s = Math.max(0, a - 1);
+  if (b - s < 2) return;
+  ctx.strokeStyle = pat(ctx, BC(it.c).wax, kp);
+  ctx.globalAlpha = 0.3; ctx.lineWidth = it.w * 0.95; ctx.lineCap = 'butt';
+  ctx.beginPath(); ctx.moveTo(z[s * 4], z[s * 4 + 1]);
+  for (let i = s + 1; i < b; i++) ctx.lineTo(z[i * 4], z[i * 4 + 1]);
+  ctx.stroke();
+  ctx.globalAlpha = 0.78; ctx.lineWidth = 0.95; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(z[s * 4 + 2], z[s * 4 + 3]);
+  for (let i = s + 1; i < b; i++) ctx.lineTo(z[i * 4 + 2], z[i * 4 + 3]);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+function drawHouse(ctx, it, a, b, kp) {
+  if (b <= a) return;
+  const p = it.pts, ox = it.ox, oy = it.oy, P = pat(ctx, BC(it.c).wax, kp);
+  ctx.save();
+  ctx.beginPath(); ctx.moveTo(p[0] + ox, p[1] + oy);
+  for (let i = 2; i + 1 < p.length; i += 2) ctx.lineTo(p[i] + ox, p[i + 1] + oy);
+  ctx.closePath();
+  ctx.strokeStyle = P;
+  if (a === 0) { ctx.globalAlpha = 0.45; ctx.lineWidth = 0.9; ctx.stroke(); }
+  ctx.clip();
+  ctx.globalAlpha = 0.64; ctx.lineWidth = 0.92;
+  strokeZ(ctx, it.z, a, b);
+  ctx.restore();
+  if (b >= it.n && it.flick) { // one stroke that got away
+    const bb = it.bb0, cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2, rr = Math.max(bb[2] - bb[0], bb[3] - bb[1]) / 2 + 1.6;
+    ctx.save(); ctx.strokeStyle = P; ctx.globalAlpha = 0.5; ctx.lineWidth = 0.75; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx + Math.cos(it.fa) * rr * 0.4, cy + Math.sin(it.fa) * rr * 0.4);
+    ctx.quadraticCurveTo(cx + Math.cos(it.fa + 0.3) * rr * 0.8, cy + Math.sin(it.fa + 0.3) * rr * 0.8, cx + Math.cos(it.fa + 0.1) * rr, cy + Math.sin(it.fa + 0.1) * rr);
+    ctx.stroke(); ctx.restore();
+  }
+}
+function drawLabel(ctx, it, kp) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.translate(it.x, it.y); ctx.rotate(it.ang);
+  ctx.font = '700 ' + it.fs + 'px ' + HAND;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(255,254,251,.9)'; ctx.lineWidth = it.fs * 0.32;
+  ctx.strokeText(it.name, 0, 0);
+  ctx.fillStyle = pat(ctx, BC(it.c).press, kp, true);
+  ctx.fillText(it.name, 0, 0);
+  ctx.restore();
+}
+const PLACE_COL = { cup: '#ff8a1f', plate: '#ff5a6e', mug: '#ffd02e', bread: '#c0763e', frame: '#8c5cf0', scissors: '#13bfb0', book: '#3557e6', flag: '#1fa2e8', church: '#be95ff', bag: '#ee3e9e', dot: '#13bfb0' };
+function hatchIn(ctx, clipFn, bb, col, kp, seed, alpha) {
+  const r = rng(seed);
+  ctx.save();
+  ctx.beginPath(); clipFn(); ctx.clip();
+  ctx.strokeStyle = pat(ctx, col, kp); ctx.globalAlpha = alpha; ctx.lineWidth = 0.8;
+  const z = hatchZ(bb, -0.6 + (r() - 0.5) * 0.4, 0.7, r);
+  strokeZ(ctx, z, 0, z.length / 2);
+  ctx.restore();
+}
+function drawPlace(ctx, it, kp) {
+  const ic = it.ic, x = ic.x, y = ic.y, seed = Math.round(x * 7 + y * 13);
+  if (ic.kind === 'tower') {
+    const b = y + 5.4, sx = 0.5;
+    hatchIn(ctx, () => { [[x - 4.4, b - 9, 8.8, 9], [x - 3.5, b - 15.5, 7, 6.5], [x - 2.7, b - 20.5, 5.4, 5], [x - 1.9, b - 24.2, 3.8, 3.7]].forEach((q) => ctx.rect(q[0] + sx, q[1], q[2], q[3])); },
+      [x - 5, b - 25, x + 5, b + 1], '#c0763e', kp, seed, 0.7);
+    hatchIn(ctx, () => { ctx.translate(sx, 0); towerCrown(ctx, x, b - 0.4); ctx.translate(-sx, 0); }, [x - 3.4, b - 29, x + 3.4, b - 23.5], '#1fa2e8', kp, seed + 1, 0.85);
+    return;
+  }
+  const r = rng(seed), ox = 0.35 + r() * 0.4, oy = 0.3 + r() * 0.4;
+  hatchIn(ctx, () => ctx.arc(x + ox, y + oy, 2.9, 0, Math.PI * 2), [x - 3.5, y - 3.5, x + 4, y + 4], PLACE_COL[ic.kind] || '#13bfb0', kp, seed, 0.8);
+}
+function drawItem(ctx, it, a, b, kp) {
+  if (it.k === 'st') drawStreet(ctx, it, a, b, kp);
+  else if (it.k === 'h') drawHouse(ctx, it, a, b, kp);
+  else if (a === 0 && it.k === 'lb') drawLabel(ctx, it, kp);
+  else if (a === 0 && it.k === 'pl') drawPlace(ctx, it, kp);
+}
+function waterPath(x0, y0, x1, y1) {
+  const p = new Path2D();
+  let any = false;
+  gW.each(x0, y0, x1, y1, (w) => { w.rings.forEach((r) => { p.moveTo(r[0], r[1]); for (let i = 2; i + 1 < r.length; i += 2) p.lineTo(r[i], r[i + 1]); p.closePath(); }); any = true; });
+  return any ? p : null;
+}
+function drawWater(ctx, a, b, kp, wp) {
+  if (!wp || b <= a) return;
+  ctx.save();
+  ctx.translate(0.6, 0.45); ctx.clip(wp); ctx.translate(-0.6, -0.45);
+  ctx.strokeStyle = pat(ctx, WATER, kp); ctx.globalAlpha = 0.55; ctx.lineWidth = 1.25; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(WZ[a * 2], WZ[a * 2 + 1]);
+  for (let i = a + 1; i <= b; i++) ctx.lineTo(WZ[i * 2], WZ[i * 2 + 1]);
+  ctx.stroke();
+  ctx.restore();
+}
+function drawTrail(ctx, a, b, kp, wMul) {
+  if (b <= a) return;
+  ctx.save();
+  ctx.lineWidth = 0.8 * (wMul || 1); ctx.globalAlpha = 0.85; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  let i = a;
+  while (i < b) {
+    const c = TC[i + 1];
+    let j = i + 1;
+    while (j < b && TC[j + 1] === c) j++;
+    ctx.strokeStyle = pat(ctx, BC(c).press, kp);
+    ctx.beginPath(); ctx.moveTo(TZ[i * 2], TZ[i * 2 + 1]);
+    for (let q = i + 1; q <= j; q++) ctx.lineTo(TZ[q * 2], TZ[q * 2 + 1]);
+    ctx.stroke();
+    i = j;
+  }
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- tiles: the page, cut in squares
+let DPR = Math.min(2, window.devicePixelRatio || 1), K = KC * DPR, TW = TILE / K;
+// ponytail: tiles hold the color too, so none is ever evicted; a whole walk keeps about 100 tiles (~100 MB).
+// Upgrade path: evict far tiles and repaint their ITEMS up to M when they come back.
+const tiles = new Map();
+let colored = false;
+function tileAt(tx, ty) {
+  const key = tx + ',' + ty;
+  let t = tiles.get(key);
+  if (t) return t;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = TILE;
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(K, 0, 0, K, -tx * TILE, -ty * TILE);
+  const x0 = tx * TW, y0 = ty * TW;
+  drawInk(ctx, x0 - 8, y0 - 8, x0 + TW + 8, y0 + TW + 8, {});
+  t = { cv, ctx, tx, ty, x0, y0, wp: undefined };
+  tiles.set(key, t);
+  return t;
+}
+function paintInTiles(bb, fn) {
+  const tx0 = Math.floor(bb[0] / TW), tx1 = Math.floor(bb[2] / TW), ty0 = Math.floor(bb[1] / TW), ty1 = Math.floor(bb[3] / TW);
+  for (let tx = tx0; tx <= tx1; tx++)
+    for (let ty = ty0; ty <= ty1; ty++) {
+      const t = tileAt(tx, ty), c = t.ctx;
+      c.save();
+      c.setTransform(K, 0, 0, K, -tx * TILE, -ty * TILE);
+      c.globalCompositeOperation = 'multiply'; // crayon never covers the printed black lines
+      c.lineJoin = 'round'; c.lineCap = 'round';
+      fn(c, t);
+      c.restore();
+    }
+  colored = true;
+}
+function tileWater(t) { if (t.wp === undefined) t.wp = waterPath(t.x0 - 3, t.y0 - 3, t.x0 + TW + 3, t.y0 + TW + 3); return t.wp; }
+function paintItem(it, a, b) { paintInTiles(it.bb, (c) => drawItem(c, it, a, b, K)); }
+// bounds of street-zigzag points a..b-1 (stride 4: centre x, y, stroke x, y)
+function zBB(z, a, b, pad) {
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (let i = a; i < b; i++) for (let o = 0; o < 4; o += 2) { const x = z[i * 4 + o], y = z[i * 4 + o + 1]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return [x0 - pad, y0 - pad, x1 + pad, y1 + pad];
+}
+function ptsBB(z, a, b, pad) {
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (let i = a; i <= b; i++) { const x = z[i * 2], y = z[i * 2 + 1]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return [x0 - pad, y0 - pad, x1 + pad, y1 + pad];
+}
+
+// ---------------------------------------------------------------- Mr Sparkles
+// A stubby, well-used crayon. His wax is the color of the street he's on; he wears down as you walk.
+function mrInner(wear, waving, shadow) {
+  const H = Math.max(24, 50 * wear), yt = 75 - H, fy = yt + H * 0.52 + 1;
+  const zig = H > 31 ? `<path d="M20 ${yt + 11} l2.5 -1.6 2.5 1.6 2.5 -1.6 2.5 1.6 2.5 -1.6 2.5 1.6 2.5 -1.6 2.5 1.6" fill="none" stroke-width="1.2"/>` : '';
+  const low = H > 34 ? '<path d="M20 69 H40" stroke-width="1.3"/>' : '';
+  return (shadow ? '<ellipse cx="30" cy="97" rx="11" ry="2.6" fill="#000" opacity=".14"/>' : '') +
+    `<g stroke="#000" stroke-width="2.1" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M21 ${fy + 6} Q14 ${fy + 8} 11.6 ${fy + 2}" fill="none"/>
+      <circle cx="11" cy="${fy + 1}" r="2.5" fill="#fff"/>
+      <g class="${waving ? 'arm-wave' : ''}"><path d="M39 ${fy + 5} Q46 ${fy + 3} 47.6 ${fy - 4}" fill="none"/><circle cx="48" cy="${fy - 5.2}" r="2.5" fill="#fff"/></g>
+      <path d="M20.5 79 L26.8 94.4 Q30.4 96.6 33.8 95.2 L39.5 79 Z" style="fill:var(--wax)"/>
+      <rect x="20" y="72" width="20" height="7" style="fill:var(--wax)"/>
+      <path d="M20 ${yt} H40 V74.5 l-2.5 2.2 -2.9 -2.1 -2.9 2.3 -2.9 -2.1 -2.9 2.3 -2.9 -2.1 L20 75.6 Z" fill="#fff"/>
+      <path d="M20 ${yt + 3.5} H40 V${yt + 8.5} H20 Z" style="fill:var(--wax)" stroke-width="1.5"/>
+      ${zig}${low}
+      <ellipse cx="30" cy="${yt}" rx="10" ry="3" style="fill:var(--press)"/>
+    </g>
+    <ellipse cx="25.6" cy="${fy}" rx="2.1" ry="3" fill="#000"/><ellipse cx="34.4" cy="${fy}" rx="2.1" ry="3" fill="#000"/>
+    <circle cx="26.3" cy="${fy - 1.1}" r=".8" fill="#fff"/><circle cx="35.1" cy="${fy - 1.1}" r=".8" fill="#fff"/>
+    <ellipse cx="22.4" cy="${fy + 4}" rx="1.9" ry="1.1" fill="#ff8fb3"/><ellipse cx="37.6" cy="${fy + 4}" rx="1.9" ry="1.1" fill="#ff8fb3"/>
+    <path d="M26.4 ${fy + 4.2} Q30 ${fy + 9.4} 33.6 ${fy + 4.2} Z" fill="#000" stroke="#000" stroke-width="1" stroke-linejoin="round"/>
+    <path d="M28.2 ${fy + 6.6} Q30 ${fy + 5.6} 31.8 ${fy + 6.6} Q30 ${fy + 8.3} 28.2 ${fy + 6.6} Z" fill="#ff6f91"/>`;
+}
+// a crayon `len` units long (62 is new, shorter is worn down), drawn `w` px wide
+function crayonSVG(c, w, len) {
+  len = len || 62; w = w || 13;
+  return `<svg viewBox="0 0 13 ${len}" width="${w}" height="${((w * len) / 13).toFixed(1)}" aria-hidden="true"><g stroke="#000" stroke-width="1.3" stroke-linejoin="round">
+    <path d="M2 13 L5.2 2.4 Q6.5 1 7.8 2.4 L11 13 Z" fill="${c.wax}"/><rect x="1" y="12.5" width="11" height="${len - 13.2}" fill="${c.wax}"/>
+    <path d="M1 19 H12 M1 22.5 H12${len > 44 ? ` M1 ${len - 9} H12` : ''}" stroke-width="1"/>
+    ${len > 34 ? '<path d="M1 28 l2.75 -1.8 2.75 1.8 2.75 -1.8 2.75 1.8" fill="none" stroke-width=".9"/>' : ''}</g></svg>`;
+}
+function setWax(el, c) { el.style.setProperty('--wax', c.wax); el.style.setProperty('--press', c.press); }
+
+// ---------------------------------------------------------------- the cover art
+function titleSVG() {
+  const word = 'Sparkles', cols = [0, 1, 2, 3, 5, 6, 8, 11], rot = '-6 5 -3 6 -5 3 -6 4';
+  const tsp = word.split('').map((ch, i) => `<tspan fill="${BOX[cols[i]].wax}">${ch}</tspan>`).join('');
+  const t = (extra) => `<text x="170" y="86" text-anchor="middle" textLength="322" lengthAdjust="spacingAndGlyphs" rotate="${rot}" font-family='"Marker Felt","Chalkboard SE",Noteworthy,"Comic Sans MS",cursive' font-weight="700" font-size="88" ${extra}`;
+  // printed bubble letters (black outline, white inside), colored in a little off-register
+  return `${t('fill="#000" stroke="#000" stroke-width="9" stroke-linejoin="round"')}>${word}</text>
+    ${t('fill="#fffefb"')}>${word}</text>
+    <g filter="url(#wax)" style="mix-blend-mode:multiply">${t('transform="translate(-1.6 -1.8)"')}>${tsp}</text></g>`;
+}
+function sceneSVG() {
+  const houses = [
+    { x0: 6, x1: 54, d: 'M6 192V84H14V72H22V60H38V72H46V84H54V192Z', top: 92, gw: [26, 63], c: '#ff5a6e' },
+    { x0: 54, x1: 102, d: 'M54 192V94Q54 82 62 80Q64 62 78 54Q92 62 94 80Q102 82 102 94V192Z', top: 102, gw: [74, 66], c: '#ffd02e' },
+    { x0: 102, x1: 148, d: 'M102 192V98H109V72Q109 66 115 64V52H135V64Q141 66 141 72V98H148V192Z', top: 106, gw: [121, 57], c: '#13bfb0' },
+    { x0: 148, x1: 196, d: 'M148 192V90L172 60L196 90V192Z', top: 100, gw: [168, 73], c: '#ee3e9e', part: true },
+    { x0: 196, x1: 246, d: 'M196 192V78H246V192Z', top: 88, gw: null, c: null, cornice: true },
+    { x0: 246, x1: 292, d: 'M246 192V96H253V86H260V76H278V86H285V96H292V192Z', top: 104, gw: [265, 80], c: null },
+  ];
+  const pats = houses.filter((h) => h.c).map((h, i) => `<pattern id="hp${i}" width="4.2" height="4.2" patternUnits="userSpaceOnUse" patternTransform="rotate(-38)"><rect width="4.2" height="4.2" fill="${h.c}" fill-opacity=".42"/><rect width="4.2" height="2.5" fill="${h.c}"/></pattern>`).join('');
+  let color = '', ink = '', pi = 0;
+  houses.forEach((h) => {
+    if (h.c) {
+      const id = 'hp' + pi++;
+      color += `<path d="${h.d}" transform="translate(2.6 1.7)" fill="url(#${id})"${h.part ? ' clip-path="url(#cpart)"' : ''}/>`;
+      if (h.part) color += `<polyline points="150,134 156,121 161,134 166,118 171,134 176,122 181,134 186,126 190,134" fill="none" stroke="${h.c}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`;
+    }
+    ink += `<path d="${h.d}"/>`;
+    if (h.cornice) ink += '<path d="M193 78H249M196 84H246"/>';
+    const cx = (h.x0 + h.x1) / 2, dx = (h.x1 - h.x0) * 0.2;
+    for (let y = h.top; y <= 150; y += 22) [cx - dx, cx + dx].forEach((wx) => { ink += `<rect x="${wx - 5}" y="${y}" width="10" height="13" fill="#fff"/><path d="M${wx} ${y}V${y + 13}M${wx - 5} ${y + 6.5}H${wx + 5}"/>`; });
+    if (h.gw) ink += `<rect x="${h.gw[0]}" y="${h.gw[1]}" width="8" height="10" fill="#fff"/>`;
+    ink += `<rect x="${h.x0 + 6}" y="170" width="10" height="13" fill="#fff"/><path d="M${h.x1 - 17} 192V178Q${h.x1 - 17} 171 ${h.x1 - 11.5} 171Q${h.x1 - 6} 171 ${h.x1 - 6} 178V192" fill="#fff"/>`;
+  });
+  // the street, colored up to where Mr Sparkles' tip is; the canal, colored a bit behind him
+  let zig = '', y = 196;
+  const zr = rng(5);
+  for (let x = 1; x <= 194; x += 3.1) { y = y < 203 ? 210.5 - zr() * 1.5 : 195.6 + zr() * 1.5; zig += x.toFixed(1) + ',' + y.toFixed(1) + ' '; }
+  let wz = '';
+  for (let x = -8, k = 0; x <= 168; x += 3.4, k++) wz += (k & 1 ? (x + 12) + ',241 ' : x + ',214.5 ');
+  color += `<rect x="0" y="196" width="194" height="14" fill="#1fa2e8" fill-opacity=".4"/><polyline points="${zig}" fill="none" stroke="#1fa2e8" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`;
+  color += `<rect x="0" y="217" width="172" height="23" fill="${WATER}" fill-opacity=".35"/><polyline points="${wz}" fill="none" stroke="${WATER}" stroke-width="2.4" stroke-linejoin="round"/>`;
+  ink += '<path d="M0 194H360M0 212H360M0 216.5H360"/>';
+  for (let x = 14, k = 0; x < 360; x += 26, k++) { const wy = k & 1 ? 226 : 233; ink += `<path d="M${x - 6} ${wy}q3 -3 6 0t6 0"/>`; }
+  // a tree and a cloud, still blank
+  let tree = '';
+  { const cx = 322, cy = 124, r = 25, n = 8; for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2, bx = cx + Math.cos(a) * r * 0.62, by = cy + Math.sin(a) * r * 0.62, a0 = a - 1.25, a1 = a + 1.25, rr = r * 0.44; tree += (i ? 'L' : 'M') + (bx + Math.cos(a0) * rr).toFixed(1) + ' ' + (by + Math.sin(a0) * rr).toFixed(1) + 'A' + rr.toFixed(1) + ' ' + rr.toFixed(1) + ' 0 0 1 ' + (bx + Math.cos(a1) * rr).toFixed(1) + ' ' + (by + Math.sin(a1) * rr).toFixed(1); } tree += 'Z'; }
+  ink += `<path d="M322 192V140M322 164L312 154M322 158L332 148"/><path d="${tree}" fill="#fff"/>`;
+  ink += '<path d="M30 40Q26 28 38 27Q42 16 54 20Q62 12 70 21Q82 20 80 31Q88 38 78 42Z" fill="#fff"/>';
+  return `<svg viewBox="0 0 360 246" aria-hidden="true">
+    <defs>${pats}<clipPath id="cpart"><rect x="140" y="132" width="64" height="70"/></clipPath></defs>
+    <g filter="url(#wax)">${color}</g>
+    <g fill="none" stroke="#000" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" filter="url(#wobble)">${ink}</g>
+    <ellipse cx="201" cy="205" rx="13" ry="3.2" fill="#000" opacity=".14"/>
+    <g transform="rotate(8 200 204)"><svg x="168" y="101" width="64" height="107" viewBox="0 0 60 100" overflow="visible" style="--wax:#1fa2e8;--press:#0b6eaa">${mrInner(1, true, false)}</svg></g>
+  </svg>`;
+}
+
+// ---------------------------------------------------------------- DOM
+const screenEl = $('#screen'), phone = $('#phone'), cover = $('#cover'), walkSec = $('#walk'), summary = $('#summary');
+const mapCv = $('#map'), mctx = mapCv.getContext('2d'), claimCv = $('#claim'), cctx = claimCv.getContext('2d');
+const walker = $('#walker'), leanEl = $('#lean'), mrWalk = $('#mrWalk'), bubble = $('#bubble');
+const rTime = $('#rTime'), rDist = $('#rDist'), rSteps = $('#rSteps'), endBtn = $('#end'), endLbl = $('#endLbl'), live = $('#live');
+$('#titleArt').innerHTML = titleSVG();
+$('#scene').insertAdjacentHTML('afterbegin', sceneSVG());
+$('#go').style.setProperty('--tex', 'url(' + waxURL('#1fa2e8') + ')');
+$('#again').style.setProperty('--tex', 'url(' + waxURL('#1fa2e8') + ')');
+const crDiv = $('#crayons');
+const gap = Math.min(16.1, 206 / Math.max(1, RS.length));
+const crEls = RS.map((s, i) => {
+  const el = document.createElement('span');
+  el.className = 'cr';
+  el.style.left = (16 + i * gap).toFixed(1) + 'px';
+  el.style.setProperty('--r', ((hash(i * 5) - 0.5) * 10).toFixed(1) + 'deg');
+  el.innerHTML = crayonSVG(BC(i));
+  crDiv.appendChild(el);
+  return el;
+});
+const desk = $('#desk');
+const deskCrayons = [BOX[11], BOX[5], BOX[3], BOX[8]].map((c, i) => {
+  const d = document.createElement('div');
+  d.className = 'desk-crayon';
+  d.innerHTML = crayonSVG(c, 22, i === 3 ? 33 : 62);
+  d.style.height = i === 3 ? '56px' : '105px';
+  desk.appendChild(d);
+  return d;
+});
+
+let W = 390, H = 844;
+function fit() {
+  const small = innerWidth < 500;
+  const s = small ? 1 : Math.min((innerHeight - 32) / 844, (innerWidth - 32) / 390, 1);
+  phone.style.setProperty('--s', s.toFixed(4));
+  W = screenEl.clientWidth || 390; H = screenEl.clientHeight || 844;
+  const nd = Math.min(2, window.devicePixelRatio || 1);
+  if (nd !== DPR) { DPR = nd; K = KC * DPR; TW = TILE / K; rebuild(); }
+  mapCv.width = Math.round(W * DPR); mapCv.height = Math.round(H * DPR);
+  claimCv.width = Math.round(W * DPR); claimCv.height = Math.round(150 * DPR);
+  cctx.__p = null;
+  // loose crayons on the table, only where there is table to spare
+  const pw = 390 * s, ph = 844 * s, side = (innerWidth - pw) / 2, cx = innerWidth / 2, cy = innerHeight / 2;
+  const spots = [[-1, 0.56, -0.24, 28], [-1, 0.42, 0.27, -64], [1, 0.5, -0.31, -16], [1, 0.46, 0.22, 72]];
+  deskCrayons.forEach((d, i) => {
+    const sp = spots[i];
+    d.style.display = small || side < 130 ? 'none' : '';
+    const x = cx + sp[0] * (pw / 2 + side * sp[1]), y = cy + sp[2] * ph;
+    d.style.transform = `translate(${(x - 11).toFixed(0)}px, ${(y - 52).toFixed(0)}px) rotate(${sp[3]}deg)`;
+  });
+  if (walking) render(performance.now());
+}
+
+// ---------------------------------------------------------------- walk state
+let player = null, walking = false, instant = false, M = 0;
+let itemIdx = 0, wDone = 0, tDone = 0;
+const active = [];
+let camX = 0, camY = 0, snapCam = true, lean = 0, lastR = 0, wearShown = -1;
+const ro = { t: '', d: '', s: '' };
+
+// How far an item is colored: a street keeps pace with Mr Sparkles' tip, a house is scribbled in quickly.
+function reach(it, m, now, inst) {
+  if (it.k === 'st') return Math.min(it.n, Math.ceil((m - it.at) / MPU / 0.85) + 2);
+  return inst ? it.n : Math.min(it.n, Math.ceil((it.n * (now - it.t0)) / it.dur));
+}
+function advance(m, now, inst) {
+  while (itemIdx < ITEMS.length && ITEMS[itemIdx].at <= m) {
+    const it = ITEMS[itemIdx++];
+    prep(it);
+    it.p = 0; it.t0 = now;
+    if (it.n <= 1) { paintItem(it, 0, it.n); it.p = it.n; } else active.push(it);
+  }
+  for (let i = active.length - 1; i >= 0; i--) {
+    const it = active[i], tgt = reach(it, m, now, inst);
+    if (tgt > it.p && (inst || tgt >= it.n || tgt - it.p >= 3)) { // a few points per stroke: fewer seams
+      const a = it.p;
+      if (it.k === 'st') paintInTiles(zBB(it.z, Math.max(0, a - 1), tgt, it.w), (c) => drawStreet(c, it, a, tgt, K));
+      else paintItem(it, a, tgt);
+      it.p = tgt;
+    }
+    if (it.p >= it.n) active.splice(i, 1);
+  }
+  // the canal and the line, in chunks so each touches few tiles
+  let j = wDone;
+  while (j + 1 < WM.length && WM[j + 1] <= m) j++;
+  if (j > wDone && (inst || j - wDone >= 3)) {
+    for (let a = wDone; a < j; a += 48) { const b = Math.min(j, a + 48); paintInTiles(ptsBB(WZ, a, b, 2), (c, t) => drawWater(c, a, b, K, tileWater(t))); }
+    wDone = j;
+  }
+  j = tDone;
+  while (j + 1 < TM.length && TM[j + 1] <= m) j++;
+  if (j > tDone) {
+    for (let a = tDone; a < j; a += 48) { const b = Math.min(j, a + 48); paintInTiles(ptsBB(TZ, a, b, 1.5), (c) => drawTrail(c, a, b, K)); }
+    tDone = j;
+  }
+}
+function rebuild() {
+  tiles.clear(); colored = false;
+  itemIdx = 0; active.length = 0; wDone = 0; tDone = 0;
+  if (M > 0) advance(M, performance.now(), true);
+}
+function render(now) {
+  const p = Kit.at(M);
+  const dt = Math.min(0.1, Math.max(0, (now - lastR) / 1000));
+  lastR = now;
+  if (snapCam) { camX = p.x; camY = p.y; } else { const f = 1 - Math.exp(-dt * 4.5); camX += (p.x - camX) * f; camY += (p.y - camY) * f; }
+  const Wd = mapCv.width, Hd = mapCv.height;
+  const ox = Math.round(Wd / 2 - camX * K), oy = Math.round(Hd * ANCH - camY * K);
+  const tx0 = Math.floor(-ox / TILE), tx1 = Math.floor((Wd - ox) / TILE), ty0 = Math.floor(-oy / TILE), ty1 = Math.floor((Hd - oy) / TILE);
+  mctx.setTransform(1, 0, 0, 1, 0, 0);
+  mctx.globalCompositeOperation = 'source-over'; mctx.globalAlpha = 1;
+  mctx.fillStyle = PAPER; mctx.fillRect(0, 0, Wd, Hd);
+  for (let tx = tx0; tx <= tx1; tx++) for (let ty = ty0; ty <= ty1; ty++) mctx.drawImage(tileAt(tx, ty).cv, ox + tx * TILE, oy + ty * TILE);
+  prefetch(tx0 - 1, tx1 + 1, ty0 - 1, ty1 + 1);
+  const sx = (ox + p.x * K) / DPR, sy = (oy + p.y * K) / DPR;
+  mctx.fillStyle = 'rgba(0,0,0,.13)';
+  mctx.beginPath(); mctx.ellipse(sx * DPR, (sy + 1) * DPR, 8.5 * DPR, 2.6 * DPR, 0, 0, Math.PI * 2); mctx.fill();
+  walker.style.transform = `translate(${(sx - 16).toFixed(1)}px, ${(sy - 51.2).toFixed(1)}px)`;
+  const target = Math.cos(p.angle) * 15;
+  lean = snapCam ? target : lean + (target - lean) * (1 - Math.exp(-dt * 6));
+  leanEl.style.transform = `rotate(${lean.toFixed(1)}deg)`;
+  snapCam = false;
+  if (bubble.classList.contains('on')) placeBubble(sx, sy);
+}
+function prefetch(x0, x1, y0, y1) {
+  for (let tx = x0; tx <= x1; tx++) for (let ty = y0; ty <= y1; ty++) if (!tiles.has(tx + ',' + ty)) { tileAt(tx, ty); return; }
+}
+let bw = 160, bh = 40;
+function placeBubble(sx, sy) {
+  // above his head, the tail pointing down at him
+  const bx = Math.max(12, Math.min(W - bw - 12, sx - 26)), by = Math.max(bh + 60, sy - 48);
+  bubble.style.transform = `translate(${bx.toFixed(0)}px, ${(by - bh).toFixed(0)}px)`;
+  bubble.style.setProperty('--tail', Math.max(10, Math.min(bw - 24, sx - bx - 7)).toFixed(0) + 'px');
+}
+
+function onTick(m) {
+  M = m;
+  const now = performance.now();
+  advance(m, now, instant);
+  const st = Kit.stats(m);
+  if (st.time !== ro.t) rTime.textContent = ro.t = st.time;
+  if (st.dist !== ro.d) rDist.textContent = ro.d = st.dist;
+  if (st.steps !== ro.s) rSteps.textContent = ro.s = st.steps;
+  const wear = Math.round((1 - 0.42 * m / Kit.total) * 40) / 40;
+  if (wear !== wearShown) { wearShown = wear; mrWalk.innerHTML = mrInner(wear, false, false); }
+  if (walking) render(now);
+}
+
+// ---------------------------------------------------------------- the street-claimed moment
+const CLAIM_LINES = ['Colored in!', "That one's ours for good.", 'Another street, colored in!', 'Look how bright it is now!', 'Ooh, a new color!'];
+let claim = null, claimRAF = 0, claimT = 0;
+function isBridge(name) { return /sluis$|brug$/i.test(name) || name === 'Grachtenvlinder' || name === 'Liefdesverklaring'; }
+function startClaim(i, quiet) {
+  const s = RS[i];
+  if (!s) return;
+  const c = BC(i), name = s.name;
+  live.textContent = 'Colored in ' + name + '.';
+  let fs = 52;
+  cctx.font = '700 ' + fs + 'px ' + HAND;
+  const w0 = cctx.measureText(name).width || name.length * 26;
+  if (w0 > W - 64) fs = Math.max(26, (fs * (W - 64)) / w0);
+  cctx.font = '700 ' + fs + 'px ' + HAND;
+  const r = rng(i * 31 + name.length);
+  const L = [];
+  let x = 0;
+  for (const ch of name) { const cw = cctx.measureText(ch).width || fs * 0.5; L.push({ ch, x: x + cw / 2, rot: (r() - 0.5) * 0.2, dy: (r() - 0.5) * 7, sc: 0.93 + r() * 0.14 }); x += cw * 0.97; }
+  const start = (W - x) / 2;
+  L.forEach((l) => { l.x += start; });
+  const ul = [];
+  for (let k = 0; k <= 28; k++) { const t = k / 28; ul.push(start - 8 + t * (x + 18), 0 + Math.sin(t * Math.PI * 3.2) * 3.2 + t * 2); }
+  claim = { L, fs, c, t0: performance.now() - (quiet ? 1e4 : 0), ul }; // quiet: arriving mid-walk, already written
+  claimCv.classList.remove('gone');
+  clearTimeout(claimT);
+  claimT = setTimeout(() => claimCv.classList.add('gone'), 4300);
+  if (!claimRAF) claimRAF = requestAnimationFrame(claimFrame);
+  if (!quiet) {
+    if (crEls[i]) crEls[i].classList.add('out');
+    setWax(mrWalk, c);
+    walker.classList.remove('pop'); void walker.offsetWidth; walker.classList.add('pop');
+    say(i === 0 ? 'Here we go! First street.' : isBridge(name) ? 'A bridge! Colored in.' : CLAIM_LINES[i % CLAIM_LINES.length], 3, 2000);
+  }
+}
+const easeBack = (t) => { const c1 = 1.7, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+function claimFrame(now) {
+  claimRAF = 0;
+  const st = claim;
+  if (!st) return;
+  const per = 55, n = st.L.length, el = RM ? 1e9 : now - st.t0;
+  const shown = Math.min(n, Math.floor(el / per) + 1), ulp = Math.max(0, Math.min(1, (el - n * per) / 360));
+  const BASE = 86;
+  cctx.setTransform(1, 0, 0, 1, 0, 0);
+  cctx.clearRect(0, 0, claimCv.width, claimCv.height);
+  cctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  cctx.save();
+  cctx.translate(W / 2, BASE); cctx.rotate(-0.045); cctx.translate(-W / 2, -BASE);
+  cctx.font = '700 ' + st.fs.toFixed(1) + 'px ' + HAND;
+  cctx.textAlign = 'center'; cctx.textBaseline = 'alphabetic'; cctx.lineJoin = 'round'; cctx.lineCap = 'round';
+  const each = (fn) => {
+    for (let k = 0; k < shown; k++) {
+      const l = st.L[k];
+      const pop = el >= n * per ? 1 : Math.min(1, Math.max(0, (el - k * per) / (per * 1.6)));
+      const s = l.sc * (0.6 + 0.4 * easeBack(pop));
+      cctx.save(); cctx.translate(l.x, BASE + l.dy); cctx.rotate(l.rot); cctx.scale(s, s); fn(l); cctx.restore();
+    }
+  };
+  // a clear patch of paper under the writing, so the name reads over the line art
+  cctx.strokeStyle = 'rgba(255,254,251,.94)'; cctx.lineWidth = 12;
+  each((l) => cctx.strokeText(l.ch, 0, 0));
+  if (ulp > 0) {
+    const u = st.ul, upto = Math.max(2, Math.round((u.length / 2) * ulp));
+    const ulPath = () => { cctx.beginPath(); cctx.moveTo(u[0], BASE + 14 + u[1]); for (let k = 1; k < upto; k++) cctx.lineTo(u[k * 2], BASE + 14 + u[k * 2 + 1]); };
+    ulPath(); cctx.lineWidth = 10; cctx.stroke();
+    ulPath(); cctx.strokeStyle = pat(cctx, st.c.wax, DPR); cctx.lineWidth = 5; cctx.stroke();
+  }
+  cctx.fillStyle = pat(cctx, st.c.wax, DPR);
+  each((l) => cctx.fillText(l.ch, 1.3, 1));
+  cctx.fillStyle = pat(cctx, st.c.press, DPR, true);
+  each((l) => cctx.fillText(l.ch, 0, 0));
+  cctx.restore();
+  if (el < n * per + 380) claimRAF = requestAnimationFrame(claimFrame);
+}
+
+// ---------------------------------------------------------------- Mr Sparkles talks
+let bub = { until: 0, prio: 0 }, bubT = 0, quietUntil = 0;
+const waiting = [];
+function say(text, prio, hold) {
+  const now = performance.now();
+  // claims and landmarks wait their turn; a passing cafe is only mentioned when he's free
+  if (now < bub.until && prio <= bub.prio) { if (prio >= 2 && waiting.length < 3) waiting.push({ text, prio, hold, at: now }); return; }
+  if (prio < 2 && (now < quietUntil || now < bub.until)) return;
+  bubble.textContent = text;
+  bw = bubble.offsetWidth || 160; bh = bubble.offsetHeight || 40;
+  bubble.classList.add('on');
+  bub = { until: now + hold, prio };
+  clearTimeout(bubT);
+  bubT = setTimeout(bubbleDone, hold);
+  if (walking) { const p = Kit.at(M), sx = (Math.round(mapCv.width / 2 - camX * K) + p.x * K) / DPR, sy = (Math.round(mapCv.height * ANCH - camY * K) + p.y * K) / DPR; placeBubble(sx, sy); }
+}
+function bubbleDone() {
+  const now = performance.now();
+  bub = { until: 0, prio: 0 };
+  while (waiting.length && now - waiting[0].at > 4000) waiting.shift();
+  if (waiting.length) { const p = waiting.shift(); say(p.text, p.prio, p.hold); return; }
+  bubble.classList.remove('on');
+  quietUntil = now + 1600;
+}
+function placeLine(p) {
+  const n = p.name;
+  switch (iconKind(p.cls, p.name)) {
+    case 'tower': return 'Look up! The Westertoren.';
+    case 'cup': return n + '. Coffee later?';
+    case 'plate': return 'Ooh, ' + n + '.';
+    case 'mug': return n + '. Cheers!';
+    case 'bread': return 'Mmm, ' + n + '.';
+    case 'frame': return 'Art! ' + n + '.';
+    case 'flag': return 'Look, ' + n + '!';
+    case 'scissors': return n + '. Snip snip.';
+    case 'book': return 'Books! ' + n + '.';
+    default: return 'Spotted: ' + n + '.';
+  }
+}
+
+// ---------------------------------------------------------------- moving between the three moments
+function setCrayons(m) {
+  crDiv.classList.add('instant');
+  crEls.forEach((el, i) => el.classList.toggle('out', RS[i].m <= m));
+  void crDiv.offsetWidth;
+  crDiv.classList.remove('instant');
+}
+function stopWalk() {
+  if (player) player.pause();
+  player = null; walking = false;
+  walkSec.classList.remove('walking');
+  disarm();
+}
+function resetWalk() {
+  if (colored) { tiles.clear(); colored = false; }
+  itemIdx = 0; active.length = 0; wDone = 0; tDone = 0; M = 0;
+  ro.t = ro.d = ro.s = '';
+  rTime.textContent = '0:00'; rDist.textContent = '0 m'; rSteps.textContent = '0';
+  setCrayons(-1);
+  claim = null; clearTimeout(claimT); claimCv.classList.add('gone');
+  cctx.setTransform(1, 0, 0, 1, 0, 0); cctx.clearRect(0, 0, claimCv.width, claimCv.height);
+  clearTimeout(bubT); waiting.length = 0; bub = { until: 0, prio: 0 }; bubble.classList.remove('on');
+  claimWaits.forEach(clearTimeout); claimWaits.length = 0; claimNext = 0;
+  wearShown = -1; mrWalk.innerHTML = mrInner(1, false, false); setWax(mrWalk, BC(0));
+  snapCam = true;
+}
+function startWalk(fromM, delay) {
+  stopWalk(); resetWalk();
+  walking = true;
+  walkSec.classList.add('walking');
+  setActive('walk');
+  player = Kit.player({ rate: RATE, onTick, onStreet, onPlace, onEnd: () => finishWalk(Kit.total) });
+  if (fromM > 0) {
+    instant = true; player.seek(fromM); instant = false;
+    const k = crayonAt(fromM);
+    setCrayons(fromM); setWax(mrWalk, BC(k));
+    startClaim(k, true);
+    claimNext = performance.now() + 1400;
+    say(isBridge(RS[k].name) ? 'A bridge! Colored in.' : CLAIM_LINES[k % CLAIM_LINES.length], 3, 2200);
+    player.play();
+  } else {
+    onTick(0);
+    const p = player;
+    setTimeout(() => { if (player === p) p.play(); }, delay || 0);
+  }
+}
+// Two streets can be claimed a few steps apart (Westermarkt, then Prinsengracht): each name gets 1.4 s on its own.
+let claimNext = 0;
+const claimWaits = [];
+function onStreet(s) {
+  const i = RS.indexOf(s);
+  if (i < 0) return;
+  const now = performance.now(), at = Math.max(now, claimNext);
+  claimNext = at + 1400;
+  if (at <= now) startClaim(i, false);
+  else claimWaits.push(setTimeout(() => { if (walking) startClaim(i, false); }, at - now));
+}
+function onPlace(p) { say(placeLine(p), p.cls === 'attraction' || p.name === 'Westertoren' ? 2 : 1, 1700); }
+let armed = false, armT = 0;
+function disarm() { armed = false; clearTimeout(armT); endBtn.classList.remove('armed'); endLbl.textContent = 'End'; endBtn.style.removeProperty('--tex'); endBtn.removeAttribute('aria-label'); }
+endBtn.addEventListener('click', () => {
+  if (!player) return;
+  if (!armed) {
+    armed = true;
+    endBtn.classList.add('armed');
+    endBtn.style.setProperty('--tex', 'url(' + waxURL('#ff5a6e') + ')');
+    endLbl.textContent = 'End walk?';
+    endBtn.setAttribute('aria-label', 'End walk? Press again to end it.');
+    armT = setTimeout(disarm, 3500);
+    return;
+  }
+  finishWalk(player.m);
+});
+function finishWalk(m) { stopWalk(); showSummary(m, true); setHash('summary'); }
+
+function setActive(name) {
+  [['cover', cover], ['walk', walkSec], ['summary', summary]].forEach((pair) => {
+    const on = pair[0] === name;
+    if (on) { pair[1].removeAttribute('inert'); pair[1].removeAttribute('aria-hidden'); }
+    else { pair[1].setAttribute('inert', ''); pair[1].setAttribute('aria-hidden', 'true'); }
+  });
+}
+function showSummary(m, animate) {
+  summary.hidden = false;
+  setActive('summary');
+  summary.classList.remove('drop');
+  renderSummary(m);
+  if (animate && !RM) { void summary.offsetWidth; summary.classList.add('drop'); }
+  summary.scrollTop = 0;
+  const h = $('#wow');
+  if (h && animate) h.focus({ preventScroll: true });
+}
+let coverT = 0;
+function showStart(animate) {
+  stopWalk();
+  setActive('cover');
+  clearTimeout(coverT);
+  cover.classList.remove('open');
+  const settle = () => { summary.hidden = true; resetWalk(); setTimeout(renderIdle, 40); };
+  if (animate && !RM) coverT = setTimeout(settle, 900); else settle();
+  if (animate) $('#go').focus({ preventScroll: true });
+}
+// The page under the cover, ready before Start, so the cover turns onto a drawn page.
+function renderIdle() {
+  if (walking || colored) return;
+  M = 0; snapCam = true; walking = true; render(performance.now()); walking = false;
+  const p = Kit.at(0), ox = mapCv.width / 2 - p.x * K, oy = mapCv.height * ANCH - p.y * K;
+  const queue = [];
+  for (let tx = Math.floor((-ox - TILE) / TILE); tx <= Math.floor((mapCv.width - ox + TILE) / TILE); tx++)
+    for (let ty = Math.floor((-oy - TILE) / TILE); ty <= Math.floor((mapCv.height - oy + TILE) / TILE); ty++) queue.push([tx, ty]);
+  const step = () => { if (walking || colored) return; const q = queue.shift(); if (!q) return; tileAt(q[0], q[1]); setTimeout(step, 16); };
+  setTimeout(step, 60);
+}
+$('#go').addEventListener('click', () => {
+  clearTimeout(coverT);
+  summary.hidden = true;
+  cover.classList.add('open');
+  startWalk(0, RM ? 150 : 620);
+  setHash('walk');
+  walkSec.focus({ preventScroll: true });
+});
+$('#again').addEventListener('click', () => { showStart(true); setHash('start'); });
+
+// ---------------------------------------------------------------- the summary: the page, on the fridge
+function renderSummary(m) {
+  const st = Kit.stats(m), lit = Kit.lit(m), names = lit.names || [], nh = (lit.houses || []).length;
+  const last = BC(crayonAt(m));
+  const head = 'Wow, ' + names.length + ' street' + (names.length === 1 ? '' : 's') + '!';
+  const wow = $('#wow');
+  wow.setAttribute('aria-label', head);
+  const r = rng(names.length + 3);
+  wow.innerHTML = head.split(' ').map((word) => '<span aria-hidden="true">' + word.split('').map((ch) => `<span class="wx" style="--r:${((r() - 0.5) * 12).toFixed(1)}deg;--y:${((r() - 0.5) * 5).toFixed(1)}px">${ch}</span>`).join('') + '</span>').join(' '); // "Wow," on its own line, then the count
+  wow.style.setProperty('--press', last.press);
+  wow.style.setProperty('--wax', last.wax);
+  $('#sDistTxt').textContent = st.value + ' ' + st.unit;
+  const dEl = $('#sDist'), parts = String(st.value).split('.');
+  dEl.textContent = parts[0];
+  if (parts.length > 1) { const dot = document.createElement('span'); dot.className = 'pt'; dEl.appendChild(dot); dEl.appendChild(document.createTextNode(parts[1])); }
+  $('#sUnit').textContent = st.unit;
+  $('#sMeta').textContent = st.words + ' of walking, ' + st.steps + ' steps';
+  const shown = names.slice(0, 3);
+  $('#sList').innerHTML = shown.map((n) => {
+    const c = BC(crayonOf.has(n) ? crayonOf.get(n) : 0);
+    return `<li><svg viewBox="0 0 34 14" aria-hidden="true"><path d="M2 10 L6 3 L9 11 L13 3 L16 11 L20 3 L23 11 L27 3 L31 10" fill="none" stroke="${c.wax}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" filter="url(#wax)"/></svg><span></span></li>`;
+  }).join('');
+  Array.from($('#sList').querySelectorAll('li span')).forEach((el, i) => { el.textContent = shown[i]; });
+  const rest = names.length - shown.length, hs = nh + ' house' + (nh === 1 ? '' : 's');
+  $('#sMore').textContent = rest > 0 ? 'and ' + rest + ' more street' + (rest === 1 ? '' : 's') + ' and ' + hs : nh ? 'and ' + hs : '';
+  const fr = $('#mrFridge');
+  fr.innerHTML = mrInner(Math.max(0.55, 1 - 0.42 * m / Kit.total), false, true);
+  setWax(fr, last);
+  drawPage(m);
+}
+function drawPage(m) {
+  const cv = $('#pagemap'), box = cv.parentNode;
+  const cw = box.clientWidth || 290, ch = box.clientHeight || 200;
+  cv.width = Math.round(cw * DPR); cv.height = Math.round(ch * DPR);
+  const ctx = cv.getContext('2d');
+  ctx.__p = null;
+  const tr = Kit.trail(m);
+  const bb = bbox(tr.length >= 2 ? tr : [Kit.at(0).x, Kit.at(0).y], 26);
+  const minW = 150, minH = (minW * ch) / cw;
+  if (bb[2] - bb[0] < minW) { const c = (bb[0] + bb[2]) / 2; bb[0] = c - minW / 2; bb[2] = c + minW / 2; }
+  if (bb[3] - bb[1] < minH) { const c = (bb[1] + bb[3]) / 2; bb[1] = c - minH / 2; bb[3] = c + minH / 2; }
+  const ks = Math.min(cw / (bb[2] - bb[0]), ch / (bb[3] - bb[1]), 2.4), KS = ks * DPR;
+  const ox = (cv.width) / 2 - ((bb[0] + bb[2]) / 2) * KS, oy = (cv.height) / 2 - ((bb[1] + bb[3]) / 2) * KS;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.setTransform(KS, 0, 0, KS, ox, oy);
+  const x0 = -ox / KS, y0 = -oy / KS, x1 = (cv.width - ox) / KS, y1 = (cv.height - oy) / KS;
+  drawInk(ctx, x0, y0, x1, y1, { lw: Math.max(0.8, 1.09 / ks), icons: false });
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply'; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  let j = 0;
+  while (j + 1 < WM.length && WM[j + 1] <= m) j++;
+  if (j > 0) drawWater(ctx, 0, j, KS, waterPath(x0, y0, x1, y1));
+  for (const it of ITEMS) {
+    if (it.at > m) break;
+    if (it.k !== 'st' && it.k !== 'h') continue;
+    prep(it);
+    drawItem(ctx, it, 0, it.n, KS);
+  }
+  j = 0;
+  while (j + 1 < TM.length && TM[j + 1] <= m) j++;
+  if (j > 0) drawTrail(ctx, 0, j, KS, 1.7);
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- hash states
+let ignoreHash = false;
+function setHash(h) {
+  if (location.hash === '#' + h) return;
+  try { history.replaceState(null, '', '#' + h); } catch (e) { ignoreHash = true; location.hash = h; }
+}
+function route() {
+  const h = (location.hash || '#start').slice(1);
+  clearTimeout(coverT);
+  if (h === 'walk') {
+    cover.classList.add('instant', 'open');
+    summary.hidden = true;
+    startWalk(960);
+  } else if (h === 'summary') {
+    stopWalk();
+    cover.classList.add('instant', 'open');
+    showSummary(1450, false);
+  } else {
+    cover.classList.add('instant');
+    showStart(false);
+  }
+  requestAnimationFrame(() => requestAnimationFrame(() => cover.classList.remove('instant')));
+}
+addEventListener('hashchange', () => { if (ignoreHash) { ignoreHash = false; return; } route(); });
+addEventListener('resize', fit);
+fit();
+route();
+})();
+</script>
+</body>
+</html>

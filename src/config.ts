@@ -66,8 +66,11 @@ export const CONFIG = {
   /** Average adult walking step, metres. Steps are estimated as distance / this. */
   stepLengthM: 0.75,
 
-  /** Zoom the camera settles on while walking. */
-  walkZoom: 17,
+  /**
+   * Zoom the camera settles on while walking: the design's scale, 2.25 CSS px per 1.495 m in
+   * Amsterdam. The map's line widths are set at this zoom (src/map/ink.ts KC).
+   */
+  walkZoom: 16.13,
   /** After you pan the map away, the camera comes back to you this long after you let go (ms). */
   followResumeMs: 9000,
   /** Farther than this (m) from you, the camera flies back instead of sliding. */

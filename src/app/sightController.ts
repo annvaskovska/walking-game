@@ -2,13 +2,12 @@ import { HeadingFusion } from '../core/heading';
 import type { MotionFrame } from '../core/motion';
 import { OccluderCache, stepOutside, type Occluders } from '../core/occluders';
 import { SeenMemory, type Look } from '../core/seenMemory';
-import type { Fix, LitHouse, SeenHouse, SeenPlace } from '../core/types';
+import type { Fix, SeenHouse, SeenPlace } from '../core/types';
 import type { StreetGraph } from '../data/graph';
 import type { TileSource } from '../data/tiles';
 import { declinationDeg, decimalYear } from '../geo/declination';
 import { bearingDeg, distanceM, metresPerDegree } from '../geo/geo';
-import { pageTime } from '../map/fog/fogLayer';
-import { LONG_AGO, latOfWm, lonOfWm, wmX, wmY } from '../map/fog/geometry';
+import { latOfWm, lonOfWm, wmX, wmY } from '../map/fog/geometry';
 import type { MapView } from '../map/mapView';
 import { createCompass } from '../platform/compass';
 import type { Storage } from '../platform/storage';
@@ -52,10 +51,10 @@ const REPLAYS_PER_FRAME = 6;
 const MAX_PENDING = 600;
 
 /**
- * Line of sight: your light stops at walls, and what you see stays moonlit for good. This keeps
- * the walls around you, turns your position and the way you look (compass, else the way you walk)
- * into the light the fog draws, and into "looks" that the seen memory remembers: the moonlit
- * ground, the houses and the landmarks you have seen. While the screen was locked (iPhone app),
+ * Line of sight: your sight stops at walls, and what you see is remembered for good. This keeps
+ * the walls around you, and turns your position and the way you look (compass, else the way you
+ * walk) into "looks" that the seen memory remembers: the ground, the houses and the landmarks you
+ * have seen. While the screen was locked (iPhone app),
  * the fixes recorded meanwhile are looked from in the direction you walked.
  */
 export class SightController {
@@ -79,13 +78,14 @@ export class SightController {
   private placesTimer = 0;
   /** Demo only: look this way (degrees), as if the phone had a compass. */
   simLook: number | null = null;
+  /** Landmarks seen for the first time, live (not from fixes recorded while the screen was off). */
+  onSpotted: (places: SeenPlace[]) => void = () => {};
 
   constructor(
     private theme: Theme,
     private view: MapView,
     private graph: StreetGraph,
     private source: TileSource,
-    private isLit: (houseId: string) => boolean,
   ) {
     this.memory = new SeenMemory(theme);
   }
@@ -100,8 +100,6 @@ export class SightController {
     this.memory.grid.load(tiles.filter((t) => t.data instanceof Uint8Array));
     this.memory.loadHouses(houses);
     this.memory.loadPlaces(places);
-    for (const t of this.memory.grid.tiles.values()) this.view.fog.setSeenTile(t);
-    for (const h of houses) if (!this.isLit(h.id)) this.view.fog.addSeenHouse(h, LONG_AGO);
     this.view.setSeenPlaces([...this.memory.places.values()]);
   }
 
@@ -125,7 +123,6 @@ export class SightController {
     this.pending = [];
     this.replays = [];
     this.lastReplay = null;
-    this.view.fog.setOccluders(null);
     this.occVersion = -1;
   }
 
@@ -157,7 +154,8 @@ export class SightController {
     // Live looks need the walls around you; until they load, the next frame looks again.
     if (occ && now - this.lastLiveLook >= LIVE_LOOK_MS) {
       this.lastLiveLook = now;
-      this.see({ lon: f.lon, lat: f.lat, heading: h.heading, cone: h.cone }, occ);
+      const spotted = this.see({ lon: f.lon, lat: f.lat, heading: h.heading, cone: h.cone }, occ);
+      if (spotted.length) this.onSpotted(spotted);
     }
     this.replaySome();
     return light;
@@ -197,11 +195,6 @@ export class SightController {
     if (this.pending.length > MAX_PENDING) this.pending.splice(0, this.pending.length - MAX_PENDING);
   }
 
-  /** Houses that just lit up gold are drawn as lit houses, not seen ones. */
-  housesLit(houses: LitHouse[]): void {
-    for (const h of houses) this.view.fog.removeSeenHouse(h.id);
-  }
-
   /** What changed since the last save. */
   takeSaves(): Saves {
     for (const t of this.memory.grid.takeDirty()) this.unsaved.set(t.key, { key: t.key, data: t.data });
@@ -232,7 +225,6 @@ export class SightController {
     const occ = this.occluders.around(lon, lat, this.graph.houses, this.graph.version);
     if (occ.version !== this.occVersion) {
       this.occVersion = occ.version;
-      this.view.fog.setOccluders(occ);
       // The compass points to magnetic north, the map to true north (a few degrees apart in most cities).
       this.fusion.declination = declinationDeg(lat, lon, decimalYear(new Date()));
     }
@@ -250,20 +242,13 @@ export class SightController {
     );
   }
 
-  /** Remember what you see from a spot, over the walls around it. */
-  private see(l: Look, occ: Occluders): void {
+  /** Remember what you see from a spot, over the walls around it; returns the landmarks seen first. */
+  private see(l: Look, occ: Occluders): SeenPlace[] {
     const m = metresPerDegree(l.lat);
     const r = this.theme.fog.coneM + 15;
     const places = this.graph.places.query([l.lon - r / m.lon, l.lat - r / m.lat, l.lon + r / m.lon, l.lat + r / m.lat]);
     const res = this.memory.look(l, occ, places, Date.now());
-    for (const t of res.tiles) this.view.fog.setSeenTile(t);
-    if (res.houses.length) {
-      const t0 = pageTime();
-      for (const h of res.houses) {
-        this.newHouses.push(h);
-        if (!this.isLit(h.id)) this.view.fog.addSeenHouse(h, t0 + Math.random() * 0.25);
-      }
-    }
+    this.newHouses.push(...res.houses);
     if (res.places.length) {
       this.newPlaces.push(...res.places);
       if (!this.placesTimer) {
@@ -273,5 +258,6 @@ export class SightController {
         }, 400);
       }
     }
+    return res.places;
   }
 }

@@ -1,192 +1,131 @@
 /**
- * The night look of the map: the basemap, the fog, lit streets and houses, and you. The splash
- * and HUD read the same palette as CSS custom properties from the inline style in index.html,
- * which has to paint before any script loads; keep the two in step.
+ * The look of the app (ADR 0015): a coloring book of the city, black ink on white paper, every street
+ * you walk colored in with crayon for good, with its houses and its name. The cover in index.html,
+ * which has to paint before any script loads, repeats the type and the crayons it needs inline; keep
+ * the two in step.
  */
+export interface Pencil {
+  /** How the pencil colors: multiplied over the paper and the ink, so lines stay black. */
+  lay: string;
+  /** The same pencil pressed hard: dark enough for text on paper (at least 4.5:1). */
+  press: string;
+}
+
 export interface Theme {
   font: {
     /**
-     * Gold names of the streets you walked: Instrument Serif in italic, as on the summary. The first
-     * names are the files the app ships (style.ts fontFaces); the phone's own serifs follow for
-     * scripts those files lack.
+     * The hand, a marker: street names, the claim lettering, titles and numbers. Marker Felt on
+     * Apple's devices, Kalam Bold elsewhere (style.ts fontFaces, index.html --hand).
      */
-    walked: string[];
-    /** Moonlit names of the streets you have seen: the same serif, upright. */
-    names: string[];
-    /** Faint district names and landmarks: Instrument Sans. */
-    places: string[];
+    hand: string[];
+    /** The kid, a chalk hand: everything you read and tap. Chalkboard SE, or Patrick Hand. */
+    kid: string[];
   };
+  /**
+   * The printed page: every line in ink on paper, no tints (style.ts). The streets' insides are cut
+   * back to paper inside their ink casings, so crossings stay open.
+   */
   map: {
-    background: string;
-    residential: string;
-    park: string;
-    wood: string;
-    water: string;
-    waterway: string;
-    building: string;
-    buildingEdge: string;
-    roadMinor: string;
-    roadMajor: string;
-    path: string;
-    rail: string;
-    /** Every street, drawn faintly over the fog so you can see where you could go. */
-    ghost: string;
-    ghostRoadOpacity: number;
-    ghostPathOpacity: number;
-    place: string;
-    placeHalo: string;
-    name: string;
-    nameHalo: string;
-    /** Street names you have seen but not walked: under the fog, in moonlight. */
-    moonName: string;
-    /** Shops, cafés and other landmarks you have seen, labelled over the fog. */
-    landmark: string;
-    landmarkHalo: string;
+    paper: string;
+    ink: string;
   };
+  /** Your sight, which the seen memory remembers; and how fast a walked street colors in. */
   fog: {
-    color: string;
-    opacity: number;
-    /** Slow drifting mist inside the fog. */
-    mist: string;
-    /** Warm glow along the edge of the cleared corridors. */
-    rim: string;
-    /** Warm light of your lantern. */
-    lamp: string;
-    /** Your beam of sight, lighting the mist ahead of you. */
-    beam: string;
-    /** The wave that runs along a street the moment it unlocks. */
-    flash: string;
-    /** Thin gold line along the middle of a lit street. */
-    street: string;
-    /** Half-width of the clear corridor around a lit street / path, ground metres. */
-    roadM: number;
-    pathM: number;
-    /** Soft clear halo around a lit house, metres. */
-    houseM: number;
-    /** Your lantern: a clear disc around you, and a cone of sight ahead while you move. */
+    /** A disc around you, and a cone ahead while you move, metres. */
     lanternM: number;
     coneM: number;
     /** Outer half-angle of the cone (where it has faded out) and inner one (full strength). */
     coneHalfDeg: number;
     coneInnerDeg: number;
-    /**
-     * Light stops at walls. Size of the lantern as a light source (m): the bigger, the softer the
-     * edge of a shadow, which widens with distance behind the wall.
-     */
-    lampRadiusM: number;
-    /** Speed of the unlock wave along a street, m/s. */
+    /** Speed at which a street colors in up to you, m/s; from there it keeps your pace. */
     sweepMps: number;
   };
-  /** What you have seen but not walked: it stays moonlit for good. */
-  seen: {
-    /** Cool light laid over the seen part of the map. */
-    moon: string;
-    /** Share of the fog a fully seen spot clears, 0..1 (walked streets clear all of it). */
-    clear: number;
-    /** Strength of the moonlight added over a seen spot. */
-    tint: number;
-    /** A house you have seen: dim blue roof and a moonlit outline. */
-    fill: string;
-    edge: string;
-    fillOpacity: number;
-    edgeOpacity: number;
-    /** Warm light on the walls that face your lantern right now. */
-    facade: string;
+  /** The box of pencils; a street keeps one for good (pencilOf). */
+  pencils: Pencil[];
+  pencil: {
     /**
-     * How far sight is remembered (m): in the beam ahead of you, and all around you. Houses and
+     * How wide a crayon colors a street in, units (1.495 m in Amsterdam), by its class: the
+     * design's WCLS, as the map prints them (style.ts). Any other street, and a path.
+     */
+    width: Record<string, number>;
+    road: number;
+    path: number;
+    /** Share of walked houses colored with their street's crayon; the others take one of their own. */
+    houseMatch: number;
+  };
+  /** What you have seen, remembered for the landmarks you spot. */
+  seen: {
+    /**
+     * How far sight is remembered (m): in the cone ahead of you, and all around you. Houses and
      * landmarks hit by your sight within this reach become seen.
      */
     beamM: number;
     aroundM: number;
   };
-  house: {
-    fill: string;
-    edge: string;
-    /** Window lights, from warm to pale. */
-    windowWarm: string;
-    windowPale: string;
-  };
-  /** Mr Sparkles on the map: his orb from the middle to the edge, his tight shine and his wide glow. */
-  puck: {
-    core: string;
-    edge: string;
-    shine: string;
-    glow: string;
-  };
 }
 
-export const nightTheme: Theme = {
+export const paperTheme: Theme = {
   font: {
-    walked: ['Instrument Serif Italic', 'Instrument Serif', 'ui-serif', 'New York', 'Iowan Old Style', 'Georgia', 'Noto Serif', 'serif'],
-    names: ['Instrument Serif', 'ui-serif', 'New York', 'Iowan Old Style', 'Georgia', 'Noto Serif', 'serif'],
-    places: ['Instrument Sans', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+    hand: ['Marker Felt', 'Kalam', 'Chalkboard SE', 'Noteworthy', 'Comic Sans MS', 'cursive'],
+    kid: ['Chalkboard SE', 'Chalkboard', 'Patrick Hand', 'Noteworthy', 'Comic Sans MS', 'cursive'],
   },
   map: {
-    background: '#0f1218',
-    residential: '#11151c',
-    park: '#111a16',
-    wood: '#101915',
-    water: '#0b1622',
-    waterway: '#0e1b29',
-    building: '#1a1e27',
-    buildingEdge: '#20252f',
-    roadMinor: '#262b36',
-    roadMajor: '#2f3542',
-    path: '#232833',
-    rail: '#1f232c',
-    ghost: '#c9d3e6',
-    // Fainter than before line of sight: what you have seen now shows the streets for real.
-    ghostRoadOpacity: 0.08,
-    ghostPathOpacity: 0.045,
-    place: '#8a94a8',
-    placeHalo: '#0b0d12',
-    name: '#f0c987',
-    nameHalo: '#120d06',
-    moonName: '#b4c3e0',
-    landmark: '#d9c7a6',
-    landmarkHalo: '#0b0d12',
+    paper: '#fffefb',
+    ink: '#000000',
   },
   fog: {
-    color: '#0b0d12',
-    opacity: 0.94,
-    mist: '#161b26',
-    rim: '#ffb46b',
-    lamp: '#ffe3b8',
-    beam: '#ffc98e',
-    flash: '#fff3d6',
-    street: '#e8b56e',
-    roadM: 17,
-    pathM: 11,
-    houseM: 7,
     lanternM: 40,
     coneM: 110,
     coneHalfDeg: 38,
     coneInnerDeg: 19,
-    lampRadiusM: 1.5,
     sweepMps: 50,
   },
+  pencils: [
+    { lay: '#1fa2e8', press: '#0b6eaa' }, // cerulean
+    { lay: '#ff8a1f', press: '#ad4e00' }, // orange
+    { lay: '#ee3e9e', press: '#c0157a' }, // magenta
+    { lay: '#ffd02e', press: '#836300' }, // sunflower
+    { lay: '#c0763e', press: '#97521e' }, // raw sienna
+    { lay: '#ff5a6e', press: '#c81e42' }, // watermelon
+    { lay: '#8c5cf0', press: '#6c3ed8' }, // violet
+    { lay: '#a6d93a', press: '#4a720b' }, // inchworm
+    { lay: '#13bfb0', press: '#06756b' }, // turquoise
+    { lay: '#be95ff', press: '#7f43e0' }, // lavender
+    { lay: '#ffa27f', press: '#b5470f' }, // peach
+    { lay: '#3557e6', press: '#2c4ad1' }, // royal blue
+    { lay: '#e3256b', press: '#c7185a' }, // razzmatazz
+  ],
+  pencil: {
+    width: {
+      motorway: 7, trunk: 7, primary: 7, secondary: 6.4, tertiary: 5.6, minor: 4.4, service: 3.2,
+      busway: 4.6, track: 3, pedestrian: 3.8,
+    },
+    road: 4.2,
+    path: 2.4,
+    houseMatch: 0.45,
+  },
   seen: {
-    moon: '#9db4e0',
-    clear: 0.58,
-    tint: 0.09,
-    fill: '#1c2230',
-    edge: '#4e5b76',
-    fillOpacity: 0.92,
-    edgeOpacity: 0.85,
-    facade: '#ffc98e',
     beamM: 88,
     aroundM: 37,
   },
-  house: {
-    fill: '#2b2117',
-    edge: '#c98d4f',
-    windowWarm: '#ffd9a0',
-    windowPale: '#ffeacc',
-  },
-  puck: {
-    core: '#fffdf6',
-    edge: '#ffd596',
-    shine: '#fff1d6',
-    glow: '#ffbd7c',
-  },
 };
+
+/** A font stack as CSS, for a 2D canvas. */
+export const cssFont = (stack: string[]) => stack.map((f) => (/^[\w-]+$/.test(f) ? f : `"${f}"`)).join(', ');
+
+/**
+ * The pencil a street keeps for good: a hash of its name, or of its way when it has none, so it
+ * comes out the same on every walk and every device. FNV-1a, with a basis picked so each street of
+ * the demo walk gets a pencil of its own, and no two of like hue follow each other.
+ */
+export function pencilOf(key: string, n = paperTheme.pencils.length): number {
+  let h = 0x952002b7;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0) % n;
+}
+
+/** The key pencilOf reads for a street piece. */
+export const pencilKey = (p: { name: string | null; way: string | number }) => p.name ?? `way ${p.way}`;

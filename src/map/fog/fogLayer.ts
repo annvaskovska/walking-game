@@ -1,55 +1,98 @@
-import type { CustomLayerInterface, CustomRenderMethodInput, Map as MlMap } from 'maplibre-gl';
-import type { Occluders } from '../../core/occluders';
-import type { SeenTile } from '../../core/seen';
-import { polylineLengthM } from '../../geo/geo';
-import type { Theme } from '../../theme';
+import earcut from 'earcut';
+import type { CustomLayerInterface, CustomRenderMethodInput, Map as MlMap, MapSourceDataEvent } from 'maplibre-gl';
+import { CONFIG } from '../../config';
+import { distanceM, polylineLengthM, projectOnPolylineM } from '../../geo/geo';
+import { pencilKey, pencilOf, type Theme } from '../../theme';
 import { EARTH_CIRCUMFERENCE_M, GrowBuffer, hex3, invert, localMatrix, program, type Program } from '../gl';
+import { KC } from '../ink';
 import {
-  HOUSE_FLOATS, KIND_PATH, KIND_ROAD, SEG_FLOATS, houseSeed, makeOrigin, pushHouse, pushPiece,
-  type Origin, type Sweep,
+  HOUSE_FLOATS, LONG_AGO, RIB_FLOATS, SEG_FLOATS, localX, localY, makeOrigin, miter, pushHouse, pushPiece, rng,
+  sample, sweepTime, type Mesh, type Origin, type Sweep,
 } from './geometry';
-import { MaskMemo, type MaskInputs, type MaskLight } from './maskMemo';
-import { MoonHouses, SeenTextures } from './seenLayer';
-import { ShadowCaster } from './shadows';
+import { MaskMemo, type MaskInputs } from './maskMemo';
 import * as S from './shaders';
 
-/** Where you are, for the lantern. */
-export interface Lantern {
-  /** Where the light comes from: you, stepped out of a house if GPS put you inside one. */
-  lon: number;
-  lat: number;
-  /** Degrees clockwise from north. */
-  heading: number | null;
-  /** Visibility of the cone of sight, 0..1. */
-  cone: number;
+/** A walked street piece, as the crayon needs it: its line, its class, and what picks its crayon. */
+export interface FogPiece {
+  coords: ArrayLike<number>;
+  kind: 'road' | 'path' | 'side';
+  hw: string;
+  name: string | null;
+  way: string | number;
 }
 
 interface PieceRec {
   coords: ArrayLike<number>;
-  kind: number;
+  width: number;
   sweep: Sweep | null;
+  offsetM: number;
+  tone: number;
 }
 
 interface HouseRec {
   house: { id: string; coords: ArrayLike<number>; holes?: ArrayLike<number>[] };
   tOn: number;
+  tone: number;
 }
 
-/** Rebase the local origin once the view is this far from it (float32 stays mm-exact well past it). */
+/** The walk in progress, sampled: where his trail and the canal's zigzag go on from. */
+interface Run {
+  /** Where the last step ended (local units). */
+  x: number;
+  y: number;
+  /** Carry into the next step: of the trail, and of the canal (local units). */
+  tc: number;
+  wc: number;
+  /**
+   * Zigzag turns so far; the ones not drawn yet (from the last drawn on), as the design draws
+   * three strokes at a time; and the way the walk heads, smoothed over GPS noise.
+   */
+  k: number;
+  zig: number[];
+  hx: number;
+  hy: number;
+  /** The trail's last two samples (its last one waits for the next, for its miter). */
+  px: number;
+  py: number;
+  qx: number;
+  qy: number;
+  qTone: number;
+  /** Has the trail of this run any vertices yet? */
+  started: boolean;
+}
+
+/** Rebase the local origin once the walk is this far from it (float32 stays mm-exact well past it). */
 const REBASE_M = 200_000;
-const NOISE_SIZE = 128;
-/** Below this zoom the seen memory is not drawn (a tile would be a few pixels). */
-const SEEN_MIN_ZOOM = 14;
+/** The paper's tooth: one texel a device pixel, tiled. */
+const TOOTH_SIZE = 256;
+/** Floats of a zigzag instance. */
+const ZIG_FLOATS = 8;
+/** A step this close to a street lit on it (m) is where its color starts from. */
+const ON_STREET_M = 25;
+/** The design's water crayon. */
+const WATER = '#55c4f0';
 
 /** Seconds on the page clock the shaders animate with. */
 export const pageTime = () => performance.now() / 1000;
 
+const mesh = (): { v: GrowBuffer<Float32Array>; i: GrowBuffer<Uint32Array> } => ({
+  v: new GrowBuffer((n) => new Float32Array(n), 4096),
+  i: new GrowBuffer((n) => new Uint32Array(n), 4096),
+});
+type GpuMesh = ReturnType<typeof mesh>;
+
+/** Append a mesh built on the CPU, its indices offset by the vertices already there. */
+function append(m: GpuMesh, add: Mesh, stride: number): void {
+  const base = m.v.length / stride;
+  m.v.push(add.v);
+  m.i.push(base ? add.i.map((i) => i + base) : add.i);
+}
+
 /**
- * The fog of the unwalked city, drawn on the GPU as one MapLibre custom layer right above the
- * basemap. It owns everything "lit": the cleared corridors of your streets with their gold line
- * and unlock wave, your lit houses, and your lantern, whose light stops at walls. It also draws
- * what you have seen: the fog thins in moonlight there, and seen houses stand out of it. See
- * shaders.ts for how it looks.
+ * The crayon walking leaves on the coloring page (ADR 0015), drawn on the GPU as one MapLibre
+ * custom layer right above the basemap: the streets you walked colored in, each in its own crayon,
+ * their houses hatched in, his trail, and the canal colored as he passes it, all as the design
+ * draws them (see shaders.ts). The page itself prints in full ink everywhere.
  */
 export class FogLayer implements CustomLayerInterface {
   readonly id = 'wl-fog';
@@ -58,187 +101,318 @@ export class FogLayer implements CustomLayerInterface {
 
   private map: MlMap | null = null;
   private origin: Origin | null = null;
+  /** Local units a unit of the design: its scale is KC CSS px a unit at the walk zoom. */
+  private readonly u = (KC * EARTH_CIRCUMFERENCE_M) / (512 * 2 ** CONFIG.walkZoom);
   private pieces: PieceRec[] = [];
   private houses: HouseRec[] = [];
+  /** The walk in progress: [aLon, aLat, bLon, bLat, crayon, ...]. */
+  private steps: number[] = [];
+  /** Water polygons seen so far, as lon/lat rings, by feature. */
+  private water = new Map<string, number[][]>();
+  private waterDirty = true;
+  private nextWaterScan = 0;
+
   private segs = new GrowBuffer((n) => new Float32Array(n), SEG_FLOATS * 4096);
-  private hverts = new GrowBuffer((n) => new Float32Array(n), HOUSE_FLOATS * 4096);
-  private hidx = new GrowBuffer((n) => new Uint32Array(n), 8192);
-  private lantern: Lantern | null = null;
-  private animUntil = 0;
-  /** Until when the masks animate (an unlock wave, a house fading in); the rest is in `render`. */
-  private maskUntil = 0;
-  /** Bumped by every change of what goes into the masks, so a frame that changes nothing skips them. */
+  private fill = mesh();
+  private ribs = mesh();
+  private trail = mesh();
+  /** The canal's zigzag, three strokes (four turns, local units) an instance. */
+  private canal = new GrowBuffer((n) => new Float32Array(n), ZIG_FLOATS * 2048);
+  private lakes = mesh();
+  private run: Run | null = null;
+  private trailRng = rng(24);
+  private canalRng = rng(23);
+  /** Your pace (m/s on the page clock), from your steps, and when the last one came. */
+  private mps = 1.4;
+  private stepT = 0;
+  /** With reduced motion, the crayon colors everything in place, at once. */
+  private reduced = matchMedia('(prefers-reduced-motion: reduce)');
+
+  /** Until when something colors in fast (the frame loop draws every frame), and at all. */
+  private fastUntil = 0;
+  private paintUntil = 0;
+  /** Bumped by every change of what goes into the paint, so a frame that changes nothing skips it. */
   private version = 0;
   private memo = new MaskMemo();
-  private still: MaskInputs = {
-    version: 0, t: 0, animUntil: 0, mvp: [], ws: 0, w: 0, h: 0, light: null, probeX: 0, probeY: 0,
-  };
-  private stillLight: MaskLight = { x: 0, y: 0, heading: null, cone: 0 };
+  private still: MaskInputs = { version: 0, t: 0, animUntil: 0, mvp: [], ws: 0, w: 0, h: 0, probeX: 0, probeY: 0 };
   private broken = false;
-  /** Walls around you, for the shadows of your light. */
-  readonly shadows = new ShadowCaster();
-  /** The seen memory, as textures; and the houses you have seen. */
-  readonly seen = new SeenTextures();
-  readonly moon = new MoonHouses();
 
   // GL state, created lazily inside prerender (MapLibre resets its state cache right after).
   private gl: WebGL2RenderingContext | null = null;
-  private progs: Record<'seg' | 'houseMask' | 'lamp' | 'house' | 'comp', Program> | null = null;
-  private vaoSeg: WebGLVertexArrayObject | null = null;
-  private vaoHouse: WebGLVertexArrayObject | null = null;
-  private vaoQuad: WebGLVertexArrayObject | null = null;
-  private vaoTri: WebGLVertexArrayObject | null = null;
-  private maskTex: WebGLTexture | null = null;
-  private maskFbo: WebGLFramebuffer | null = null;
-  private maskW = 0;
-  private maskH = 0;
-  /** Same size as the mask: the seen memory in view, R = 0..1. */
-  private seenTex: WebGLTexture | null = null;
-  /** The seen mask holds nothing (cleared, and nothing drawn since). */
-  private seenClear = false;
-  private seenFbo: WebGLFramebuffer | null = null;
-  private noiseTex: WebGLTexture | null = null;
+  private progs: Record<'street' | 'house' | 'ribbon' | 'zigzag' | 'water' | 'pencil', Program> | null = null;
+  private vao: Record<'street' | 'house' | 'ribs' | 'trail' | 'zigzag' | 'water' | 'tri', WebGLVertexArrayObject> | null = null;
+  private toothTex: WebGLTexture | null = null;
+  /** The canvas' size, so the scribble stays crisp: what the crayons absorb, RGB, and how covered, A. */
+  private paintTex: WebGLTexture | null = null;
+  private paintFbo: WebGLFramebuffer | null = null;
+  private stencil: WebGLRenderbuffer | null = null;
+  private paintW = 0;
+  private paintH = 0;
 
-  /** `masks`: frames that drew the masks; `kept`: frames that kept them, as nothing had changed. */
+  /** `masks`: frames that painted the crayon; `kept`: frames that kept it, as nothing had changed. */
   readonly stats = { segments: 0, houses: 0, frames: 0, masks: 0, kept: 0 };
-  private col: Record<'fill' | 'warm' | 'pale' | 'fog' | 'mist' | 'rim' | 'lamp' | 'beam' | 'flash' | 'street' | 'moon', [number, number, number]>;
+  /** The crayons for the u_crayons array: the box's lay colors, their press colors, the water. */
+  private crayons: Float32Array;
 
   constructor(private theme: Theme) {
-    const f = theme.fog, h = theme.house;
-    this.col = {
-      fill: hex3(h.fill), warm: hex3(h.windowWarm), pale: hex3(h.windowPale),
-      fog: hex3(f.color), mist: hex3(f.mist), rim: hex3(f.rim), lamp: hex3(f.lamp), beam: hex3(f.beam), flash: hex3(f.flash), street: hex3(f.street),
-      moon: hex3(theme.seen.moon),
-    };
+    const box = theme.pencils;
+    this.crayons = new Float32Array([...box.flatMap((p) => hex3(p.lay)), ...box.flatMap((p) => hex3(p.press)), ...hex3(WATER)]);
   }
 
   // ---- Data ----
 
-  /** A lit street piece; with a sweep it lights up as a wave from where you stood. */
-  addPiece(coords: ArrayLike<number>, kind: 'road' | 'path' | 'side', sweep: Sweep | null = null): void {
+  /**
+   * A walked street piece, in its crayon, `offsetM` along its block; with a sweep (`sweep()`) it
+   * colors in as you walk it, without one it is there at once.
+   */
+  addPiece(piece: FogPiece, sweep: Sweep | null = null, offsetM = 0): void {
+    const { coords } = piece;
     if (coords.length < 4) return;
-    const rec: PieceRec = { coords, kind: kind === 'road' ? KIND_ROAD : KIND_PATH, sweep };
+    if (this.reduced.matches) sweep = null;
+    const pen = this.theme.pencil;
+    const rec: PieceRec = {
+      coords, sweep, offsetM, tone: pencilOf(pencilKey(piece), this.theme.pencils.length),
+      width: piece.kind === 'road' ? (pen.width[piece.hw] ?? pen.road) : pen.path,
+    };
     this.pieces.push(rec);
     if (!this.origin) this.setOrigin(coords[0], coords[1]);
     this.pushPiece(rec);
     if (sweep) {
-      const end = sweep.offsetM + polylineLengthM(coords);
-      const reach = Math.max(Math.abs(sweep.offsetM - sweep.fromM), Math.abs(end - sweep.fromM));
-      const until = sweep.t0 + reach / this.theme.fog.sweepMps + 3;
-      this.animUntil = Math.max(this.animUntil, until);
-      this.maskUntil = Math.max(this.maskUntil, until);
+      const len = polylineLengthM(coords);
+      const far = Math.abs(offsetM - sweep.fromM) > Math.abs(offsetM + len - sweep.fromM) ? offsetM : offsetM + len;
+      this.paintUntil = Math.max(this.paintUntil, sweepTime(sweep, far, this.catchMps) + 0.1);
+      // Up to you it is fast; then it goes at your pace.
+      this.fastUntil = Math.max(this.fastUntil, Math.min(sweepTime(sweep, far, this.catchMps), sweep.t0 + sweep.headM / this.catchMps) + 0.1);
     }
-    this.version++;
-    this.map?.triggerRepaint();
+    this.changed();
   }
 
-  /** A lit house; its windows come on at page time `tOn` (or at once for houses lit long ago). */
-  addHouse(house: HouseRec['house'], tOn: number): void {
-    const rec: HouseRec = { house, tOn };
+  /**
+   * A walked house; it hatches in from page time `tOn` (at once for houses walked long ago). Some
+   * take the crayon of `street`, the pencilKey of the street that colored it in, and the rest one
+   * of their own, as a child colors a page.
+   */
+  addHouse(house: HouseRec['house'], tOn: number, street?: string): void {
+    if (this.reduced.matches) tOn = LONG_AGO;
+    const n = this.theme.pencils.length;
+    const match = street !== undefined && pencilOf(`match ${house.id}`, 100) < this.theme.pencil.houseMatch * 100;
+    const rec: HouseRec = { house, tOn, tone: pencilOf(match ? street : `house ${house.id}`, n) };
     this.houses.push(rec);
     if (!this.origin) this.setOrigin(house.coords[0], house.coords[1]);
     this.pushHouse(rec);
-    this.animUntil = Math.max(this.animUntil, tOn + 3);
-    // Its footprint clears the fog over 0.6 s; the windows after that are drawn in `render`.
-    this.maskUntil = Math.max(this.maskUntil, tOn + 0.7);
-    this.version++;
-    this.map?.triggerRepaint();
+    this.fastUntil = Math.max(this.fastUntil, tOn + 0.35);
+    this.paintUntil = Math.max(this.paintUntil, tOn + 0.35);
+    this.changed();
   }
 
-  clear(): void {
-    this.pieces = [];
-    this.houses = [];
-    this.segs.clear();
-    this.hverts.clear();
-    this.hidx.clear();
-    this.stats.segments = this.stats.houses = 0;
-    this.version++;
-    this.map?.triggerRepaint();
+  /**
+   * How a street lit now colors in (`line`: its block's, or its own): from the end you walked in
+   * from on your last step (the last of `steps`, the walk's [aLon, aLat, bLon, bLat, radius, ...]),
+   * up to you and on at your pace. Null when that step is not on it: it is there at once.
+   */
+  sweep(line: ArrayLike<number>, steps: ArrayLike<number>): Sweep | null {
+    const n = steps.length;
+    if (n < 5) return null;
+    const a = projectOnPolylineM(steps[n - 5], steps[n - 4], line);
+    const b = projectOnPolylineM(steps[n - 3], steps[n - 2], line);
+    if (b.distM > ON_STREET_M) return null;
+    const fromM = b.alongM >= a.alongM ? 0 : polylineLengthM(line);
+    return { fromM, headM: Math.abs(b.alongM - fromM), mps: this.mps, t0: pageTime() };
   }
 
-  /** The walls around you: your light stops at them. */
-  setOccluders(occ: Occluders | null): void {
-    this.shadows.setOccluders(occ);
-    this.version++;
-    this.map?.triggerRepaint();
+  /** Page time a sweep colors in up to the spot (lon, lat) beside its `line`: now, without one. */
+  reach(sweep: Sweep | null, line: ArrayLike<number>, lon: number, lat: number): number {
+    return sweep ? sweepTime(sweep, projectOnPolylineM(lon, lat, line).alongM, this.catchMps) : pageTime();
   }
 
-  /** A tile of the seen memory that is new or changed. */
-  setSeenTile(tile: SeenTile): void {
-    this.seen.set(tile);
-    this.version++;
-    this.map?.triggerRepaint();
+  /**
+   * A step of the walk in progress, from a to b, on the street with crayon `tone`: his trail goes
+   * on in its press color, and the canal beside him colors in. Steps replayed at once (a reload
+   * mid-walk) leave his pace as it was.
+   */
+  walkTo(aLon: number, aLat: number, bLon: number, bLat: number, tone: number): void {
+    const t = pageTime(), dt = t - this.stepT;
+    const mps = Math.min(40, Math.max(0.3, distanceM(aLon, aLat, bLon, bLat) / dt));
+    if (dt > 0.05 && dt < 10) this.mps = this.stepT ? this.mps * 0.6 + mps * 0.4 : mps;
+    this.stepT = t;
+    this.steps.push(aLon, aLat, bLon, bLat, tone);
+    const o = this.origin;
+    if (!o || distanceM(o.lon, o.lat, bLon, bLat) > REBASE_M) this.setOrigin(bLon, bLat);
+    else this.pushStep(this.steps.length - 5);
+    this.changed();
   }
 
-  /** A house you have just seen (or saw on an earlier walk: `tOn` long ago). */
-  addSeenHouse(house: { id: string; coords: ArrayLike<number>; holes?: ArrayLike<number>[] }, tOn: number): void {
-    this.moon.add(house, tOn);
-    this.animUntil = Math.max(this.animUntil, tOn + 1.2);
-    this.map?.triggerRepaint();
+  /** A new walk: the last one's trail goes. */
+  clearWalk(): void {
+    this.steps = [];
+    this.trail.v.clear();
+    this.trail.i.clear();
+    this.canal.clear();
+    this.run = null;
+    this.trailRng = rng(24);
+    this.canalRng = rng(23);
+    this.stepT = 0;
+    this.changed();
   }
 
-  /** A seen house that has just lit up gold: it is drawn as a lit house from now on. */
-  removeSeenHouse(id: string): void {
-    this.moon.remove(id);
+  /** The walk is over: whatever still colors in is there at once. */
+  finish(): void {
+    for (const p of this.pieces) p.sweep = null;
+    for (const h of this.houses) h.tOn = LONG_AGO;
+    this.fastUntil = this.paintUntil = 0;
+    if (this.origin) this.setOrigin(this.origin.lon, this.origin.lat);
+    this.changed();
   }
 
-  setLantern(l: Lantern | null): void {
-    this.lantern = l;
-    if (l && this.origin) {
-      const dx = (l.lon - this.origin.lon) * 111_320 * Math.cos((l.lat * Math.PI) / 180);
-      const dy = (l.lat - this.origin.lat) * 110_540;
-      if (Math.hypot(dx, dy) > REBASE_M) this.setOrigin(l.lon, l.lat);
-    } else if (l && !this.origin) this.setOrigin(l.lon, l.lat);
-  }
-
-  /** Is an unlock wave or a house's windows still animating? */
+  /** Is a street or a house coloring in fast? */
   animating(now = pageTime()): boolean {
-    return now < this.animUntil;
+    return now < this.fastUntil;
+  }
+
+  private get catchMps(): number {
+    return this.theme.fog.sweepMps;
+  }
+
+  private changed(): void {
+    this.version++;
+    this.map?.triggerRepaint();
   }
 
   private pushPiece(r: PieceRec): void {
     const tmp: number[] = [];
-    pushPiece(tmp, this.origin!, r.coords, r.kind, r.sweep);
+    pushPiece(tmp, this.origin!, r.coords, r.width, r.sweep, r.offsetM, r.tone);
     this.segs.push(tmp);
     this.stats.segments = this.segs.length / SEG_FLOATS;
   }
 
   private pushHouse(r: HouseRec): void {
-    const v: number[] = [], idx: number[] = [], seg: number[] = [];
-    // Indices are absolute: offset them by the vertices already stored.
-    const base = this.hverts.length / HOUSE_FLOATS;
-    if (!pushHouse(v, idx, seg, this.origin!, r.house, houseSeed(r.house.id), r.tOn)) return;
-    this.hverts.push(v);
-    this.hidx.push(idx.map((i) => i + base));
-    this.segs.push(seg);
+    const fill: Mesh = { v: [], i: [] }, rib: Mesh = { v: [], i: [] };
+    if (!pushHouse(fill, rib, this.origin!, this.u, r.house, r.tOn, r.tone)) return;
+    append(this.fill, fill, HOUSE_FLOATS);
+    append(this.ribs, rib, RIB_FLOATS);
     this.stats.houses++;
-    this.stats.segments = this.segs.length / SEG_FLOATS;
+  }
+
+  /** Step i of the walk: his trail every 1.3 units with a slight wobble, the canal's zigzag every 1.05. */
+  private pushStep(i: number): void {
+    const o = this.origin!, s = this.steps, u = this.u;
+    const ax = localX(o, s[i]), ay = localY(o, s[i + 1]), bx = localX(o, s[i + 2]), by = localY(o, s[i + 3]);
+    const tone = this.theme.pencils.length + s[i + 4];
+    let r = this.run;
+    if (!r || Math.hypot(ax - r.x, ay - r.y) > 0.01) {
+      r = this.run = { x: ax, y: ay, tc: 0, wc: 0, k: 0, zig: [], hx: 0, hy: 0, px: NaN, py: NaN, qx: NaN, qy: NaN, qTone: 0, started: false };
+    }
+    const run = r;
+    const add: Mesh = { v: [], i: [] };
+    run.tc = sample(ax, ay, bx, by, 1.3 * u, run.tc, (x, y, ux, uy) => {
+      const w = (this.trailRng() - 0.5) * 0.3 * u;
+      this.trailPoint(run, add, x - uy * w, y + ux * w, tone);
+    });
+    this.trail.v.push(add.v);
+    this.trail.i.push(add.i);
+    // The zigzag swings across the way he heads over the last ten units or so: across each noisy
+    // GPS step, its 21-unit swings would fan out.
+    const keep = Math.exp(-Math.hypot(bx - ax, by - ay) / (10 * u));
+    run.hx = run.hx * keep + (bx - ax);
+    run.hy = run.hy * keep + (by - ay);
+    const hl = Math.hypot(run.hx, run.hy) || 1, hx = run.hx / hl, hy = run.hy / hl;
+    const zz: number[] = [];
+    run.wc = sample(ax, ay, bx, by, 1.05 * u, run.wc, (x, y) => {
+      const off = (run.k++ & 1 ? 1 : -1) * (21 + (this.canalRng() - 0.5) * 6) * u;
+      run.zig.push(x - hy * off, y + hx * off);
+      if (run.zig.length < ZIG_FLOATS) return;
+      zz.push(...run.zig);
+      run.zig = run.zig.slice(-2);
+    });
+    if (zz.length) this.canal.push(zz);
+    run.x = bx;
+    run.y = by;
+  }
+
+  /** A sample of the trail: the one before it can now be mitred and drawn up to. */
+  private trailPoint(r: Run, add: Mesh, x: number, y: number, tone: number): void {
+    if (!Number.isNaN(r.qx)) {
+      const [mx, my] = miter(r.px, r.py, r.qx, r.qy, x, y);
+      const at = (this.trail.v.length + add.v.length) / RIB_FLOATS;
+      for (const side of [-1, 1]) add.v.push(r.qx, r.qy, mx, my, side, 0.4, 0.85, LONG_AGO, r.qTone);
+      if (r.started) add.i.push(at - 2, at - 1, at, at - 1, at + 1, at);
+      r.started = true;
+    }
+    r.px = r.qx;
+    r.py = r.qy;
+    r.qx = x;
+    r.qy = y;
+    r.qTone = tone;
   }
 
   private setOrigin(lon: number, lat: number): void {
     this.origin = makeOrigin(lon, lat);
     this.segs.clear();
-    this.hverts.clear();
-    this.hidx.clear();
+    for (const m of [this.fill, this.ribs, this.trail, this.lakes]) {
+      m.v.clear();
+      m.i.clear();
+    }
+    this.canal.clear();
     this.stats.houses = 0;
     for (const p of this.pieces) this.pushPiece(p);
     for (const h of this.houses) this.pushHouse(h);
+    this.run = null;
+    this.trailRng = rng(24);
+    this.canalRng = rng(23);
+    for (let i = 0; i < this.steps.length; i += 5) this.pushStep(i);
+    for (const rings of this.water.values()) this.pushWater(rings);
     this.version++;
+  }
+
+  /** Water from the map's own tiles (OpenMapTiles' water layer), for the canal's crayon to stay in. */
+  private scanWater(): void {
+    const map = this.map!;
+    let added = false;
+    for (const f of map.querySourceFeatures('omt', { sourceLayer: 'water' })) {
+      // Tiles of the full detail only (lower ones are coarser), and no water in tunnels.
+      if (f._z < 14 || f.properties.brunnel === 'tunnel') continue;
+      const g = f.geometry;
+      const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+      for (const p of polys) {
+        const rings = p.map((ring) => ring.flat());
+        const key = `${f.id}:${rings[0].slice(0, 2)}:${rings[0].length}`;
+        if (this.water.has(key)) continue;
+        this.water.set(key, rings);
+        this.pushWater(rings);
+        added = true;
+      }
+    }
+    if (added) this.version++;
+  }
+
+  private pushWater(rings: number[][]): void {
+    const o = this.origin!, flat: number[] = [], holes: number[] = [];
+    for (const r of rings) {
+      if (flat.length) holes.push(flat.length / 2);
+      for (let k = 0; k + 1 < r.length; k += 2) flat.push(localX(o, r[k]), localY(o, r[k + 1]));
+    }
+    append(this.lakes, { v: flat, i: earcut(flat, holes.length ? holes : undefined, 2) }, 2);
   }
 
   // ---- MapLibre hooks ----
 
   onAdd(map: MlMap): void {
     this.map = map;
-    const canvas = map.getCanvas();
-    canvas.addEventListener('webglcontextlost', this.onLost);
+    map.getCanvas().addEventListener('webglcontextlost', this.onLost);
+    map.on('sourcedata', this.onSource);
   }
 
   onRemove(map: MlMap): void {
     map.getCanvas().removeEventListener('webglcontextlost', this.onLost);
+    map.off('sourcedata', this.onSource);
     this.map = null;
     this.release();
   }
+
+  /** New tiles may bring water. */
+  private onSource = (e: MapSourceDataEvent) => {
+    if (e.sourceId === 'omt' && e.tile) this.waterDirty = true;
+  };
 
   /** After a lost context every GL object is gone; rebuild them on the next frame. */
   private onLost = () => this.release();
@@ -246,17 +420,16 @@ export class FogLayer implements CustomLayerInterface {
   private release(): void {
     this.gl = null;
     this.progs = null;
-    this.vaoSeg = this.vaoHouse = this.vaoQuad = this.vaoTri = null;
-    this.maskTex = this.maskFbo = this.noiseTex = null;
-    this.seenTex = this.seenFbo = null;
-    this.maskW = this.maskH = 0;
+    this.vao = null;
+    this.toothTex = this.paintTex = this.paintFbo = this.stencil = null;
+    this.paintW = this.paintH = 0;
     this.memo.forget();
-    this.shadows.release();
-    this.seen.release();
-    this.moon.release();
     this.segs.lose();
-    this.hverts.lose();
-    this.hidx.lose();
+    this.canal.lose();
+    for (const m of [this.fill, this.ribs, this.trail, this.lakes]) {
+      m.v.lose();
+      m.i.lose();
+    }
   }
 
   private ensure(gl: WebGL2RenderingContext): boolean {
@@ -266,8 +439,8 @@ export class FogLayer implements CustomLayerInterface {
       this.init(gl);
       return true;
     } catch (e) {
-      // Without the fog the map still works: say why once, then keep out of the way.
-      console.error('Mr Sparkles: fog disabled', e);
+      // Without the crayon the map still works: say why once, then keep out of the way.
+      console.error('Mr Sparkles: crayon disabled', e);
       this.broken = true;
       return false;
     }
@@ -275,12 +448,14 @@ export class FogLayer implements CustomLayerInterface {
 
   private init(gl: WebGL2RenderingContext): void {
     this.gl = gl;
+    const n = this.theme.pencils.length;
     this.progs = {
-      seg: program(gl, S.SEG_VS, S.SEG_FS, ['a_corner', 'i_ab', 'i_along', 'i_sweep', 'i_kind']),
-      houseMask: program(gl, S.HOUSE_MASK_VS, S.HOUSE_MASK_FS, ['a_pos', 'a_frame', 'a_house']),
-      lamp: program(gl, S.LAMP_VS, S.LAMP_FS, ['a_corner']),
-      house: program(gl, S.HOUSE_VS, S.HOUSE_FS, ['a_pos', 'a_frame', 'a_house']),
-      comp: program(gl, S.COMP_VS, S.COMP_FS, ['a_corner']),
+      street: program(gl, S.STREET_VS, S.STREET_FS(n), ['a_corner', 'i_ab', 'i_along', 'i_sweep', 'i_wt']),
+      house: program(gl, S.HOUSE_VS, S.HOUSE_FS(n), ['a_pos', 'a_hatch', 'a_house']),
+      ribbon: program(gl, S.RIBBON_VS, S.RIBBON_FS(n), ['a_pos', 'a_miter', 'a_rib', 'a_crayon']),
+      zigzag: program(gl, S.ZIGZAG_VS, S.ZIGZAG_FS, ['a_corner', 'i_a', 'i_b']),
+      water: program(gl, S.WATER_VS, S.WATER_FS, ['a_pos']),
+      pencil: program(gl, S.COMP_VS, S.PENCIL_FS, ['a_corner']),
     };
     const quad = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, quad);
@@ -289,86 +464,59 @@ export class FogLayer implements CustomLayerInterface {
     gl.bindBuffer(gl.ARRAY_BUFFER, tri);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
 
-    this.segs.buffer = gl.createBuffer();
-    this.hverts.buffer = gl.createBuffer();
-    this.hidx.buffer = gl.createBuffer();
-
-    // Street segments: a unit quad per instance.
-    this.vaoSeg = gl.createVertexArray();
-    gl.bindVertexArray(this.vaoSeg);
-    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    this.segs.sync(gl, gl.ARRAY_BUFFER);
-    const st = SEG_FLOATS * 4;
-    const inst: [number, number, number][] = [[1, 4, 0], [2, 2, 16], [3, 2, 24], [4, 1, 32]];
-    for (const [loc, size, off] of inst) {
-      gl.enableVertexAttribArray(loc);
-      gl.vertexAttribPointer(loc, size, gl.FLOAT, false, st, off);
-      gl.vertexAttribDivisor(loc, 1);
-    }
-
-    // Houses: indexed triangles.
-    this.vaoHouse = gl.createVertexArray();
-    gl.bindVertexArray(this.vaoHouse);
-    this.hverts.sync(gl, gl.ARRAY_BUFFER);
-    const hs = HOUSE_FLOATS * 4;
-    for (const [loc, off] of [[0, 0], [1, 8], [2, 16]]) {
-      gl.enableVertexAttribArray(loc);
-      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, hs, off);
-    }
-    this.hidx.sync(gl, gl.ELEMENT_ARRAY_BUFFER);
-
-    this.vaoQuad = gl.createVertexArray();
-    gl.bindVertexArray(this.vaoQuad);
-    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-
-    this.vaoTri = gl.createVertexArray();
-    gl.bindVertexArray(this.vaoTri);
+    /** A VAO over `buf`: attributes [location, size, offset in floats], per instance with a quad, else indexed. */
+    const vao = (buf: GrowBuffer<Float32Array>, stride: number, attrs: number[][], idx?: GrowBuffer<Uint32Array>) => {
+      const v = gl.createVertexArray()!;
+      gl.bindVertexArray(v);
+      if (!idx) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      }
+      buf.sync(gl, gl.ARRAY_BUFFER);
+      for (const [loc, size, off] of attrs) {
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, size, gl.FLOAT, false, stride * 4, off * 4);
+        if (!idx) gl.vertexAttribDivisor(loc, 1);
+      }
+      idx?.sync(gl, gl.ELEMENT_ARRAY_BUFFER);
+      return v;
+    };
+    const rib = [[0, 2, 0], [1, 2, 2], [2, 4, 4], [3, 1, 8]];
+    const fullTri = gl.createVertexArray()!;
+    gl.bindVertexArray(fullTri);
     gl.bindBuffer(gl.ARRAY_BUFFER, tri);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    this.vao = {
+      street: vao(this.segs, SEG_FLOATS, [[1, 4, 0], [2, 2, 4], [3, 4, 6], [4, 2, 10]]),
+      house: vao(this.fill.v, HOUSE_FLOATS, [[0, 2, 0], [1, 2, 2], [2, 3, 4]], this.fill.i),
+      ribs: vao(this.ribs.v, RIB_FLOATS, rib, this.ribs.i),
+      trail: vao(this.trail.v, RIB_FLOATS, rib, this.trail.i),
+      zigzag: vao(this.canal, ZIG_FLOATS, [[1, 4, 0], [2, 4, 4]]),
+      water: vao(this.lakes.v, 2, [[0, 2, 0]], this.lakes.i),
+      tri: fullTri,
+    };
     gl.bindVertexArray(null);
-
-    this.noiseTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, this.noiseTex);
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, NOISE_SIZE, NOISE_SIZE, 0, gl.RED, gl.UNSIGNED_BYTE, makeNoise(NOISE_SIZE));
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
-
-    // Without shadows or the seen memory the fog still works: those parts just stay out.
-    for (const part of [this.shadows, this.seen, this.moon]) {
-      try {
-        part.init(gl);
-      } catch (e) {
-        console.error('Mr Sparkles: part of the fog disabled', e);
-      }
-    }
-    this.seenClear = false;
+    this.toothTex = repeating(gl, TOOTH_SIZE, makeTooth(TOOTH_SIZE));
     this.version++;
   }
 
-  private resizeMask(gl: WebGL2RenderingContext): void {
-    const w = Math.max(1, Math.ceil(gl.drawingBufferWidth / 2));
-    const h = Math.max(1, Math.ceil(gl.drawingBufferHeight / 2));
-    if (w === this.maskW && h === this.maskH && this.maskTex) return;
-    for (const t of [this.maskTex, this.seenTex]) if (t) gl.deleteTexture(t);
-    for (const f of [this.maskFbo, this.seenFbo]) if (f) gl.deleteFramebuffer(f);
-    [this.maskTex, this.maskFbo] = target(gl, w, h, gl.RGBA8, gl.RGBA);
-    // Only one channel: the seen memory.
-    [this.seenTex, this.seenFbo] = target(gl, w, h, gl.R8, gl.RED);
-    this.seenClear = false;
-    this.maskW = w;
-    this.maskH = h;
+  private resize(gl: WebGL2RenderingContext): void {
+    const w = Math.max(1, gl.drawingBufferWidth), h = Math.max(1, gl.drawingBufferHeight);
+    if (w === this.paintW && h === this.paintH && this.paintTex) return;
+    if (this.paintTex) gl.deleteTexture(this.paintTex);
+    if (this.paintFbo) gl.deleteFramebuffer(this.paintFbo);
+    if (this.stencil) gl.deleteRenderbuffer(this.stencil);
+    [this.paintTex, this.paintFbo] = target(gl, w, h);
+    // The water, for the canal's crayon to stay inside.
+    this.stencil = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, this.stencil);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, w, h);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, this.stencil);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+    this.paintW = w;
+    this.paintH = h;
     this.version++;
   }
 
@@ -377,245 +525,199 @@ export class FogLayer implements CustomLayerInterface {
     const map = this.map!;
     const zoom = map.getZoom();
     const ws = 512 * 2 ** zoom;
-    const o = this.origin ?? makeOrigin(map.getCenter().lng, map.getCenter().lat);
+    const o = this.origin!;
     const m64 = localMatrix(opts.modelViewProjectionMatrix, ws, o.ox, o.oy);
-    const cssPxUnits = EARTH_CIRCUMFERENCE_M / ws;
-    return { zoom, ws, o, m64, matrix: new Float32Array(m64), cssPxUnits, dpr: map.getPixelRatio() };
+    // Local units per device pixel.
+    const px = EARTH_CIRCUMFERENCE_M / ws / map.getPixelRatio();
+    return { zoom, o, m64, matrix: new Float32Array(m64), px };
+  }
+
+  /** Anything to draw? */
+  private get empty(): boolean {
+    return !this.origin || (!this.segs.length && !this.fill.i.length && !this.trail.i.length && !this.canal.length);
   }
 
   prerender(gl: WebGL2RenderingContext, opts: CustomRenderMethodInput): void {
-    if (!this.map || !this.ensure(gl)) return;
-    this.resizeMask(gl);
+    if (!this.map || this.empty || !this.ensure(gl)) return;
+    this.resize(gl);
     const t = pageTime();
-    // Standing still, the masks would come out as they are: keep them (and the battery).
+    if (this.waterDirty && this.canal.length && t >= this.nextWaterScan) {
+      this.waterDirty = false;
+      this.nextWaterScan = t + 1;
+      this.scanWater();
+    }
+    // Standing still, the paint would come out as it is: keep it (and the battery).
     const still = this.stillInputs(opts, t);
     if (this.memo.same(still)) {
       this.stats.kept++;
       return;
     }
     this.stats.masks++;
-    const p = this.progs!;
+    const p = this.progs!, vao = this.vao!;
     const f = this.frame(opts);
-    const fog = this.theme.fog;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.maskFbo);
-    gl.viewport(0, 0, this.maskW, this.maskH);
+    const u = this.u, um = u / f.o.m2u;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.paintFbo);
+    gl.viewport(0, 0, this.paintW, this.paintH);
     gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.clearStencil(0);
+    gl.stencilMask(0xff);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
     gl.disable(gl.DEPTH_TEST);
-    gl.disable(gl.STENCIL_TEST);
     gl.disable(gl.CULL_FACE);
     gl.enable(gl.BLEND);
-    gl.blendEquation(gl.MAX);
-    gl.blendFunc(gl.ONE, gl.ONE);
+    // Crayon over crayon multiplies (screen blending of what they absorb).
+    const multiply = () => {
+      gl.blendEquation(gl.FUNC_ADD);
+      gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_COLOR, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    };
+    multiply();
+
+    // The canal: the water into the stencil (off register, as the design's), the zigzag inside it,
+    // its strokes darker where they cross.
+    const nZig = this.canal.length / ZIG_FLOATS, nLake = this.lakes.i.length;
+    if (nZig && nLake) {
+      gl.enable(gl.STENCIL_TEST);
+      gl.stencilFunc(gl.ALWAYS, 1, 0xff);
+      gl.stencilOp(gl.KEEP, gl.KEEP, gl.REPLACE);
+      gl.colorMask(false, false, false, false);
+      gl.useProgram(p.water.p);
+      gl.bindVertexArray(vao.water);
+      this.lakes.v.sync(gl, gl.ARRAY_BUFFER);
+      this.lakes.i.sync(gl, gl.ELEMENT_ARRAY_BUFFER);
+      gl.uniformMatrix4fv(p.water.u.u_matrix, false, f.matrix);
+      gl.uniform2f(p.water.u.u_shift, 0.6 * u, 0.45 * u);
+      gl.drawElements(gl.TRIANGLES, nLake, gl.UNSIGNED_INT, 0);
+      gl.colorMask(true, true, true, true);
+      gl.stencilFunc(gl.EQUAL, 1, 0xff);
+      gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
+      gl.useProgram(p.zigzag.p);
+      gl.bindVertexArray(vao.zigzag);
+      this.canal.sync(gl, gl.ARRAY_BUFFER);
+      gl.uniformMatrix4fv(p.zigzag.u.u_matrix, false, f.matrix);
+      gl.uniform1f(p.zigzag.u.u_hw, 0.625 * u);
+      gl.uniform1f(p.zigzag.u.u_aa, f.px);
+      gl.uniform3fv(p.zigzag.u.u_absorb, this.crayons.subarray(-3).map((c) => 1 - c));
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nZig);
+      gl.disable(gl.STENCIL_TEST);
+    }
 
     const nSeg = this.segs.length / SEG_FLOATS;
-    if (nSeg > 0) {
-      gl.useProgram(p.seg.p);
-      gl.bindVertexArray(this.vaoSeg);
+    if (nSeg) {
+      // A street must not color itself twice where its segments meet: the darker of two wins.
+      gl.blendEquation(gl.MAX);
+      gl.blendFunc(gl.ONE, gl.ONE);
+      const su = p.street.u;
+      gl.useProgram(p.street.p);
+      gl.bindVertexArray(vao.street);
       this.segs.sync(gl, gl.ARRAY_BUFFER);
-      gl.uniformMatrix4fv(p.seg.u.u_matrix, false, f.matrix);
-      gl.uniform3f(p.seg.u.u_radius, fog.roadM, fog.pathM, fog.houseM);
-      gl.uniform1f(p.seg.u.u_m2u, f.o.m2u);
-      gl.uniform1f(p.seg.u.u_minr, 2.5 * f.cssPxUnits);
-      gl.uniform1f(p.seg.u.u_time, t);
-      gl.uniform1f(p.seg.u.u_speed, fog.sweepMps);
+      gl.uniformMatrix4fv(su.u_matrix, false, f.matrix);
+      gl.uniform1f(su.u_m2u, f.o.m2u);
+      gl.uniform1f(su.u_um, um);
+      gl.uniform1f(su.u_aa, f.px / f.o.m2u);
+      gl.uniform1f(su.u_time, t);
+      gl.uniform1f(su.u_catch, this.catchMps);
+      // The design colors a point or two past his tip.
+      gl.uniform1f(su.u_lead, 1.7 * um);
+      gl.uniform3fv(su.u_crayons, this.crayons);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nSeg);
     }
 
-    const nIdx = this.hidx.length;
-    if (nIdx > 0) {
-      gl.useProgram(p.houseMask.p);
-      gl.bindVertexArray(this.vaoHouse);
-      this.hverts.sync(gl, gl.ARRAY_BUFFER);
-      this.hidx.sync(gl, gl.ELEMENT_ARRAY_BUFFER);
-      gl.uniformMatrix4fv(p.houseMask.u.u_matrix, false, f.matrix);
-      gl.uniform1f(p.houseMask.u.u_time, t);
-      gl.drawElements(gl.TRIANGLES, nIdx, gl.UNSIGNED_INT, 0);
+    multiply();
+    const nFill = this.fill.i.length;
+    if (nFill) {
+      const hu = p.house.u;
+      gl.useProgram(p.house.p);
+      gl.bindVertexArray(vao.house);
+      this.fill.v.sync(gl, gl.ARRAY_BUFFER);
+      this.fill.i.sync(gl, gl.ELEMENT_ARRAY_BUFFER);
+      gl.uniformMatrix4fv(hu.u_matrix, false, f.matrix);
+      gl.uniform1f(hu.u_time, t);
+      gl.uniform1f(hu.u_aa, f.px / u);
+      gl.uniform3fv(hu.u_crayons, this.crayons);
+      gl.drawElements(gl.TRIANGLES, nFill, gl.UNSIGNED_INT, 0);
     }
-
-    const l = this.lantern;
-    if (l) {
-      const x = (mercXOf(l.lon) - f.o.ox) * EARTH_CIRCUMFERENCE_M;
-      const y = (mercYOf(l.lat) - f.o.oy) * EARTH_CIRCUMFERENCE_M;
-      const h = ((l.heading ?? 0) * Math.PI) / 180;
-      gl.useProgram(p.lamp.p);
-      gl.bindVertexArray(this.vaoQuad);
-      gl.uniformMatrix4fv(p.lamp.u.u_matrix, false, f.matrix);
-      gl.uniform2f(p.lamp.u.u_pos, x, y);
-      gl.uniform1f(p.lamp.u.u_extent, Math.max(fog.lanternM, fog.coneM) * f.o.m2u * 1.05);
-      gl.uniform1f(p.lamp.u.u_m2u, f.o.m2u);
-      gl.uniform1f(p.lamp.u.u_lantern, fog.lanternM);
-      gl.uniform1f(p.lamp.u.u_coneLen, fog.coneM);
-      gl.uniform1f(p.lamp.u.u_coneCos, Math.cos((fog.coneHalfDeg * Math.PI) / 180));
-      gl.uniform1f(p.lamp.u.u_coneInnerCos, Math.cos((fog.coneInnerDeg * Math.PI) / 180));
-      gl.uniform2f(p.lamp.u.u_dir, Math.sin(h), -Math.cos(h));
-      gl.uniform1f(p.lamp.u.u_cone, l.heading === null ? 0 : l.cone);
-      gl.uniform1f(p.lamp.u.u_on, 1);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-      // Your light stops at walls: darken it behind every wall that faces you.
-      gl.bindVertexArray(null);
-      const reach = Math.max(fog.lanternM, fog.coneM) * f.o.m2u * 1.05;
-      this.shadows.draw(
-        gl, f.matrix, f.o.ox * EARTH_CIRCUMFERENCE_M, f.o.oy * EARTH_CIRCUMFERENCE_M, this.lightAt(x, y), reach,
-        fog.lampRadiusM * f.o.m2u,
-      );
+    const ru = p.ribbon.u;
+    gl.useProgram(p.ribbon.p);
+    gl.uniformMatrix4fv(ru.u_matrix, false, f.matrix);
+    gl.uniform1f(ru.u_unit, u);
+    gl.uniform1f(ru.u_aa, f.px);
+    gl.uniform1f(ru.u_time, t);
+    gl.uniform3fv(ru.u_crayons, this.crayons);
+    for (const [m, v, grow] of [
+      [this.ribs, vao.ribs, 1],
+      // His trail, drawn wider on a page of the whole walk, as the design's summary.
+      [this.trail, vao.trail, f.zoom < CONFIG.walkZoom - 1 ? 1.7 : 1],
+    ] as const) {
+      if (!m.i.length) continue;
+      gl.bindVertexArray(v);
+      m.v.sync(gl, gl.ARRAY_BUFFER);
+      m.i.sync(gl, gl.ELEMENT_ARRAY_BUFFER);
+      gl.uniform1f(ru.u_grow, grow);
+      gl.drawElements(gl.TRIANGLES, m.i.length, gl.UNSIGNED_INT, 0);
     }
-
-    gl.blendEquation(gl.FUNC_ADD);
     gl.bindVertexArray(null);
-
-    // What you have seen, for the view: its own mask, read by the composite. Zoomed far out it
-    // is a few pixels a tile, not worth a texture each. With nothing to draw, cleared once.
-    const seenOn = f.zoom >= SEEN_MIN_ZOOM && this.seen.stats.tiles > 0;
-    let pending = false;
-    if (seenOn || !this.seenClear) {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.seenFbo);
-      gl.viewport(0, 0, this.maskW, this.maskH);
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      if (seenOn) {
-        gl.disable(gl.BLEND);
-        pending = this.seen.draw(gl, f.matrix, f.o.ox, f.o.oy, this.viewBounds());
-        if (pending) this.map?.triggerRepaint();
-        gl.enable(gl.BLEND);
-      }
-      this.seenClear = !seenOn;
-      gl.bindVertexArray(null);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    }
-    this.memo.drawn(still, pending);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.memo.drawn(still);
   }
 
-  /** What the masks would be drawn from this frame, without allocating. */
+  /** What the paint would be drawn from this frame, without allocating. */
   private stillInputs(opts: CustomRenderMethodInput, t: number): MaskInputs {
-    const s = this.still;
-    const ws = 512 * 2 ** this.map!.getZoom();
+    const s = this.still, map = this.map!;
+    const ws = 512 * 2 ** map.getZoom();
+    const c = map.getCenter();
     s.version = this.version;
     s.t = t;
-    s.animUntil = this.maskUntil;
+    s.animUntil = this.paintUntil;
     s.mvp = opts.modelViewProjectionMatrix;
     s.ws = ws;
-    s.w = this.maskW;
-    s.h = this.maskH;
-    const l = this.lantern;
-    if (l) {
-      const sl = this.stillLight;
-      sl.x = mercXOf(l.lon) * ws;
-      sl.y = mercYOf(l.lat) * ws;
-      sl.heading = l.heading;
-      sl.cone = l.cone;
-      s.light = sl;
-    } else {
-      s.light = null;
-      const c = this.map!.getCenter();
-      s.probeX = mercXOf(c.lng) * ws;
-      s.probeY = mercYOf(c.lat) * ws;
-    }
+    s.w = this.paintW;
+    s.h = this.paintH;
+    s.probeX = ((c.lng + 180) / 360) * ws;
+    s.probeY = mercYOf(c.lat) * ws;
     return s;
   }
 
-  private lightXY = new Float64Array(2);
-  private lightAt(x: number, y: number): Float64Array {
-    this.lightXY[0] = x;
-    this.lightXY[1] = y;
-    return this.lightXY;
-  }
-
-  /** The map's view as WM bounds [west, north, east, south] (x grows east, y south). */
-  private viewBounds(): [number, number, number, number] {
-    const b = this.map!.getBounds();
-    return [
-      mercXOf(b.getWest()) * EARTH_CIRCUMFERENCE_M, mercYOf(b.getNorth()) * EARTH_CIRCUMFERENCE_M,
-      mercXOf(b.getEast()) * EARTH_CIRCUMFERENCE_M, mercYOf(b.getSouth()) * EARTH_CIRCUMFERENCE_M,
-    ];
-  }
-
   render(gl: WebGL2RenderingContext, opts: CustomRenderMethodInput): void {
-    if (!this.map || !this.progs || this.gl !== gl || !this.maskTex || gl.isContextLost()) return;
-    const p = this.progs;
+    if (!this.map || this.empty || !this.progs || this.gl !== gl || !this.paintTex || gl.isContextLost()) return;
     const f = this.frame(opts);
-    const t = pageTime();
-    const th = this.theme;
+    const inv = invert(f.m64);
+    if (!inv) return;
+    const u = this.progs.pencil.u;
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.STENCIL_TEST);
     gl.enable(gl.BLEND);
     gl.blendEquation(gl.FUNC_ADD);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-
-    const mpp = f.cssPxUnits / f.dpr / f.o.m2u;
-    const nIdx = this.hidx.length;
-    if (nIdx > 0) {
-      gl.useProgram(p.house.p);
-      gl.bindVertexArray(this.vaoHouse);
-      gl.uniformMatrix4fv(p.house.u.u_matrix, false, f.matrix);
-      gl.uniform1f(p.house.u.u_time, t);
-      gl.uniform1f(p.house.u.u_mpp, mpp);
-      gl.uniform3fv(p.house.u.u_fill, this.col.fill);
-      gl.uniform3fv(p.house.u.u_warm, this.col.warm);
-      gl.uniform3fv(p.house.u.u_pale, this.col.pale);
-      gl.drawElements(gl.TRIANGLES, nIdx, gl.UNSIGNED_INT, 0);
-    }
-
-    const inv = invert(f.m64);
-    if (inv) {
-      const ndcZ = f.m64[14] / f.m64[15];
-      const roadUnits = th.fog.roadM * f.o.m2u;
-      const core = Math.min(0.985, Math.max(0.86, 1 - (1.5 * f.cssPxUnits) / roadUnits));
-      gl.useProgram(p.comp.p);
-      gl.bindVertexArray(this.vaoTri);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, this.maskTex);
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, this.noiseTex);
-      gl.activeTexture(gl.TEXTURE2);
-      gl.bindTexture(gl.TEXTURE_2D, this.seenTex);
-      const u = p.comp.u;
-      gl.uniform1i(u.u_mask, 0);
-      gl.uniform1i(u.u_noise, 1);
-      gl.uniform1i(u.u_seen, 2);
-      gl.uniform1f(u.u_seenClear, th.seen.clear);
-      gl.uniform1f(u.u_seenTint, th.seen.tint);
-      gl.uniform3fv(u.u_moon, this.col.moon);
-      gl.uniformMatrix4fv(u.u_inv, false, new Float32Array(inv));
-      gl.uniform1f(u.u_ndcZ, ndcZ);
-      gl.uniform1f(u.u_time, t);
-      gl.uniform1f(u.u_noiseScale, 1 / (700 * f.o.m2u));
-      gl.uniform1f(u.u_mistAmt, smooth(12.5, 15, f.zoom));
-      gl.uniform1f(u.u_opacity, th.fog.opacity);
-      gl.uniform1f(u.u_core, f.zoom < 14 ? 2 : core);
-      const c = this.col;
-      gl.uniform3fv(u.u_fog, c.fog);
-      gl.uniform3fv(u.u_mist, c.mist);
-      gl.uniform3fv(u.u_rim, c.rim);
-      gl.uniform3fv(u.u_lamp, c.lamp);
-      gl.uniform3fv(u.u_beam, c.beam);
-      gl.uniform3fv(u.u_flash, c.flash);
-      gl.uniform3fv(u.u_street, c.street);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      gl.activeTexture(gl.TEXTURE2);
-      gl.bindTexture(gl.TEXTURE_2D, null);
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, null);
-      gl.activeTexture(gl.TEXTURE0);
-    }
-    gl.bindVertexArray(null);
-
-    // Houses you have seen stand out of the fog in moonlight; walls facing your light glow.
-    this.moon.draw(gl, f.matrix, f.o.ox, f.o.oy, t, f.cssPxUnits, f.dpr, this.maskTex);
+    // The crayon, multiplied over the paper and the ink: lines stay black under it.
+    gl.useProgram(this.progs.pencil.p);
+    gl.bindVertexArray(this.vao!.tri);
+    gl.blendFuncSeparate(gl.DST_COLOR, gl.ZERO, gl.ZERO, gl.ONE);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.toothTex);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.paintTex);
+    gl.uniform1i(u.u_paint, 0);
+    gl.uniform1i(u.u_tooth, 1);
+    gl.uniformMatrix4fv(u.u_inv, false, new Float32Array(inv));
+    gl.uniform1f(u.u_ndcZ, f.m64[14] / f.m64[15]);
+    gl.uniform1f(u.u_pxUnits, f.px);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.bindVertexArray(null);
     this.stats.frames++;
   }
 }
 
-/** A render target with linear filtering. */
-function target(
-  gl: WebGL2RenderingContext, w: number, h: number, internal: number, format: number,
-): [WebGLTexture, WebGLFramebuffer] {
+/** A render target with linear filtering, bound. */
+function target(gl: WebGL2RenderingContext, w: number, h: number): [WebGLTexture, WebGLFramebuffer] {
   const tex = gl.createTexture()!;
   gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, format, gl.UNSIGNED_BYTE, null);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -626,51 +728,52 @@ function target(
   return [tex, fbo];
 }
 
-const mercXOf = (lon: number) => (lon + 180) / 360;
 function mercYOf(lat: number): number {
   const s = Math.sin((lat * Math.PI) / 180);
   return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI);
 }
 
-function smooth(a: number, b: number, x: number): number {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
+/** A tiled R8 texture, one texel a pixel: no filtering. */
+function repeating(gl: WebGL2RenderingContext, n: number, data: Uint8Array): WebGLTexture {
+  const tex = gl.createTexture()!;
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, n, n, 0, gl.RED, gl.UNSIGNED_BYTE, data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+  return tex;
 }
 
-/** Tileable soft noise: white noise blurred with wrap-around, two octaves. */
-export function makeNoise(n: number): Uint8Array {
-  let seed = 1234567;
-  const rnd = () => {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    return seed / 0x7fffffff;
+/**
+ * The paper's tooth, as the coloring book design draws it: a seamless n×n mask, 1 where the wax
+ * takes and 0 in the tiny pits it skips, so about a quarter of the paper shows through.
+ */
+export function makeTooth(n: number): Uint8Array {
+  // xorshift32, seeded as the design's rng(7).
+  const r = rng(7);
+  const lattice = (p: number) => Float32Array.from({ length: p * p }, r);
+  const l1 = lattice(64), l2 = lattice(128), l3 = lattice(32);
+  // Value noise on a p×p lattice that wraps, so the tile does too.
+  const at = (l: Float32Array, p: number, x: number, y: number) => {
+    const fx = (x * p) / n, fy = (y * p) / n, ix = Math.floor(fx), iy = Math.floor(fy);
+    const tx = fx - ix, ty = fy - iy, sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+    const x0 = ix % p, y0 = iy % p, x1 = (x0 + 1) % p, y1 = (y0 + 1) % p;
+    const a = l[y0 * p + x0] + (l[y0 * p + x1] - l[y0 * p + x0]) * sx;
+    const b = l[y1 * p + x0] + (l[y1 * p + x1] - l[y1 * p + x0]) * sx;
+    return a + (b - a) * sy;
   };
-  // Box blur with wrap-around (so the texture tiles), as a running sum: O(n²) per pass.
-  const pass = (src: Float32Array, r: number, at: (line: number, i: number) => number): Float32Array => {
-    const out = new Float32Array(n * n);
-    const w = 2 * r + 1;
-    for (let line = 0; line < n; line++) {
-      let s = 0;
-      for (let k = -r; k <= r; k++) s += src[at(line, (k + n) % n)];
-      for (let i = 0; i < n; i++) {
-        out[at(line, i)] = s / w;
-        s += src[at(line, (i + r + 1) % n)] - src[at(line, (i - r + n) % n)];
-      }
-    }
-    return out;
-  };
-  const blur = (src: Float32Array, r: number) =>
-    pass(pass(src, r, (y, x) => y * n + x), r, (x, y) => y * n + x);
-  const white = new Float32Array(n * n).map(() => rnd());
-  const big = blur(blur(white, 9), 9);
-  const small = blur(blur(white.map(() => rnd()), 3), 3);
-  const mix = new Float32Array(n * n);
-  let lo = Infinity, hi = -Infinity;
-  for (let i = 0; i < mix.length; i++) {
-    mix[i] = big[i] * 0.7 + small[i] * 0.3;
-    if (mix[i] < lo) lo = mix[i];
-    if (mix[i] > hi) hi = mix[i];
-  }
   const out = new Uint8Array(n * n);
-  for (let i = 0; i < mix.length; i++) out[i] = Math.round(((mix[i] - lo) / (hi - lo || 1)) * 255);
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const v = 0.5 * at(l1, 64, x, y) + 0.32 * at(l2, 128, x, y) + 0.18 * r();
+      const wax = v > 0.64 ? 0 : v > 0.58 ? (0.64 - v) / 0.06 : 1;
+      out[y * n + x] = Math.round(wax * (0.8 + 0.2 * at(l3, 32, x, y)) * 255);
+    }
+  }
   return out;
 }

@@ -1,35 +1,22 @@
-import { distanceParts, estimateSteps, formatDurationWords, formatSteps } from '../core/stats';
-import type { WalkRecord } from '../core/types';
-import { newOnMap } from './summaryText';
-
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const html = document.documentElement;
+const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
 
 export interface Lifetime {
   streets: number;
   km: string;
 }
 
-/** What a finished walk added, for the summary. */
-export interface WalkSummary {
-  walk: WalkRecord;
-  newHouses: number;
-}
-
 /**
- * The one screen besides the map: a question, one line on Mr Sparkles, and Start, over your map or,
- * before your first walk, over Mr Sparkles in the fog. Its markup and that scene live in index.html
- * so they paint before any script loads; this drives the screen once the app is up.
- * After a walk it shows, over the map, how far you went and what the walk lit.
+ * The cover: the start screen, a coloring book's yellow cover with Start (ADR 0015). Its markup and
+ * art live in index.html so they paint before any script loads; this drives it once the app is up.
+ * Hiding it turns it like a book page onto the map drawn under it; showing it turns it back.
  */
 export class Splash {
   private go = byId<HTMLButtonElement>('wl-go');
   private msg = byId('wl-msg');
   private stats = byId('wl-stats');
-  private card = document.querySelector('.wl-card') as HTMLElement;
-  private sum = document.querySelector('.wl-sum') as HTMLElement;
-
-  constructor(private sim: boolean) {}
+  private page = byId('wl-page');
 
   onStart(fn: () => void): void {
     this.go.addEventListener('click', fn);
@@ -40,18 +27,20 @@ export class Splash {
   }
 
   show(): void {
+    const back = !this.visible;
     html.classList.remove('wl-walking');
+    themeColor?.setAttribute('content', '#ffd23f');
     this.busy(false);
+    // Turned back from a walk: focus goes to Start, as a new screen's does.
+    if (back) this.go.focus({ preventScroll: true });
   }
 
   hide(): void {
     html.classList.add('wl-walking');
+    themeColor?.setAttribute('content', '#fffefb');
+    // The page turns with Start's label on it, as it was tapped.
+    this.busy(false);
     (document.activeElement as HTMLElement | null)?.blur?.();
-  }
-
-  /** The map is drawn behind the screen (there is somewhere to show). */
-  overMap(on: boolean): void {
-    html.classList.toggle('wl-has-map', on);
   }
 
   busy(on: boolean): void {
@@ -70,35 +59,12 @@ export class Splash {
       this.stats.hidden = true;
       return;
     }
-    this.stats.innerHTML = `<b>${l.streets}</b> street${l.streets === 1 ? '' : 's'} lit · <b>${l.km}</b> km walked`;
+    this.stats.innerHTML = `<b>${l.streets}</b> street${l.streets === 1 ? '' : 's'} colored in · <b>${l.km}</b> km walked`;
     this.stats.hidden = false;
   }
 
-  /** Back to the first screen. */
+  /** Back to the cover from its first line, before show(). */
   intro(): void {
-    this.card.classList.remove('wl-summary');
-    this.go.textContent = this.sim ? 'Start the demo walk' : 'Start walking';
-  }
-
-  /** How far the walk that just ended went, and what it lit. */
-  summary({ walk, newHouses }: WalkSummary): void {
-    const d = distanceParts(walk.distanceM);
-    byId('wl-sum-dist').textContent = d.value;
-    byId('wl-sum-unit').textContent = d.unit;
-    const steps = estimateSteps(walk.distanceM);
-    byId('wl-sum-sub').textContent =
-      `${formatDurationWords(walk.durationMs)} · ${formatSteps(steps)} step${steps === 1 ? '' : 's'}`;
-    const lit = newOnMap(walk, newHouses);
-    const names = byId('wl-sum-names');
-    names.textContent = lit.names ?? '';
-    names.hidden = !lit.names;
-    names.toggleAttribute('data-long', lit.long);
-    const more = byId('wl-sum-more');
-    more.textContent = lit.more;
-    more.hidden = !lit.more;
-    byId('wl-sum-label').hidden = lit.empty;
-    this.sum.toggleAttribute('data-empty', lit.empty);
-    this.card.classList.add('wl-summary');
-    this.go.textContent = 'Walk again';
+    this.page.scrollTop = 0;
   }
 }

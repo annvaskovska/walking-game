@@ -18,7 +18,7 @@ describe('formatting', () => {
     expect(formatDistance(420)).toBe('420 m');
     expect(formatDistance(2345)).toBe('2.35 km');
     expect(formatDistance(12_345)).toBe('12.3 km');
-    expect(formatDuration(65_000)).toBe('01:05');
+    expect(formatDuration(65_000)).toBe('1:05');
     expect(formatDuration(3_725_000)).toBe('1:02:05');
     expect(formatSteps(12_480)).toBe('12,480');
   });

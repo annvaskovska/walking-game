@@ -60,20 +60,20 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Mr Sparkles lights up the streets you walk, so it needs to know where you are, also while your screen is locked during a walk. Your location never leaves this iPhone.</string>
+	<string>Mr Sparkles colors in the streets you walk, so it needs to know where you are, also while your screen is locked during a walk. Your location never leaves this iPhone.</string>
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
 	<dict>
 		<key>WalkStreets</key>
-		<string>Precise location tells one street from the next, so the right streets light up on this walk.</string>
+		<string>Precise location tells one street from the next, so the right streets color in on this walk.</string>
 	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
 	</array>
 	<key>UIUserInterfaceStyle</key>
-	<string>Dark</string>
+	<string>Light</string>
 	<key>UIStatusBarStyle</key>
-	<string>UIStatusBarStyleLightContent</string>
+	<string>UIStatusBarStyleDarkContent</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>

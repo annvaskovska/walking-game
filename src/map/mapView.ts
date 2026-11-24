@@ -1,16 +1,15 @@
 import { Map as MlMap, addProtocol, prewarm, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
-import type { Feature, LineString, Point } from 'geojson';
+import type { Feature, Point } from 'geojson';
 import type { SeenPlace } from '../core/types';
 import type { TileSource } from '../data/tiles';
-import type { Theme } from '../theme';
+import { pencilOf, type Theme } from '../theme';
 import { FollowCamera } from './camera';
 import { FogLayer } from './fog/fogLayer';
+import { HATCHINGS, iconKind, inkImages, picId } from './ink';
+import type { NameFeature } from './names';
 import { PuckLayer } from './puckLayer';
-import {
-  ABOVE_FOG_LAYER, LANDMARK_DOT, MOON_NAMES_LAYER, NAMES_SOURCE, SEEN_PLACES_SOURCE, TILE_PROTOCOL,
-  buildStyle, moonNamesFilter,
-} from './style';
+import { ABOVE_FOG_LAYER, NAMES_SOURCE, SEEN_PLACES_SOURCE, TILE_PROTOCOL, buildStyle } from './style';
 
 setWorkerUrl(workerUrl);
 // Start MapLibre's workers while the start screen is up, not when you tap Start.
@@ -24,34 +23,11 @@ export interface MapStart {
   zoom: number;
 }
 
-export type NameFeature = Feature<LineString, { n: string }>;
-type PlaceFeature = Feature<Point, { name: string; cls: string; rank: number }>;
+type PlaceFeature = Feature<Point, { icon: string; kind: string; rank: number }>;
 
 /**
- * The landmark dot: a pale core in a dark ring, so it reads on the fog and on a lit street alike.
- * Drawn here at 2x rather than taken from a sprite, which would be one more download.
- */
-function landmarkDot(t: Theme): ImageData {
-  const size = 14;
-  const ctx = document.createElement('canvas').getContext('2d')!;
-  ctx.canvas.width = ctx.canvas.height = size;
-  const c = size / 2;
-  ctx.fillStyle = t.map.landmarkHalo;
-  ctx.globalAlpha = 0.8;
-  ctx.beginPath();
-  ctx.arc(c, c, c, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = t.map.landmark;
-  ctx.globalAlpha = 1;
-  ctx.beginPath();
-  ctx.arc(c, c, 3.5, 0, Math.PI * 2);
-  ctx.fill();
-  return ctx.getImageData(0, 0, size, size);
-}
-
-/**
- * The map: the night basemap, the fog with everything you lit, the gold names of your streets
- * and you, all in one WebGL canvas. Tiles come from the shared TileSource through a custom
+ * The map: the printed coloring page of the city, the crayon of everything you colored in, the
+ * names of your streets in their crayons and you, all in one WebGL canvas. Tiles come from the shared TileSource through a custom
  * protocol; until a position is known none are downloaded.
  */
 export class MapView {
@@ -64,9 +40,6 @@ export class MapView {
   private loaded = false;
   private pendingNames: NameFeature[] | null = null;
   private pendingPlaces: SeenPlace[] | null = null;
-  /** Lit street names the moon names leave out, as a key (sorted, joined) and as given. */
-  private litKey = '';
-  private litNames: string[] = [];
 
   constructor(container: HTMLElement, theme: Theme, tiles: TileSource, start: MapStart | null) {
     this.armed = !!start;
@@ -84,7 +57,7 @@ export class MapView {
       zoom: start?.zoom ?? 11,
       minZoom: 11,
       maxZoom: 19,
-      // Three device pixels per CSS pixel cost 2.25x the fill of two and look the same under fog.
+      // Three device pixels per CSS pixel cost 2.25x the fill of two and look much the same on paper.
       pixelRatio: Math.min(2, window.devicePixelRatio || 1),
       fadeDuration: 200,
       validateStyle: false,
@@ -111,11 +84,10 @@ export class MapView {
       this.map.once('style.load', () => {
         this.map.addLayer(this.fog, ABOVE_FOG_LAYER);
         this.map.addLayer(this.puck);
-        this.map.addImage(LANDMARK_DOT, landmarkDot(theme), { pixelRatio: 2 });
+        for (const { id, data, pixelRatio } of inkImages()) this.map.addImage(id, data, { pixelRatio });
         this.loaded = true;
         if (this.pendingNames) this.setNames(this.pendingNames);
         if (this.pendingPlaces) this.setSeenPlaces(this.pendingPlaces);
-        if (this.litNames.length) this.map.setFilter(MOON_NAMES_LAYER, moonNamesFilter(this.litNames));
         this.pendingNames = this.pendingPlaces = null;
         resolve();
       });
@@ -131,7 +103,7 @@ export class MapView {
     return this.armed;
   }
 
-  /** The gold names along your lit streets. */
+  /** The names of your walked streets, each in its crayon. */
   setNames(features: NameFeature[]): void {
     if (!this.loaded) {
       this.pendingNames = features;
@@ -140,30 +112,20 @@ export class MapView {
     (this.map.getSource(NAMES_SOURCE) as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features });
   }
 
-  /**
-   * Streets named in gold: their moon names under the fog are left out, so a walked street shows
-   * one name. A new filter makes MapLibre lay the map tiles out again, so only when the list changed.
-   */
-  setLitStreetNames(names: string[]): void {
-    const sorted = [...new Set(names)].sort();
-    const key = sorted.join('\u0001');
-    if (key === this.litKey) return;
-    this.litKey = key;
-    this.litNames = sorted;
-    if (this.loaded) this.map.setFilter(MOON_NAMES_LAYER, moonNamesFilter(sorted));
-  }
-
-  /** The landmarks you have seen, labelled over the fog. */
+  /** The places you have seen: their pictograms colored in, each in one of a few hatchings. */
   setSeenPlaces(places: SeenPlace[]): void {
     if (!this.loaded) {
       this.pendingPlaces = places;
       return;
     }
-    const features: PlaceFeature[] = places.map((p) => ({
-      type: 'Feature',
-      properties: { name: p.name, cls: p.cls, rank: p.rank },
-      geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
-    }));
+    const features: PlaceFeature[] = places.map((p) => {
+      const kind = iconKind(p.cls, p.name);
+      return {
+        type: 'Feature',
+        properties: { icon: picId(kind, kind === 'tower' ? 0 : pencilOf(p.name, HATCHINGS)), kind, rank: p.rank },
+        geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
+      };
+    });
     (this.map.getSource(SEEN_PLACES_SOURCE) as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features });
   }
 

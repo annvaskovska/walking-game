@@ -5,9 +5,11 @@ import { distanceM } from '../geo/geo';
 /** Time constant of the slide back to you, and of zoom changes (s). */
 const ACQUIRE_TAU = 0.25;
 const ZOOM_TAU = 0.35;
+/** While you walk you stand this far down the screen, as in the design: more map ahead than behind. */
+const ANCHOR = 0.42;
 
 /**
- * Keeps you in the middle of the map while you walk, every frame, so the map glides with you
+ * Keeps you on the map while you walk (ANCHOR down the screen, across its middle), every frame, so the map glides with you
  * instead of hopping once per GPS fix (a per-frame jumpTo, like the follow modes of navigation
  * apps). Pan away and it lets go; a few seconds after you let go it slides back. Zooming with
  * fingers or the wheel is around the centre, so you stay put; a double-tap zoom is let run and
@@ -54,7 +56,20 @@ export class FollowCamera {
   /** Sliding back to you or easing its zoom: worth drawing every frame. */
   get settling(): boolean {
     if (this.mode !== 'follow') return false;
-    return this.acquiring || this.flying || performance.now() < this.holdUntil || (this.targetZoom !== null && Math.abs(this.map.getZoom() - this.targetZoom) > 0.002);
+    return this.acquiring || this.flying || performance.now() < this.holdUntil || (this.targetZoom !== null && Math.abs(this.map.getZoom() - this.targetZoom) > 0.002) || this.padding(1) !== null;
+  }
+
+  /**
+   * The padding that puts you ANCHOR down the screen, `k` of the way there from where it is now,
+   * or null when it is there already.
+   */
+  private padding(k: number): { top: number; bottom: number; left: number; right: number } | null {
+    const { top = 0, bottom = 0, left = 0, right = 0 } = this.map.getPadding();
+    const p = { top, bottom, left, right };
+    const want = this.map.getContainer().clientHeight * (1 - 2 * ANCHOR);
+    if (Math.abs(p.bottom - want) < 0.01 && p.top < 0.01 && p.left < 0.01 && p.right < 0.01) return null;
+    const ease = (from: number, to: number) => (Math.abs(to - from) < 0.5 ? to : from + (to - from) * k);
+    return { top: ease(p.top, 0), bottom: ease(p.bottom, want), left: ease(p.left, 0), right: ease(p.right, 0) };
   }
 
   /** Start following, settling on `zoom`. */
@@ -79,6 +94,7 @@ export class FollowCamera {
     this.mode = 'off';
     this.targetZoom = null;
     this.aroundCenter(false);
+    this.map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
   }
 
   private aroundCenter(on: boolean): void {
@@ -126,8 +142,9 @@ export class FollowCamera {
     if (this.targetZoom !== null && Math.abs(zoom - this.targetZoom) > 0.002) {
       zoom += (this.targetZoom - zoom) * (1 - Math.exp(-dt / ZOOM_TAU));
     }
-    if (lng === c.lng && la === c.lat && zoom === map.getZoom()) return false;
-    map.jumpTo({ center: [lng, la], zoom });
+    const padding = this.padding(1 - Math.exp(-dt / ZOOM_TAU)) ?? undefined;
+    if (lng === c.lng && la === c.lat && zoom === map.getZoom() && !padding) return false;
+    map.jumpTo({ center: [lng, la], zoom, padding });
     return true;
   }
 }

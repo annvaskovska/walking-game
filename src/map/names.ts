@@ -1,5 +1,9 @@
-import type { Feature, LineString } from 'geojson';
-import { distanceM } from '../geo/geo';
+import type { Feature, Point } from 'geojson';
+import { distanceM, metresPerDegree } from '../geo/geo';
+import { paperTheme, pencilOf } from '../theme';
+
+/** A street name: where it is written, in which crayon (`c`), turned `r` degrees clockwise. */
+export type NameFeature = Feature<Point, { n: string; c: string; r: number }>;
 
 interface NamedPiece {
   way: string | number;
@@ -11,13 +15,21 @@ interface NamedPiece {
 
 /** Ends closer than this (m) belong to the same line (pieces from neighbouring tiles meet here). */
 const JOIN_M = 3;
+/** Segments that turn less than this (radians) from where a straight run began still belong to it. */
+const STRAIGHT = 0.06;
+/**
+ * Two names of one street stand at least this far apart (m): one per street where you see it, as
+ * the design writes it, not one per side of a canal or per bit walked twice.
+ */
+const NAMES_APART_M = 150;
 
 /**
- * Lines for the gold street names: the lit pieces of each named street, joined into the longest
- * runs they form, so a name is written along a whole lit stretch rather than squeezed onto each
- * 20 m piece (where it would not fit and would never show).
+ * The names of walked streets, as the design writes them: the walked pieces of each named street
+ * are joined into the longest runs they form, and each run gets its name once, straight, centred on
+ * its longest straight stretch and turned along it, kept upright; a shorter run close to a longer
+ * one of the same name goes without. Each carries its street's crayon, pressed hard, as `c`.
  */
-export function nameLines(pieces: Iterable<NamedPiece>): Feature<LineString, { n: string }>[] {
+export function nameLines(pieces: Iterable<NamedPiece>): NameFeature[] {
   // 1. Contiguous runs within each way.
   const byWay = new Map<string, NamedPiece[]>();
   for (const p of pieces) {
@@ -45,15 +57,51 @@ export function nameLines(pieces: Iterable<NamedPiece>): Feature<LineString, { n
     }
   }
   // 2. Join runs of the same name whose ends meet (the next block, or the next tile).
-  const out: Feature<LineString, { n: string }>[] = [];
+  const out: NameFeature[] = [];
+  const { pencils } = paperTheme;
   for (const [name, lines] of runs) {
-    for (const line of mergeLines(lines)) {
-      const coordinates: [number, number][] = [];
-      for (let i = 0; i < line.length; i += 2) coordinates.push([line[i], line[i + 1]]);
-      out.push({ type: 'Feature', properties: { n: name }, geometry: { type: 'LineString', coordinates } });
+    const c = pencils[pencilOf(name, pencils.length)].press;
+    const kept: [number, number][] = [];
+    // The longest run first: it carries the name where the street has two.
+    const longestFirst = mergeLines(lines).map((line) => ({ line, len: lengthM(line) })).sort((a, b) => b.len - a.len);
+    for (const { line } of longestFirst) {
+      const { at, r } = longestStraight(line);
+      if (kept.some((k) => distanceM(k[0], k[1], at[0], at[1]) < NAMES_APART_M)) continue;
+      kept.push(at);
+      out.push({ type: 'Feature', properties: { n: name, c, r }, geometry: { type: 'Point', coordinates: at } });
     }
   }
   return out;
+}
+
+/** The middle of a line's longest straight stretch, and its angle in degrees clockwise from east, within ±90. */
+export function longestStraight(line: number[]): { at: [number, number]; r: number } {
+  const m = metresPerDegree(line[1]);
+  let best = { len: -1, a: 0, b: 2 };
+  let a = 0, dir = 0, len = 0;
+  for (let i = 2; i < line.length; i += 2) {
+    const dx = (line[i] - line[i - 2]) * m.lon, dy = (line[i + 1] - line[i - 1]) * m.lat;
+    const d = Math.atan2(dy, dx), l = Math.hypot(dx, dy);
+    if (i === 2 || Math.abs(Math.atan2(Math.sin(d - dir), Math.cos(d - dir))) > STRAIGHT) {
+      a = i - 2;
+      dir = d;
+      len = 0;
+    }
+    len += l;
+    if (len > best.len) best = { len, a, b: i };
+  }
+  const { a: s, b: e } = best;
+  // Screen y runs down: north is up, so the clockwise angle is the negated compass one.
+  let r = (-Math.atan2((line[e + 1] - line[s + 1]) * m.lat, (line[e] - line[s]) * m.lon) * 180) / Math.PI;
+  if (r > 90) r -= 180;
+  if (r < -90) r += 180;
+  return { at: [(line[s] + line[e]) / 2, (line[s + 1] + line[e + 1]) / 2], r };
+}
+
+function lengthM(line: number[]): number {
+  let len = 0;
+  for (let i = 2; i < line.length; i += 2) len += distanceM(line[i - 2], line[i - 1], line[i], line[i + 1]);
+  return len;
 }
 
 function appendLine(run: number[], coords: ArrayLike<number>): void {
