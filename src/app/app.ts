@@ -573,8 +573,6 @@ export async function startApp(): Promise<void> {
 
   function startWalk(): void {
     if (session || !ready) return;
-    // Tells the service worker (main.ts) that from now on a new version waits for a quiet moment.
-    boot.tapped ||= Date.now();
     splash.message(null);
     splash.busy(true);
     const t = provider.now();

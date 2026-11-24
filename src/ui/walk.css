@@ -72,7 +72,7 @@
 .wl-readout dt { margin-top: 3px; font: 400 12px/1 var(--kid); }
 .wl-readout dd { margin: 0; font: 700 21px/1 var(--kid); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .wl-end {
-  pointer-events: auto; flex: 1; height: 62px; margin-bottom: 4px; padding: 0 6px; color: #000;
+  pointer-events: auto; flex: 1; max-width: 132px; height: 62px; margin-bottom: 4px; padding: 0 6px; color: #000;
   font: 700 23px/1 var(--hand); transform: rotate(1.4deg);
 }
 @media (hover: hover) { .wl-end:hover { transform: rotate(-.6deg) translateY(-1px); } }

@@ -7,7 +7,7 @@ In any browser, Mr Sparkles is a demo: Start walks a scripted route through the 
 Run `npm run dev` and open **http://localhost:5173**, or **http://localhost:5173/?sim=fast** for 10× speed.
 The demo keeps its own records, apart from real walks, and keeps the screen on while it walks.
 Real walks recorded in a browser before it became the demo stay in that browser's storage, and the app no longer shows them.
-In the demo, `__sparkles.look(90)` in the console turns the beam east as a compass would, and `look(null)` turns it back to the way you walk.
+In the demo, `__sparkles.look(90)` in the console turns his view east as a compass would, and `look(null)` turns it back to the way you walk.
 
 Every push to `main` builds the app and deploys it to **https://annvaskovska.github.io/walking-game/** as the public demo (`.github/workflows/pages.yml`).
 In the repository's *Settings → Pages*, set *Source* to **GitHub Actions** once.
@@ -134,7 +134,8 @@ The app asks only for *While Using* permission: a walk you started counts as usi
   The raster and the houses show nothing on the map today; they are kept so a later look can use them without new walks.
   Walked still means crayon; seen never colors a street.
 - **Look around.**
-  The beam follows the compass (`deviceorientation`; in Safari on iPhone the Start tap asks for motion access) while you stand or turn the phone, and the way you walk while you walk.
+  His view shows nothing on the map; it decides which landmarks you see.
+  It follows the compass (`deviceorientation`; in Safari on iPhone the Start tap asks for motion access) whenever a reading is fresh (under 1 s old) and sure (within 35°), walking or not, and the way you walk when it is not.
   Stretches recorded with the screen locked are looked at the way you walked them.
 
 Why each of these is built this way is in the [decision records](adr/README.md).
