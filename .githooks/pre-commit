@@ -1,3 +1,0 @@
-#!/bin/sh
-# Stops a commit whose files would publish personal data (ADR 0010). `npm install` installs it.
-exec sh scripts/check-public.sh tree

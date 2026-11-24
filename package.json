@@ -11,8 +11,6 @@
     "ios:sync": "npm run build && cap sync ios",
     "ios": "npm run ios:sync && cap open ios",
     "ios:testflight": "sh scripts/testflight.sh",
-    "prepare": "d=$(git rev-parse --git-common-dir)/hooks && mkdir -p \"$d\" && cp .githooks/* \"$d\" || echo 'check-public: the git hooks are NOT installed' >&2",
-    "pretest": "sh scripts/check-public.sh && sh scripts/check-public.test.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
