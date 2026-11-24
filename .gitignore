@@ -3,7 +3,7 @@ dist/
 dev-dist/
 *.local
 .DS_Store
-# Scratch work, real GPS traces included: this repository is public (ADR 0010).
+# Scratch work: prototypes and captures of the demo walk (ADR 0014).
 .context/
 # Signing keys and profiles never enter git.
 *.p8

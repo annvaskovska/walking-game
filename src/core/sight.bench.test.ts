@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bboxOfCoords, bearingDeg, distanceM } from '../geo/geo';
 import { GridIndex } from '../geo/spatialIndex';
+import { SIM_ROUTE } from '../platform/simRoute';
 import { wmX, wmY } from '../map/fog/geometry';
 import { nightTheme } from '../theme';
 import { OccluderCache, stepOutside, wmPerMetre } from './occluders';
@@ -10,20 +11,31 @@ import { computeSight, newSight } from './sight';
 import type { Building } from './types';
 
 /**
- * How long a look takes on real streets: the walls, the sight and the paint at
- * 20 spots along a real walk. Prints the timings; skipped when the local data is not there.
+ * How long a look takes: the walls, the sight and the paint at 20 spots along the demo walk,
+ * between made-up houses. Prints the timings.
  */
-// Local data, not in the repository: the globs come back empty without it.
-const AREA = Object.values(import.meta.glob<string>('../../.context/gps/area.json', { query: '?raw', import: 'default' }));
-const SIM = Object.values(import.meta.glob<{ TRUTH: [number, number][] }>('../../.context/gps/sim.ts'));
 const RAD = Math.PI / 180;
+/** The demo walk as [lon, lat] points. */
+const TRUTH = Array.from({ length: SIM_ROUTE.length / 2 }, (_, i) => [SIM_ROUTE[2 * i], SIM_ROUTE[2 * i + 1]]);
 
-describe.skipIf(!AREA.length || !SIM.length)('sight benchmark', () => {
-  it('looks in a few milliseconds', async () => {
-    const area = JSON.parse(await AREA[0]()) as { houses: number[][] };
-    const { TRUTH } = await SIM[0]();
+/** Made-up houses: a 12 m square every 20 m across the box around the demo walk, as flat closed rings. */
+function madeUpHouses(): number[][] {
+  const [w, s, e, n] = bboxOfCoords(SIM_ROUTE);
+  const dLat = 1 / 111_320, dLon = dLat / Math.cos(s * RAD);
+  const out: number[][] = [];
+  for (let lat = s; lat < n; lat += 20 * dLat) {
+    for (let lon = w; lon < e; lon += 20 * dLon) {
+      const x = lon + 12 * dLon, y = lat + 12 * dLat;
+      out.push([lon, lat, x, lat, x, y, lon, y, lon, lat]);
+    }
+  }
+  return out;
+}
+
+describe('sight benchmark', () => {
+  it('looks in a few milliseconds', () => {
     const houses = new GridIndex<Building>();
-    area.houses.forEach((coords, i) => houses.insert({ id: `h${i}`, coords, bbox: bboxOfCoords(coords) }));
+    madeUpHouses().forEach((coords, i) => houses.insert({ id: `h${i}`, coords, bbox: bboxOfCoords(coords) }));
 
     // 20 spots evenly along the walk, facing the way it goes.
     const legs = TRUTH.slice(1).map((p, i) => distanceM(TRUTH[i][0], TRUTH[i][1], p[0], p[1]));

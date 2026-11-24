@@ -15,18 +15,33 @@ Before you write any of them, keep out:
 - **Account details:** Apple team IDs, App Store Connect key and issuer IDs, Apple Accounts, any account or customer number.
 - **People:** names, email addresses, phone numbers, and who works on what.
 - **Places tied to a person:** a home, a home city or country, a workplace, a regular route, or a GPS track from a real walk.
-  Demo walks, test fixtures, comments and examples use the demo city, Amsterdam.
 - **Machines:** local paths such as `/Users/<name>`, device names, serial numbers, IP addresses, private URLs.
 - **Media** that shows any of the above, or carries location metadata.
 
 A script that needs an account detail reads it from the environment and names the variable, never the value.
 Picking a team in Xcode writes it into `ios/App/App.xcodeproj`: leave that change out of the commit.
-`scripts/check-public.sh` runs first in `npm test` and in the commit hook, and fails on the patterns it knows: teams, machine paths, addresses, keys, track files.
-A red run means the data comes out.
-It cannot judge a route or an image, so those stay yours to check.
+No hook and no scan check for these: you are the guard, so read each file, commit subject and pull request title for them before you write it.
 The repository's own public URLs, such as its GitHub Pages address, are fine.
 When you are not sure, leave it out and ask.
-[ADR 0010](docs/adr/0010-the-repository-is-public.md) records why.
+[ADR 0014](docs/adr/0014-agents-keep-private-data-out-of-git.md) records why.
+
+## Demo data only
+
+This repository leaked once: an agent traced a real walk from a screenshot the user shared, added it as a second demo walk with a benchmark on local data of that area, and moved tests and comments to that city.
+So the code, and every agent that works on it, meets demo data only:
+
+- **Every place is Amsterdam.**
+  Coordinates, street names, shops and walks in code, tests, comments, docs and examples come from the demo walk in `src/platform/simRoute.ts`, or are made up inside Amsterdam.
+- **Data comes from tracked files.**
+  Code, tests, benchmarks and scripts read only files that git tracks, and a fixture is written by hand or computed.
+  When a task seems to need a real trace, a stored walk or a file from outside the checkout, ask the user for a demo stand-in.
+- **The app runs as `?sim`.**
+  Open it with `?sim` or `?sim=fast` for every check, screenshot and recording: the map then shows the demo walk and keeps its own records.
+- **Scratch is demo too.**
+  `.context/` holds prototypes and captures of the demo walk; a real trace lives outside every checkout.
+- **What you learn about the user stays in the chat.**
+  A name, an address, a place or a path that you meet on the machine, in the chat or in a tool result reaches no file, commit subject, branch name or pull request.
+  A screenshot, a recording or a file the user shares shows you the problem: rebuild what it shows on the demo walk.
 
 ## Decisions
 
