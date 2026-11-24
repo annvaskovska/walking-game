@@ -757,7 +757,7 @@ export async function startApp(): Promise<void> {
       fast ||= view.camera.settling;
       // The light comes from you and points where you look (compass), else where you walk.
       const light = sight.frame(now, f);
-      // He wears down over the walk, and bobs while he goes faster than a shuffle: 0.5 m/s on the
+      // He wears down over the walk, and colors in while he goes faster than a shuffle: 0.5 m/s on the
       // walk's clock (the demo's runs fast).
       const walkT = provider.now();
       view.puck.set({

@@ -13,21 +13,25 @@ export interface PuckState {
   wear: number;
   /** Where he goes, degrees clockwise from north, or null before he has moved. */
   heading: number | null;
-  /** Walking, he bobs; standing still, he holds still. */
+  /** Walking, he colors in, scrubbing left and right; standing still, he holds still. */
   walking: boolean;
 }
 
 // As in the design: a 32 × 53.4 CSS px box (his 0 0 60 100 viewBox, fit in), placed 16 px left of
-// you and 51.2 px up, so his tip (30, 96) is on you. Lean and bob turn about that point, the pop
+// you and 51.2 px up, so his tip (30, 96) is on you. Lean and stroke turn about that point, the pop
 // squashes about 50% 96% of the box.
 const W = 32;
 const H = 53.4;
 const OY = 51.2;
 const POP_Y = 0.96 * H;
-/** Half-size of the quad he is drawn in, CSS px: room for him leaning, bobbing and popping. */
+/** Half-size of the quad he is drawn in, CSS px: room for him leaning, scrubbing and popping. */
 const REACH = 64;
-const BOB_MS = 360;
-/** He bobs while he went at walking pace this recently (ms): a slow frame does not stop him. */
+/** One stroke of his coloring, left to right or back (ms), and how far his tip goes each way (CSS px). */
+const STROKE_MS = 220;
+const STROKE_PX = 3;
+/** At mid-stroke his top leads the stroke by this much (degrees); he is upright where it turns. */
+const STROKE_TILT = 7;
+/** He colors while he went at walking pace this recently (ms): a slow frame does not stop him. */
 const WALKED_MS = 400;
 const POP_MS = 450;
 const DEG = Math.PI / 180;
@@ -48,6 +52,17 @@ export function cubicBezier(x1: number, y1: number, x2: number, y2: number): (x:
 const easeInOut = cubicBezier(0.42, 0, 0.58, 1);
 const popEase = cubicBezier(0.3, 1.7, 0.5, 1);
 
+/**
+ * His coloring stroke at `now` (ms), the way a hand colors in: left, right, left, right across the
+ * page, never up and down, so he never seems to hop. Returns how far his tip is right of you (CSS px)
+ * and his tilt (degrees, his top to the right): his top leads each stroke, upright where it turns.
+ */
+export function strokeAt(now: number): [shift: number, tilt: number] {
+  const t = (now / STROKE_MS) % 2;
+  const ph = t > 1 ? 2 - t : t;
+  return [STROKE_PX * (2 * easeInOut(ph) - 1), STROKE_TILT * (t > 1 ? -1 : 1) * Math.sin(Math.PI * ph)];
+}
+
 const VS = `#version 300 es
 in vec2 a_corner;
 uniform mat4 u_matrix;
@@ -63,22 +78,22 @@ in vec2 v_px;
 uniform sampler2D u_tex;
 uniform vec2 u_view;
 uniform vec2 u_turn;
-uniform float u_lift;
+uniform float u_shift;
 uniform vec2 u_pop;
 uniform vec2 u_box;
 uniform float u_scale;
 out vec4 o;
 vec2 rot(vec2 p, vec2 cs) { return vec2(cs.x * p.x - cs.y * p.y, cs.y * p.x + cs.x * p.y); }
 void main() {
-  // CSS px from you on screen, y down.
-  vec2 d = rot(v_px, u_view);
-  // His shadow on the paper: 17 x 5.2 px, 13% black, 1 px below you.
+  // CSS px from his tip on screen, y down: the stroke moves it off you, left and right.
+  vec2 d = rot(v_px, u_view) - vec2(u_shift, 0.0);
+  // His shadow on the paper: 17 x 5.2 px, 13% black, 1 px below his tip.
   vec2 r = vec2(8.5, 2.6);
   vec2 e = (d - vec2(0.0, 1.0)) / r;
   float edge = (dot(e, e) - 1.0) / max(2.0 * length(e / r), 1e-4);
   float shadow = 0.13 * clamp(0.5 - edge * u_scale, 0.0, 1.0);
-  // Him: undo the lean and the bob about you, then the pop, into his box.
-  vec2 v = rot(d, u_turn) - vec2(0.0, u_lift);
+  // Him: undo the lean and the stroke's tilt about his tip, then the pop, into his box.
+  vec2 v = rot(d, u_turn);
   vec2 q = vec2(${W / 2}.0, ${POP_Y}) + (v + vec2(0.0, ${OY - POP_Y})) / u_pop;
   vec4 c = texture(u_tex, q / u_box);
   o = c + vec4(0.0, 0.0, 0.0, shadow) * (1.0 - c.a);
@@ -87,7 +102,7 @@ void main() {
 /**
  * You on the map, as Mr Sparkles (ADR 0014): the crayon of the design, his tip where you are, in the
  * crayon of the street he colors. His drawing is rasterized into a texture only when his crayon or
- * wear changes; bob, lean, pop and his shadow are drawn on the GPU in the same frame as the map (a
+ * wear changes; his stroke, lean, pop and shadow are drawn on the GPU in the same frame as the map (a
  * DOM marker trails the map by a frame while the camera follows you, which reads as jitter).
  */
 export class PuckLayer implements CustomLayerInterface {
@@ -113,8 +128,8 @@ export class PuckLayer implements CustomLayerInterface {
   private snap = true;
   private lastT = 0;
   private walkedAt = -Infinity;
-  /** How much he bobs, 0..1: eased in and out, so starting and stopping never jolt him. */
-  private bobAmp = 0;
+  /** How much he colors, 0..1: eased in and out, so starting and stopping never jolt him. */
+  private stroke = 0;
   private popAt = -Infinity;
 
   constructor(theme: Theme) {
@@ -236,18 +251,17 @@ export class PuckLayer implements CustomLayerInterface {
     // He leans 15° toward where he goes on screen, eased.
     if (s.heading !== null) this.leanTo = 15 * Math.sin((s.heading - bearing) * DEG);
     this.lean = this.snap ? this.leanTo : this.lean + (this.leanTo - this.lean) * (1 - Math.exp(-dt * 6));
-    // The bob while he walks: rotate(-5deg) to rotate(5deg) translateY(-2.5px), 0.36 s ease-in-out, alternate.
-    const bobTo = now - this.walkedAt < WALKED_MS && !this.still.matches ? 1 : 0;
-    this.bobAmp = this.snap ? bobTo : this.bobAmp + (bobTo - this.bobAmp) * (1 - Math.exp(-dt * 10));
+    // Walking, he colors in (strokeAt), eased in and out.
+    const strokeTo = now - this.walkedAt < WALKED_MS && !this.still.matches ? 1 : 0;
+    this.stroke = this.snap ? strokeTo : this.stroke + (strokeTo - this.stroke) * (1 - Math.exp(-dt * 10));
     this.snap = false;
-    const t = (now / BOB_MS) % 2;
-    const b = easeInOut(t > 1 ? 2 - t : t);
-    const bob = this.bobAmp * (-5 + 10 * b);
-    const lift = this.bobAmp * -2.5 * b;
+    const [x, a] = strokeAt(now);
+    const shift = this.stroke * x;
+    const tilt = this.stroke * a;
     // The pop: scale(1.3, .78) back to none over 0.45 s.
     const p = (now - this.popAt) / POP_MS;
     const e = p < 1 && !this.still.matches ? popEase(Math.max(0, p)) : 1;
-    const turn = -(this.lean + bob) * DEG;
+    const turn = -(this.lean + tilt) * DEG;
 
     const ws = 512 * 2 ** map.getZoom();
     // One unit = one CSS pixel, centred on you.
@@ -266,7 +280,7 @@ export class PuckLayer implements CustomLayerInterface {
     gl.uniformMatrix4fv(u.u_matrix, false, new Float32Array(m));
     gl.uniform2f(u.u_view, Math.cos(-bearing * DEG), Math.sin(-bearing * DEG));
     gl.uniform2f(u.u_turn, Math.cos(turn), Math.sin(turn));
-    gl.uniform1f(u.u_lift, lift);
+    gl.uniform1f(u.u_shift, shift);
     gl.uniform2f(u.u_pop, 1.3 - 0.3 * e, 0.78 + 0.22 * e);
     gl.uniform2f(u.u_box, this.box[0], this.box[1]);
     gl.uniform1f(u.u_scale, scale);

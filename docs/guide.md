@@ -124,7 +124,7 @@ The app asks only for *While Using* permission: a walk you started counts as usi
   Each lit street gets its own crayon of 13 (`pencilOf` in `src/theme.ts`, a hash of its name), as a soft band under a back-and-forth scribble that runs a little past its lines; the houses beside it are hatched off register, some in their street's crayon and the rest in one of their own.
   The walk leaves its own line in the pressed crayon of the street it follows, and the canal beside it gets a light blue scribble.
   It paints into a target of its own, and keeps that paint while nothing in it changed and the map moved less than half a pixel.
-- **Mr Sparkles** is a crayon drawn on the GPU (`src/map/puckLayer.ts`): his drawing is turned into a texture only when his crayon or his wear changes, and he bobs, leans and pops in the shader.
+- **Mr Sparkles** is a crayon drawn on the GPU (`src/map/puckLayer.ts`): his drawing is turned into a texture only when his crayon or his wear changes, and he colors in left and right, leans and pops in the shader.
 - **What you have seen** is kept apart from what you walked.
   The walls of the houses within ~140 m are gathered around you, and gathered again only after you moved 25 m.
   A few times a second an angular sweep on the CPU computes what your view reaches over those walls (disc around you, cone ahead) and paints it into a persistent raster (zoom-17 tiles, ~0.7 m a texel, in IndexedDB), with the houses it reached.

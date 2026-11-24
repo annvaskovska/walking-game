@@ -25,7 +25,8 @@ The app keeps its rules: the first paint needs no script (ADR 0007), only real w
   Each street keeps one crayon by a hash of its name (`pencilOf`), and a house takes its street's crayon 45% of the time and otherwise one by its own id.
   The fog layer draws it on the GPU, multiplied over the ink through the paper's tooth: a street as a soft band under a back-and-forth scribble, a house as diagonal hatching off register, the walk's own line in press color, and the canal beside you as you pass.
 - **Mr Sparkles** is the stubby crayon of the prototype (`mrInner` in `src/ui/art.ts`), in the crayon of the street he colors.
-  The walker layer rasterizes him into a texture only when his crayon or his wear changes, and bobs, leans and pops him on the GPU (`src/map/puckLayer.ts`).
+  The walker layer rasterizes him into a texture only when his crayon or his wear changes, and leans, strokes and pops him on the GPU (`src/map/puckLayer.ts`).
+  Walking, he does not bob as in the prototype, which read as hopping: he colors in as a hand does, left and right across the page, his top leading each stroke.
   He wears down over a walk, `1 − 0.42 × min(1, distance / 5 km)`, and is new again on the next one.
 - **A new street** is written big across the top in its crayon, letter by letter, Mr Sparkles pops and says a line, and a crayon pops up out of the box.
   He also names the landmarks he sees, in a speech bubble.
@@ -47,5 +48,5 @@ The app keeps its rules: the first paint needs no script (ADR 0007), only real w
 - ADR 0008 holds: the crayon layer keeps its paint while nothing in it changes (`maskMemo.ts`), and Mr Sparkles' texture changes only with his crayon or his wear, and he holds still when you do.
 - A crayon a street or a house once got must stay its crayon: changing the box, its order or the hash recolors every walk.
 - Two streets side by side can get the same crayon in a real city; only the demo walk is tuned.
-- `src/theme.test.ts` checks the crayon picker, `src/map/fog/tooth.test.ts` the tooth, `src/map/fog/geometry.test.ts` the crayon's strokes, `src/map/puckLayer.test.ts` the easing of his pop, `src/map/style.test.ts` that MapLibre accepts the style, `src/map/names.test.ts` one name per street, `src/ui/bubble.test.ts` his lines and `src/ui/summaryText.test.ts` the fridge's words.
+- `src/theme.test.ts` checks the crayon picker, `src/map/fog/tooth.test.ts` the tooth, `src/map/fog/geometry.test.ts` the crayon's strokes, `src/map/puckLayer.test.ts` the easing of his pop and his stroke, `src/map/style.test.ts` that MapLibre accepts the style, `src/map/names.test.ts` one name per street, `src/ui/bubble.test.ts` his lines and `src/ui/summaryText.test.ts` the fridge's words.
   Nothing checks the look itself; side by side with the prototype at 390×844, review holds it.
