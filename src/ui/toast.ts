@@ -2,7 +2,8 @@ const el = () => document.getElementById('wl-toast') as HTMLElement;
 
 /**
  * One line at the top of the map, only when something is wrong (no GPS, no network) or worth a
- * word. Each message has a key, so clearing one never hides another that replaced it.
+ * word, on a hand-drawn card (walk.css, which hud.ts injects). Each message has a key, so clearing
+ * one never hides another that replaced it.
  */
 export class Toasts {
   private key: string | null = null;

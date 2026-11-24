@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png" width="128" height="128" alt="Mr Sparkles app icon: a glowing walker where a lit gold street crosses a dark one, with a beam of light ahead.">
+  <img src="ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png" width="128" height="128" alt="Mr Sparkles app icon: a smiling blue crayon on a yellow cover, coloring in a street.">
 </p>
 
 <h1 align="center">Mr Sparkles</h1>
 
 <p align="center">
-  <b>Your city starts as a pencil drawing. Every street you walk gets colored in, for good.</b><br>
+  <b>Your city starts as a coloring page. Every street you walk gets colored in with crayon, for good.</b><br>
   A walking motivator for your iPhone, with a demo walk in the browser.<br>
   No account, no server: your walks stay on your phone.
 </p>
@@ -28,9 +28,9 @@ Mr Sparkles is a small walking motivator.
 Your city starts as a black ink drawing on white paper, and every street you walk is colored in with crayon, with its houses and its name.
 The color stays, so each walk shows you where you have not been yet.
 
-Open it and you get one start screen: a question, your streets so far, and **Start walking**.
-The first time, it shows a drawing of a few colored-in streets in Amsterdam; after your first walk, your own map.
-On the map you are Mr Sparkles, a colored pencil, with a clear view ahead of you and a paper wash over what you have not seen.
+Open it and you get the cover: a yellow page with the title, a canal drawing and **Start**, and after your first walk your streets so far.
+Start turns the page onto the map.
+On the map you are Mr Sparkles, a stubby crayon who colors in the street you walk and wears down a little on every walk.
 
 ---
 
@@ -40,12 +40,13 @@ On the map you are Mr Sparkles, a colored pencil, with a clear view ahead of you
 
 Walk along a street and the whole block colors in from where you stand.
 Each street keeps one crayon of 13, scribbled in a little past its lines, and its name is written in that crayon; the houses beside it are colored in too, many in the street's crayon and the rest in crayons of their own.
+A new street gets its name written big across the page, Mr Sparkles says something about it, and its crayon pops up in your crayon box.
 A street you walk only part of still shows where you went.
 
-## Your view stops at walls
+## Mr Sparkles names what he sees
 
 Your view stops at walls and spills between houses.
-Whatever it reaches, such as a square at the end of the street or a shop on the corner, stays **inked**: its outlines, its street names, the landmark's label.
+A landmark it reaches, such as a church at the end of the street or a café on the corner, gets its little picture colored in, and Mr Sparkles names it.
 Turn the phone to look around: the view follows the compass.
 
 ## Only real walking counts
@@ -59,10 +60,10 @@ A step colors only the street it follows, so walking past a side street does not
 The iPhone app keeps recording with the screen locked.
 Put the phone in your pocket, and when you look again, the streets you walked are colored in at once.
 
-## Your walk in three numbers
+## Your walk in a crayon box
 
-Tap the map for the time, the distance, and an estimate of your steps, and to end the walk.
-The summary shows the same three numbers and the streets you colored in.
+The crayon box at the bottom shows the time, the distance and an estimate of your steps, with one crayon for each street you colored in on this walk.
+End the walk and its page goes on the fridge: your map of it, the distance and the new streets.
 
 ---
 
@@ -78,7 +79,7 @@ The summary shows the same three numbers and the streets you colored in.
 1. Tap **Start walking** and allow location.
 2. Walk: each street colors in as you follow it.
 3. Turn the phone to look around.
-4. Tap the map for your time, distance and steps, and to end the walk.
+4. Tap **End** in the crayon box, and again to be sure, for the page of your walk.
 
 ---
 
@@ -93,7 +94,7 @@ The iPhone app asks for location only *While Using the App*.
 
 - **Real walking only.** GPS fixes pass a filter, and a step colors only the street it runs along.
 - **One download per tile.** The vector tiles that draw the map are also parsed into the street graph and the houses.
-- **Crayon on the GPU.** One MapLibre layer draws the paper wash, the crayon, and the shadows every wall casts on your view.
+- **Crayon on the GPU.** One MapLibre layer draws the crayon over the ink drawing, through the paper's tooth, and Mr Sparkles is drawn on the GPU too.
 
 The stack: TypeScript and Vite, MapLibre GL with custom WebGL layers, OpenFreeMap vector tiles, and a Capacitor shell with Swift GPS for iPhone.
 [More under the hood](docs/guide.md#under-the-hood), and why it is built this way in the [decision records](docs/adr/README.md).

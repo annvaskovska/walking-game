@@ -55,7 +55,7 @@ Every change keeps these invariants:
 ## Stack
 
 - TypeScript and Vite, with no UI framework.
-- MapLibre GL for the map, with custom WebGL layers for the paper wash, the crayon and the shadows (`src/map/fog/`).
+- MapLibre GL for the map, with custom WebGL layers for the crayon (`src/map/fog/`) and Mr Sparkles (`src/map/puckLayer.ts`).
 - OpenFreeMap vector tiles (OpenMapTiles schema), decoded in a worker into the map, the street graph and the houses (`src/data/`).
 - Capacitor for the iPhone app, Swift for its background GPS (`ios/App/App/`).
 - Vitest for unit tests.
@@ -66,10 +66,10 @@ Every change keeps these invariants:
 - `src/geo/`: geometry, pieces, spatial index.
 - `src/data/`: tile decoder and parser, tile source, street graph. `tileUrl.ts` is the one place the tile URL lives.
 - `src/platform/`: the iPhone app's location, the demo walk, wake lock, storage, compass.
-- `src/map/`: style, GPU wash and crayon, shadows, seen memory, walker, follow camera, street names in their crayons.
-- `src/ui/`: start screen, walk stats, notices.
+- `src/map/`: ink style and pictograms, GPU crayon, seen memory, Mr Sparkles, follow camera, street names in their crayons.
+- `src/ui/`: Mr Sparkles' art and the crayon texture, the crayon box, new-street lettering and his speech bubble, the fridge summary, notices.
 - `src/app/`: the controller.
-- `index.html`: the start screen over the cover drawing (`public/cover.svg`) or your own map, its CSS and its scripts, inline.
+- `index.html`: the yellow cover, its CSS and its scripts, inline, and the shared crayon button and wax filters.
 - `ios/`: the Xcode project and the native GPS plugin.
 - `scripts/make-icons.mjs` draws the app icons, the iPhone one too; `scripts/testflight.sh` uploads to TestFlight.
 - `docs/guide.md`: how to run, install and ship it, and how it works under the hood. `docs/adr/`: why.

@@ -9,7 +9,7 @@ import { SightController } from './sightController';
 import { StreetGraph } from '../data/graph';
 import { TileSource, type GraphTile } from '../data/tiles';
 import { POS_KEY, STATS_KEY, WALKING_KEY, refreshTemplate } from '../data/tileUrl';
-import { distanceM, expandBBox, polylineDistanceM, projectOnPolylineM } from '../geo/geo';
+import { distanceM, expandBBox, polylineDistanceM } from '../geo/geo';
 import { pageTime } from '../map/fog/fogLayer';
 import { LONG_AGO } from '../map/fog/geometry';
 import { EARTH_CIRCUMFERENCE_M } from '../map/gl';
@@ -22,9 +22,13 @@ import { SIM_ROUTE } from '../platform/simRoute';
 import { openStorage, persistStorage } from '../platform/storage';
 import { WakeLockKeeper } from '../platform/wakeLock';
 import { paperTheme, pencilKey, pencilOf } from '../theme';
+import { Bubble } from '../ui/bubble';
+import { Claims } from '../ui/claim';
 import { Hud } from '../ui/hud';
+import { Fridge } from '../ui/fridge';
 import { Splash } from '../ui/splash';
 import { Toasts } from '../ui/toast';
+import { wearAfter } from '../ui/art';
 
 /** The walk in progress. Saved as it goes, so a reload mid-walk carries on. */
 interface ActiveSession {
@@ -37,6 +41,8 @@ interface ActiveSession {
   newHouses?: number;
   /** Walked steps [aLon, aLat, bLon, bLat, radius, ...], replayed when streets load late. */
   segs: number[];
+  /** The crayon of the street at each step, for his trail. */
+  tones?: number[];
   filter: FilterState;
   lastFix: Fix | null;
   fixes: number;
@@ -121,7 +127,8 @@ export async function startApp(): Promise<void> {
     : (await import('../platform/nativeLocation')).createNativeLocation();
   const theme = paperTheme;
 
-  const splash = new Splash(sim);
+  const splash = new Splash();
+  const fridge = new Fridge();
   const hud = new Hud(() => void endWalk());
   const toasts = new Toasts();
 
@@ -136,7 +143,6 @@ export async function startApp(): Promise<void> {
   let walks: WalkRecord[] = [];
   let session: ActiveSession | null = null;
   let walkAlong: WalkAlong | null = null;
-  let here: Fix | null = null;
   let stopWatch: (() => void) | null = null;
   let ready = false;
   let weakSince = 0;
@@ -149,24 +155,35 @@ export async function startApp(): Promise<void> {
   /** Mr Sparkles' pencil: the one of the street he walks, colored in now or on an earlier walk. */
   let tone = 0;
 
-  const lastPos = readJson<{ lon: number; lat: number }>(key(POS_KEY));
-  const known = lastPos && Number.isFinite(lastPos.lon) && Number.isFinite(lastPos.lat) ? lastPos : null;
-  // The demo always starts on its route, so its tiles load behind the start screen.
-  const start = known ?? (sim ? { lon: SIM_ROUTE[0], lat: SIM_ROUTE[1] } : null);
+  /** Where the next walk starts, drawn under the cover: the demo's route, or where you were last. */
+  const startPos = () => {
+    if (sim) return { lon: SIM_ROUTE[0], lat: SIM_ROUTE[1] };
+    const p = readJson<{ lon: number; lat: number }>(key(POS_KEY));
+    return p && Number.isFinite(p.lon) && Number.isFinite(p.lat) ? p : null;
+  };
+  const start = startPos();
 
   const tiles = new TileSource({
     onTile: (t) => onTile(t),
     onDrop: (k) => graph.removeTile(k),
     onWaiting: (w) => onWaiting(w),
   });
-  const view = new MapView(document.getElementById('map')!, theme, tiles, start && { ...start, zoom: 15.5 });
-  // Once the streets around are drawn, show them behind the start screen. Before the first walk
-  // (the demo's too), Mr Sparkles waits there in the fog instead (ADR 0012).
-  if (known) view.map.once('idle', () => splash.overMap(true));
+  // Drawn under the cover as the walk will show it, so Start turns the page onto it.
+  const view = new MapView(document.getElementById('map')!, theme, tiles, start && { ...start, zoom: CONFIG.walkZoom });
   hud.source(() => ({
     elapsedMs: session ? provider.now() - session.startedAt : 0,
     distanceM: session?.distanceM ?? 0,
   }));
+  // He talks over his head; a new street is written across the top, he pops, its crayon comes out.
+  const bubble = new Bubble(() => {
+    const p = motion.position;
+    return p && view.map.project([p.lon, p.lat]);
+  });
+  const claims = new Claims((name, i) => {
+    view.puck.pop();
+    hud.pop(name);
+    bubble.street(name, i);
+  });
 
   // The demo keeps the screen on while it walks. The iPhone app records with the screen locked,
   // so it lets the phone lock as usual.
@@ -194,7 +211,8 @@ export async function startApp(): Promise<void> {
     view.fog.addHouse(h, LONG_AGO, wayKey.get(b.slice(0, b.lastIndexOf(':'))));
   }
   // What you have seen from the streets you walked, in ink.
-  const sight = new SightController(theme, view, graph, tiles, (id) => progress.houses.has(id));
+  const sight = new SightController(theme, view, graph, tiles);
+  sight.onSpotted = (places) => places.forEach((p) => bubble.spotted(p));
   await sight.load(storage);
   refreshNames(true);
   writeLifetime();
@@ -286,7 +304,7 @@ export async function startApp(): Promise<void> {
     splash.setLifetime(l);
   }
 
-  /** Street names in their pencils follow the walked streets; rebuilt at most about once a second. */
+  /** Street names in their crayons follow the walked streets; rebuilt at most about once a second. */
   function refreshNames(now = false): void {
     if (!now) {
       if (!namesTimer) namesTimer = window.setTimeout(() => refreshNames(true), 700);
@@ -295,8 +313,6 @@ export async function startApp(): Promise<void> {
     clearTimeout(namesTimer);
     namesTimer = 0;
     view.setNames(nameLines(progress.lit.values()));
-    // Ink names under the wash, except where the pencil one is.
-    view.setLitStreetNames(progress.streetNames());
   }
 
   // ---- Streets and houses arriving ----
@@ -359,7 +375,6 @@ export async function startApp(): Promise<void> {
     for (const [b, hs] of byBlock) {
       const lit = progress.applyHouses(hs, b.id, Date.now());
       for (const h of lit) view.fog.addHouse(h, t0 + Math.random() * 0.8, pencilKey(b));
-      sight.housesLit(lit);
       queue([], lit);
       if (session) session.newHouses = (session.newHouses ?? 0) + lit.length;
     }
@@ -389,8 +404,6 @@ export async function startApp(): Promise<void> {
   function lightPieces(pieces: Piece[]): void {
     if (!session) return;
     const now = Date.now();
-    const t0 = pageTime();
-    const pos = motion.position ?? here;
     let changed = false;
     for (const piece of pieces) {
       if (progress.isLit(piece.id)) continue;
@@ -402,13 +415,17 @@ export async function startApp(): Promise<void> {
       queue(res.changed, res.newHouses);
       if (!res.newPieces.length && !res.newHouses.length) continue;
       changed = true;
-      const fromM = pos ? projectOnPolylineM(pos.lon, pos.lat, piece.coords).alongM : 0;
-      if (res.newPieces.length) view.fog.addPiece(piece, { offsetM: 0, fromM, t0 });
-      for (const h of res.newHouses) view.fog.addHouse(h, t0 + 0.15 + Math.random() * 0.4, pencilKey(piece));
-      sight.housesLit(res.newHouses);
+      // It colors in from the end you walked in from, keeping pace with you; its houses as it passes them.
+      const sweep = view.fog.sweep(piece.coords, session.segs);
+      if (res.newPieces.length) view.fog.addPiece(piece, sweep);
+      for (const h of res.newHouses) {
+        const [cx, cy] = centroid(h.coords);
+        view.fog.addHouse(h, view.fog.reach(sweep, piece.coords, cx, cy) + 0.15, pencilKey(piece));
+      }
       session.newPieces += res.newPieces.length;
       session.newLenM += res.newPieces.reduce((s, p) => s + p.len, 0);
       session.newStreets.push(...res.newStreets);
+      res.newStreets.forEach((n) => claims.add(n));
       session.newHouses = (session.newHouses ?? 0) + res.newHouses.length;
     }
     if (!changed) return;
@@ -423,9 +440,6 @@ export async function startApp(): Promise<void> {
   function unlockBlocks(blocks: Block[]): void {
     if (!session) return;
     const now = Date.now();
-    const t0 = pageTime();
-    const pos = motion.position ?? here;
-    const speed = theme.fog.sweepMps;
     let changed = false;
     for (const block of blocks) {
       if (litBlocks.has(block.id)) continue;
@@ -436,22 +450,21 @@ export async function startApp(): Promise<void> {
       queue(res.changed, res.newHouses);
       if (!res.newPieces.length && !res.newHouses.length) continue;
       changed = true;
-      const fromM = pos ? projectOnPolylineM(pos.lon, pos.lat, block.coords).alongM : 0;
+      const sweep = view.fog.sweep(block.coords, session.segs);
       const fresh = new Set(res.newPieces.map((p) => p.id));
       let offsetM = 0;
       for (const p of block.pieces) {
-        if (fresh.has(p.id)) view.fog.addPiece(p, { offsetM, fromM, t0 });
+        if (fresh.has(p.id)) view.fog.addPiece(p, sweep, offsetM);
         offsetM += p.len;
       }
       for (const h of res.newHouses) {
         const [cx, cy] = centroid(h.coords);
-        const along = projectOnPolylineM(cx, cy, block.coords).alongM;
-        view.fog.addHouse(h, t0 + Math.abs(along - fromM) / speed + 0.15, pencilKey(block));
+        view.fog.addHouse(h, view.fog.reach(sweep, block.coords, cx, cy) + 0.15, pencilKey(block));
       }
-      sight.housesLit(res.newHouses);
       session.newPieces += res.newPieces.length;
       session.newLenM += res.newPieces.reduce((s, p) => s + p.len, 0);
       session.newStreets.push(...res.newStreets);
+      res.newStreets.forEach((n) => claims.add(n));
       session.newHouses = (session.newHouses ?? 0) + res.newHouses.length;
     }
     if (!changed) return;
@@ -461,7 +474,6 @@ export async function startApp(): Promise<void> {
 
   // ---- Location ----
   function onFix(fix: Fix): void {
-    here = fix;
     toasts.clear('gps');
     if (!view.isArmed) view.arm();
     tiles.ensureAround(fix.lon, fix.lat);
@@ -492,6 +504,9 @@ export async function startApp(): Promise<void> {
       session.segs.push(from.lon, from.lat, to.lon, to.lat, Math.round(verdict.radiusM * 10) / 10);
       walkAlong ??= newWalkAlong();
       light(walkAlong.add(from.lon, from.lat, to.lon, to.lat, verdict.radiusM));
+      // His trail, in the crayon of the street he is on.
+      (session.tones ??= []).push(tone);
+      view.fog.walkTo(from.lon, from.lat, to.lon, to.lat, tone);
       // Recorded while the screen was off: what you saw meanwhile, looking the way you walked.
       sight.fix(to, from, provider.now());
     }
@@ -526,7 +541,7 @@ export async function startApp(): Promise<void> {
   function onCatchUp(): void {
     motion.snap();
     view.repaint();
-    if (session && !splash.visible) hud.show(3000);
+    if (session && !splash.visible) hud.show();
   }
 
   // ---- Walk ----
@@ -548,7 +563,7 @@ export async function startApp(): Promise<void> {
     weakSince = 0;
     motion.reset();
     view.puck.set(null);
-    view.fog.setLantern(null);
+    view.fog.finish();
     sight.stop();
   }
 
@@ -574,6 +589,7 @@ export async function startApp(): Promise<void> {
     };
     walkBlocks.clear();
     walkAlong = newWalkAlong();
+    view.fog.clearWalk();
     motion.reset();
     persistSession(true);
     writeLocal(key(WALKING_KEY), '1');
@@ -582,14 +598,7 @@ export async function startApp(): Promise<void> {
     revealTimer = window.setTimeout(reveal, motion.hasFix ? 0 : FIRST_FIX_WAIT_MS);
   }
 
-  /** While the start screen is up over the map, the map centres in the space above its card. */
-  function splashPadding() {
-    const h = view.map.getContainer().clientHeight;
-    const top = document.querySelector('.wl-card')?.getBoundingClientRect().top ?? h / 2;
-    return { top: 24, bottom: Math.max(0, Math.round(h - top + 24)), left: 0, right: 0 };
-  }
-
-  /** From the start screen to the map: the screen fades as the map slides you to its middle. */
+  /** From the cover to the map: the cover turns like a page as the map slides you to its middle. */
   function reveal(): void {
     clearTimeout(revealTimer);
     if (!session || !splash.visible) return;
@@ -603,7 +612,8 @@ export async function startApp(): Promise<void> {
       duration: 700,
       essential: true,
     });
-    hud.show(4500);
+    hud.show();
+    hud.showCredit(4500);
     if (!motion.hasFix) toasts.show('gps', 'Finding you…');
   }
 
@@ -629,11 +639,16 @@ export async function startApp(): Promise<void> {
     provider.reset?.();
     writeLifetime();
     hud.hideAll();
-    if (showSummary) splash.summary({ walk: rec, newHouses: s.newHouses ?? 0 });
-    else splash.intro();
-    splash.overMap(view.isArmed);
-    splash.show();
-    if (showSummary) frameWalk(s);
+    claims.clear();
+    bubble.clear();
+    if (showSummary) {
+      // The page on the fridge, in the crayon he ended the walk in.
+      fridge.show(rec, s.newHouses ?? 0, theme.pencils[tone]);
+      frameWalk(s);
+    } else {
+      splash.intro();
+      splash.show();
+    }
   }
 
   /** Longest first: the streets you really walked lead the summary, not a 20 m alley. */
@@ -656,6 +671,8 @@ export async function startApp(): Promise<void> {
     sessionTimer = 0;
     await storage.delete('meta', 'activeSession');
     hud.hideAll();
+    claims.clear();
+    bubble.clear();
     splash.intro();
     splash.show();
   }
@@ -667,26 +684,48 @@ export async function startApp(): Promise<void> {
     splash.message(LOCATION_OFF);
   }
 
-  /** Behind the summary, pull back to show the streets this walk went along. */
+  /**
+   * The page on the fridge is your map: behind the fridge, the walk is framed in the middle of the
+   * map at the page's size, and once that is drawn (and done coloring in) it is copied onto the page.
+   */
   function frameWalk(s: ActiveSession): void {
     const g = s.segs;
-    if (g.length < 5) return;
-    let w = Infinity, so = Infinity, e = -Infinity, n = -Infinity;
-    for (let i = 0; i < g.length; i += 5) {
+    const end = s.lastFix ?? { lon: view.map.getCenter().lng, lat: view.map.getCenter().lat };
+    let w = end.lon, so = end.lat, e = end.lon, n = end.lat;
+    for (let i = 0; i + 3 < g.length; i += 5) {
       w = Math.min(w, g[i], g[i + 2]);
       e = Math.max(e, g[i], g[i + 2]);
       so = Math.min(so, g[i + 1], g[i + 3]);
       n = Math.max(n, g[i + 1], g[i + 3]);
     }
-    // Into the space above the summary card.
-    const h = view.map.getContainer().clientHeight;
-    const cardTop = document.querySelector('.wl-card')?.getBoundingClientRect().top ?? h * 0.45;
-    view.map.fitBounds([[w, so], [e, n]], {
-      padding: { top: 56, bottom: Math.max(40, Math.round(h - cardTop + 40)), left: 36, right: 36 },
-      maxZoom: 16.5,
-      duration: 1400,
-      essential: true,
+    // As the design's page: the walk with 39 m of paper around it, at least 225 m across, and
+    // at most 1.6 px a metre.
+    const page = fridge.pageSize();
+    const lat = (so + n) / 2;
+    const wM = Math.max((e - w) * 111_320 * Math.cos(lat * DEG) + 78, 225);
+    const hM = Math.max((n - so) * 110_540 + 78, (225 * page.h) / page.w);
+    const pxPerM = Math.min(page.w / wM, page.h / hM, 1.6);
+    // The design's page is ink, crayon and houses only: no street names or pictograms.
+    pageLabels(false);
+    view.map.jumpTo({
+      center: [(w + e) / 2, lat],
+      zoom: Math.log2((pxPerM * EARTH_CIRCUMFERENCE_M * Math.cos(lat * DEG)) / 512),
+      padding: NO_PADDING,
     });
+    // The canvas holds a frame only while it is drawn: 'idle' comes right after. Streets still
+    // coloring in go on coloring in on the page, until they are done.
+    const grab = () => {
+      if (fridge.visible) fridge.paint(view.map.getCanvas());
+      if (fridge.visible && view.fog.animating()) view.repaint();
+      else view.map.off('idle', grab);
+    };
+    view.map.on('idle', grab);
+  }
+
+  function pageLabels(on: boolean): void {
+    for (const l of view.map.getStyle().layers) {
+      if (l.type === 'symbol') view.map.setLayoutProperty(l.id, 'visibility', on ? 'visible' : 'none');
+    }
   }
 
   // ---- Drawing ----
@@ -694,6 +733,7 @@ export async function startApp(): Promise<void> {
   let fast = true;
   let moving = false;
   let prev: { lon: number; lat: number } | null = null;
+  let prevT = 0;
   let prevHeading: number | null = null;
   /**
    * One loop draws the walker, the lantern and the camera in step with the map. Fast things (an
@@ -707,7 +747,7 @@ export async function startApp(): Promise<void> {
     if (now - lastDraw < interval - 3) return;
     const dt = Math.max(1e-3, (now - lastDraw) / 1000);
     lastDraw = now;
-    fast = view.fog.animating(now / 1000);
+    fast = view.fog.animating(now / 1000) || view.puck.animating(now);
     moving = false;
     // A map pixel in metres: standing still, the walker (and the camera on it) holds within one.
     const mpp = (EARTH_CIRCUMFERENCE_M * Math.cos((prev?.lat ?? 0) * DEG)) / (512 * 2 ** view.map.getZoom());
@@ -717,8 +757,19 @@ export async function startApp(): Promise<void> {
       fast ||= view.camera.settling;
       // The light comes from you and points where you look (compass), else where you walk.
       const light = sight.frame(now, f);
-      view.puck.set({ lon: f.lon, lat: f.lat, tone });
-      view.fog.setLantern(light);
+      // He wears down over the walk, and bobs while he goes faster than a shuffle: 0.5 m/s on the
+      // walk's clock (the demo's runs fast).
+      const walkT = provider.now();
+      view.puck.set({
+        lon: f.lon,
+        lat: f.lat,
+        tone,
+        wear: wearAfter(session?.distanceM ?? 0),
+        heading: f.heading,
+        walking: !!prev && distanceM(prev.lon, prev.lat, f.lon, f.lat) / Math.max(1e-3, (walkT - prevT) / 1000) > 0.5,
+      });
+      prevT = walkT;
+      if (bubble.up) bubble.place(view.map.project([f.lon, f.lat]));
       moving = f.moving || light.settling;
       // Turning to look around: the beam and its shadows follow at full speed.
       if (light.heading !== null && prevHeading !== null) {
@@ -732,20 +783,34 @@ export async function startApp(): Promise<void> {
     } else {
       prev = null;
       prevHeading = null;
-      // Nothing to show under a start screen with no map behind it.
-      if (splash.visible && !document.documentElement.classList.contains('wl-has-map') && !fast) return;
+      // Nothing shows under the cover or the fridge.
+      if ((splash.visible || fridge.visible) && !fast) return;
     }
     view.repaint();
   };
   requestAnimationFrame(frame);
 
+  // A tap on the map colors nothing (ADR 0004); it shows whose map it is.
   view.map.on('click', () => {
-    if (session && !splash.visible) hud.show();
+    if (session && !splash.visible) hud.showCredit(4000);
   });
 
   // ---- Start ----
   splash.onStart(() => startWalk());
   boot.app = { start: startWalk };
+  // Walk again: the cover turns back over the fridge, which comes down under it.
+  fridge.onAgain(() => {
+    splash.intro();
+    splash.show();
+    fridge.hide(true);
+    pageLabels(true);
+    // Once the cover is down, the map under it goes back to where the next walk starts.
+    const p = startPos();
+    window.setTimeout(() => {
+      if (p && !session) view.map.jumpTo({ center: [p.lon, p.lat], zoom: CONFIG.walkZoom, padding: NO_PADDING });
+    }, 900);
+  });
+  splash.onStart(() => fridge.hide());
 
   // The iPhone app may have recorded more of the walk than the page saved (screen locked).
   const lastFixT = saved ? Math.max(saved.lastFix?.t ?? 0, (await provider.lastFixTime?.(saved.id)) ?? 0) : 0;
@@ -757,6 +822,9 @@ export async function startApp(): Promise<void> {
     session = saved;
     session.newHouses ??= 0;
     walkAlong = newWalkAlong();
+    // His trail so far.
+    const s = session.segs;
+    for (let i = 0; i + 4 < s.length; i += 5) view.fog.walkTo(s[i], s[i + 1], s[i + 2], s[i + 3], session.tones?.[i / 5] ?? tone);
     writeLocal(key(WALKING_KEY), '1');
     splash.hide();
     beginTracking(session);
@@ -770,11 +838,16 @@ export async function startApp(): Promise<void> {
     } else {
       revealTimer = window.setTimeout(reveal, 0);
     }
-    hud.show(3000);
+    // The box as it was, and the last street's name up, already written.
+    hud.crayons(session.newStreets);
+    hud.show();
+    hud.showCredit(3000);
+    claims.resume(session.newStreets);
+    const last = session.newStreets.at(-1);
+    if (last) bubble.street(last, session.newStreets.length - 1, 2200);
   } else {
     writeLocal(key(WALKING_KEY), null);
     splash.show();
-    if (start) view.map.setPadding(splashPadding());
     // Start was tapped while the app loaded: carry on.
     if (boot.tapped) startWalk();
   }

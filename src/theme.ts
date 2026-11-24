@@ -1,9 +1,8 @@
 /**
- * The look of the map (ADR 0014): a coloring page of the city, black ink on white paper. Streets you
- * have not walked are faint outlines under a paper wash; what you have seen prints in full ink; every
- * street you walk is colored in, in waxy pencil, for good, with its houses and its name. The start
- * screen, the walk stats and the summary read the same palette as CSS custom properties from the
- * inline style in index.html, which has to paint before any script loads; keep the two in step.
+ * The look of the app (ADR 0014): a coloring book of the city, black ink on white paper, every street
+ * you walk colored in with crayon for good, with its houses and its name. The cover in index.html,
+ * which has to paint before any script loads, repeats the type and the crayons it needs inline; keep
+ * the two in step.
  */
 export interface Pencil {
   /** How the pencil colors: multiplied over the paper and the ink, so lines stay black. */
@@ -14,76 +13,48 @@ export interface Pencil {
 
 export interface Theme {
   font: {
-    /** Names of the streets you walked, in their pencil: Instrument Serif in italic (style.ts fontFaces). */
-    walked: string[];
-    /** Names of the streets you have seen: the same italic, in ink. */
-    names: string[];
-    /** District names and landmarks: Instrument Sans. */
-    places: string[];
+    /**
+     * The hand, a marker: street names, the claim lettering, titles and numbers. Marker Felt on
+     * Apple's devices, Kalam Bold elsewhere (style.ts fontFaces, index.html --hand).
+     */
+    hand: string[];
+    /** The kid, a chalk hand: everything you read and tap. Chalkboard SE, or Patrick Hand. */
+    kid: string[];
   };
+  /**
+   * The printed page: every line in ink on paper, no tints (style.ts). The streets' insides are cut
+   * back to paper inside their ink casings, so crossings stay open.
+   */
   map: {
     paper: string;
     ink: string;
-    water: string;
-    park: string;
-    /** The streets' inside, cut back to paper inside an ink casing, so crossings stay open. */
-    road: string;
-    place: string;
-    /** Street names you have seen but not walked. */
-    name: string;
-    /** Landmarks you have seen. */
-    landmark: string;
   };
-  /** The paper wash over what you have not seen, and the light that clears it. */
+  /** Your sight, which the seen memory remembers; and how fast a walked street colors in. */
   fog: {
-    color: string;
-    /** How much of the line art the wash hides where you have not been. */
-    opacity: number;
-    /** Half-width of the clear corridor around a walked street / path, ground metres. */
-    roadM: number;
-    pathM: number;
-    /** Clear margin around a walked house, metres. */
-    houseM: number;
-    /** Your sight: a clear disc around you, and a cone ahead while you move. */
+    /** A disc around you, and a cone ahead while you move, metres. */
     lanternM: number;
     coneM: number;
     /** Outer half-angle of the cone (where it has faded out) and inner one (full strength). */
     coneHalfDeg: number;
     coneInnerDeg: number;
-    /**
-     * Sight stops at walls. Size of the eye as a light source (m): the bigger, the softer the
-     * edge of a shadow, which widens with distance behind the wall.
-     */
-    lampRadiusM: number;
-    /** Speed at which a street colors in along its block, m/s. */
+    /** Speed at which a street colors in up to you, m/s; from there it keeps your pace. */
     sweepMps: number;
   };
   /** The box of pencils; a street keeps one for good (pencilOf). */
   pencils: Pencil[];
   pencil: {
     /**
-     * Half-width of the street a pencil colors in, ground metres (never under a pixel or two). Its
-     * scribble swings 1.2 times as far, a little past the lines, as a hand colors in.
+     * How wide a crayon colors a street in, units (1.495 m in Amsterdam), by its class: the
+     * design's WCLS, as the map prints them (style.ts). Any other street, and a path.
      */
-    roadM: number;
-    pathM: number;
-    /** The scribble: metres along the street per stroke across it, and its width (m). */
-    strokeM: number;
-    strokeWidthM: number;
-    /** How hard a house is colored, 0..1. */
-    house: number;
-    /** Share of walked houses colored with their street's pencil; the others take one of their own. */
+    width: Record<string, number>;
+    road: number;
+    path: number;
+    /** Share of walked houses colored with their street's crayon; the others take one of their own. */
     houseMatch: number;
   };
-  /** What you have seen but not walked: it stays printed in full ink, for good. */
+  /** What you have seen, remembered for the landmarks you spot. */
   seen: {
-    /** Share of the wash a fully seen spot clears, 0..1 (walked streets clear all of it). */
-    clear: number;
-    /** A house you have seen: paper roof and an ink outline over the wash. */
-    fill: string;
-    edge: string;
-    fillOpacity: number;
-    edgeOpacity: number;
     /**
      * How far sight is remembered (m): in the cone ahead of you, and all around you. Houses and
      * landmarks hit by your sight within this reach become seen.
@@ -91,40 +62,22 @@ export interface Theme {
     beamM: number;
     aroundM: number;
   };
-  /** Mr Sparkles on the map: a colored pencil, in the pencil of the street he colors now. */
-  puck: {
-    wood: string;
-    ink: string;
-  };
 }
 
 export const paperTheme: Theme = {
   font: {
-    walked: ['Instrument Serif Italic', 'Instrument Serif', 'ui-serif', 'New York', 'Iowan Old Style', 'Georgia', 'Noto Serif', 'serif'],
-    names: ['Instrument Serif Italic', 'Instrument Serif', 'ui-serif', 'New York', 'Iowan Old Style', 'Georgia', 'Noto Serif', 'serif'],
-    places: ['Instrument Sans', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+    hand: ['Marker Felt', 'Kalam', 'Chalkboard SE', 'Noteworthy', 'Comic Sans MS', 'cursive'],
+    kid: ['Chalkboard SE', 'Chalkboard', 'Patrick Hand', 'Noteworthy', 'Comic Sans MS', 'cursive'],
   },
   map: {
     paper: '#fffefb',
-    ink: '#111111',
-    water: '#eaf5f9',
-    park: '#f1f6e6',
-    road: '#fffefb',
-    place: '#5e5e5e',
-    name: '#4a4a4a',
-    landmark: '#2b2b2b',
+    ink: '#000000',
   },
   fog: {
-    color: '#fffefb',
-    opacity: 0.6,
-    roadM: 17,
-    pathM: 11,
-    houseM: 7,
     lanternM: 40,
     coneM: 110,
     coneHalfDeg: 38,
     coneInnerDeg: 19,
-    lampRadiusM: 1.5,
     sweepMps: 50,
   },
   pencils: [
@@ -143,27 +96,22 @@ export const paperTheme: Theme = {
     { lay: '#e3256b', press: '#c7185a' }, // razzmatazz
   ],
   pencil: {
-    roadM: 3.4,
-    pathM: 1.6,
-    strokeM: 1.3,
-    strokeWidthM: 1.4,
-    house: 0.64,
+    width: {
+      motorway: 7, trunk: 7, primary: 7, secondary: 6.4, tertiary: 5.6, minor: 4.4, service: 3.2,
+      busway: 4.6, track: 3, pedestrian: 3.8,
+    },
+    road: 4.2,
+    path: 2.4,
     houseMatch: 0.45,
   },
   seen: {
-    clear: 0.92,
-    fill: '#fffefb',
-    edge: '#111111',
-    fillOpacity: 1,
-    edgeOpacity: 0.45,
     beamM: 88,
     aroundM: 37,
   },
-  puck: {
-    wood: '#e9cfa6',
-    ink: '#111111',
-  },
 };
+
+/** A font stack as CSS, for a 2D canvas. */
+export const cssFont = (stack: string[]) => stack.map((f) => (/^[\w-]+$/.test(f) ? f : `"${f}"`)).join(', ');
 
 /**
  * The pencil a street keeps for good: a hash of its name, or of its way when it has none, so it

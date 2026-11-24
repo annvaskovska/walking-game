@@ -4,14 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
     <meta name="color-scheme" content="light" />
-    <meta name="theme-color" content="#fffefb" />
-    <meta name="description" content="Your city starts as a faint pencil drawing. Every street you walk gets colored in, with its houses and its name, for good." />
+    <meta name="theme-color" content="#ffd23f" />
+    <meta name="description" content="Your city's coloring book. Every street stays a blank outline until you walk it. Then it's colored in for good, with its houses and its name." />
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
-    <!-- The start screen's type, shipped with the app (OFL, see public/fonts/). -->
-    <link rel="preload" href="/fonts/instrument-serif-latin.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/fonts/instrument-sans-latin.woff2" as="font" type="font/woff2" crossorigin />
     <title>Mr Sparkles</title>
     <script>
       // Runs before the first paint: picks the screen to show and starts downloading the map tile
@@ -36,7 +33,6 @@
         if (get('wl-walking' + sfx)) h.classList.add('wl-walking');
         var pos = json('wl-pos' + sfx);
         if (!pos || !isFinite(pos.lon) || !isFinite(pos.lat)) return;
-        h.classList.add('wl-has-map');
         var t = get('wl-tiles');
         if (!t || !/^https:\/\/tiles\.openfreemap\.org\/[\w./-]+\/\{z\}\/\{x\}\/\{y\}\.pbf$/.test(t)) t = '%WL_TILES%';
         var z = 14, n = 1 << z, lat = (pos.lat * Math.PI) / 180;
@@ -59,56 +55,41 @@
       })();
     </script>
     <style>
-      /* Instrument Serif for what you read first: the question, the summary's numbers and the
-         street names; Instrument Sans for everything you tap and the small print (ADR 0014). The
-         map's labels use the same files (src/map/style.ts). The serif waits for its file rather
-         than flashing in a stand-in; the sans swaps in. */
+      /* The hand (a marker: titles, claims, numbers, street names) and the kid (a chalk hand: what you
+         read and tap), as in the design (ADR 0014). Apple's phones and Macs have both as system fonts,
+         Marker Felt and Chalkboard SE; everywhere else the open-licensed Kalam Bold and Patrick Hand
+         stand in (OFL, public/fonts/), which a browser downloads only when it lacks the first. The
+         map's labels use the same stacks (src/map/style.ts). */
       @font-face {
-        font-family: 'Instrument Serif';
+        font-family: 'Kalam';
         font-style: normal;
-        font-weight: 400;
-        font-display: block;
-        src: url(/fonts/instrument-serif-latin.woff2) format('woff2');
+        font-weight: 700;
+        font-display: swap;
+        src: url(/fonts/kalam-bold-latin.woff2) format('woff2');
         unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
       }
       @font-face {
-        font-family: 'Instrument Serif';
+        font-family: 'Kalam';
         font-style: normal;
-        font-weight: 400;
-        font-display: block;
-        src: url(/fonts/instrument-serif-latin-ext.woff2) format('woff2');
+        font-weight: 700;
+        font-display: swap;
+        src: url(/fonts/kalam-bold-latin-ext.woff2) format('woff2');
         unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
       }
       @font-face {
-        font-family: 'Instrument Serif';
-        font-style: italic;
+        font-family: 'Patrick Hand';
+        font-style: normal;
         font-weight: 400;
-        font-display: block;
-        src: url(/fonts/instrument-serif-italic-latin.woff2) format('woff2');
+        font-display: swap;
+        src: url(/fonts/patrick-hand-latin.woff2) format('woff2');
         unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
       }
       @font-face {
-        font-family: 'Instrument Serif';
-        font-style: italic;
+        font-family: 'Patrick Hand';
+        font-style: normal;
         font-weight: 400;
-        font-display: block;
-        src: url(/fonts/instrument-serif-italic-latin-ext.woff2) format('woff2');
-        unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
-      }
-      @font-face {
-        font-family: 'Instrument Sans';
-        font-style: normal;
-        font-weight: 400 700;
         font-display: swap;
-        src: url(/fonts/instrument-sans-latin.woff2) format('woff2');
-        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-      }
-      @font-face {
-        font-family: 'Instrument Sans';
-        font-style: normal;
-        font-weight: 400 700;
-        font-display: swap;
-        src: url(/fonts/instrument-sans-latin-ext.woff2) format('woff2');
+        src: url(/fonts/patrick-hand-latin-ext.woff2) format('woff2');
         unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
       }
       /* Paper and ink, as in src/theme.ts (paperTheme.map); keep the two in step. */
@@ -121,10 +102,14 @@
         --line: rgba(17, 17, 17, 0.14);
         /* Vermilion, pressed hard: for what ends or warns. */
         --stop: #a8361c;
-        --serif: 'Instrument Serif', ui-serif, 'New York', Georgia, serif;
-        --sans: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        --hand: 'Marker Felt', 'Kalam', 'Chalkboard SE', 'Noteworthy', 'Comic Sans MS', cursive;
+        --kid: 'Chalkboard SE', 'Chalkboard', 'Patrick Hand', 'Noteworthy', 'Comic Sans MS', cursive;
         --top: env(safe-area-inset-top, 0px);
         --bottom: env(safe-area-inset-bottom, 0px);
+        /* The cover's yellow, and Start's cerulean crayon (src/theme.ts paperTheme.pencils[0]) as a
+           static wax texture, so the cover paints whole before any script. */
+        --cover: #ffd23f;
+        --wax-cerulean: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='128' height='128'><filter id='t' x='0' y='0' width='100%' height='100%' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.25' numOctaves='2' stitchTiles='stitch' seed='7'/><feColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1' result='a'/><feTurbulence type='fractalNoise' baseFrequency='1.2' stitchTiles='stitch' seed='9'/><feColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1'/><feComposite in='a' operator='arithmetic' k2='.6' k3='.4'/><feColorMatrix values='0 0 0 0 .122 0 0 0 0 .635 0 0 0 0 .91 -18 0 0 0 10.8' result='h'/><feTurbulence type='fractalNoise' baseFrequency='.09' numOctaves='2' stitchTiles='stitch' seed='3'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .9 0 0 0 .45'/><feComposite in='h' operator='in'/></filter><rect width='128' height='128' filter='url(%23t)'/></svg>");
       }
       * { box-sizing: border-box; }
       html, body {
@@ -132,9 +117,7 @@
         height: 100%;
         background: var(--paper);
         color: var(--text);
-        font-family: var(--sans);
-        /* The serif has one weight: never fake a bold one. */
-        font-synthesis: none;
+        font-family: var(--kid);
         -webkit-font-smoothing: antialiased;
         overflow: hidden;
         overscroll-behavior: none;
@@ -157,95 +140,147 @@
       .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan,
       .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan .maplibregl-canvas { touch-action: none; }
 
-      /* ---- Start screen ---- */
-      .wl-splash {
+      /* ---- The cover: the start screen, a coloring book's yellow cover (ADR 0014) ---- */
+      .wl-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+      .wl-vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+      .wl-cover {
         position: fixed;
         inset: 0;
         z-index: 10;
+        /* The hand-drawn frame sits 12 px in, and clear of the notch on a phone on its side. */
+        --fl: max(12px, env(safe-area-inset-left));
+        --fr: max(12px, env(safe-area-inset-right));
+        background: var(--cover);
+        color: #000;
+        transform-origin: 0 50%;
+        -webkit-backface-visibility: hidden;
+        backface-visibility: hidden;
+        transition: transform 0.9s cubic-bezier(0.55, 0.06, 0.3, 1), opacity 0.2s ease, visibility 0s;
+      }
+      /* Start turns it like a book page onto the map drawn under it; back from a walk, it turns back. */
+      .wl-walking .wl-cover {
+        transform: perspective(1400px) rotateY(-112deg);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: transform 0.9s cubic-bezier(0.55, 0.06, 0.3, 1), opacity 0.3s ease 0.62s, visibility 0s linear 0.9s;
+      }
+      .wl-walking .wl-cover .arm-wave { animation-play-state: paused; }
+      .wl-cover::before {
+        content: '';
+        position: absolute;
+        z-index: 1;
+        inset: 12px var(--fr) 12px var(--fl);
+        pointer-events: none;
+        border: 2.6px solid #000;
+        border-radius: 30px 34px 28px 36px / 34px 28px 36px 30px;
+      }
+      /* The page inside the frame; on a short screen it scrolls, and Start is always within reach. */
+      .wl-page {
+        position: absolute;
+        inset: 12px var(--fr) 12px var(--fl);
         display: flex;
         flex-direction: column;
         align-items: center;
+        text-align: center;
+        padding: max(40px, calc(var(--top) - 6px)) 12px max(14px, calc(var(--bottom) - 4px));
+        border-radius: 30px 34px 28px 36px / 34px 28px 36px 30px;
+        overflow-x: hidden;
         overflow-y: auto;
-        padding: calc(var(--top) + 24px) 24px calc(var(--bottom) + 22px);
-        transition: opacity 0.5s ease, visibility 0s linear 0.5s;
+        overscroll-behavior: contain;
+        scrollbar-width: none;
       }
-      /* No map yet: plain paper, faded out once the map is drawn behind. */
-      .wl-splash::before {
-        content: '';
-        position: fixed;
-        inset: 0;
-        z-index: -1;
-        background: var(--paper);
-        transition: opacity 0.9s ease;
-      }
-      .wl-has-map .wl-splash::before { opacity: 0; }
-      .wl-walking .wl-splash { opacity: 0; visibility: hidden; pointer-events: none; }
-      .wl-card {
+      /* The title and the scene keep the phone's column on a wider screen. */
+      .wl-title { position: relative; width: 100%; max-width: 342px; margin: 0; line-height: 1; }
+      .wl-mr { display: block; width: max-content; margin: 0 0 -14px 26px; font: 700 34px/1 var(--hand); transform: rotate(-8deg); }
+      .wl-title svg { display: block; width: 100%; max-width: 334px; height: auto; margin: 0 auto; overflow: visible; }
+      .wl-title text { font-family: var(--hand); }
+      .wl-tagline { margin: 2px 0 12px; font: 400 19px/1.2 var(--hand); }
+      .wl-scene {
         position: relative;
-        margin-top: auto;
+        /* On a short screen it gives up its bottom first, so Start stays in view. */
+        flex: 0 1 auto;
         width: 100%;
-        max-width: 380px;
-        display: flex;
-        flex-direction: column;
-        text-wrap: pretty;
+        max-width: 342px;
+        min-height: 120px;
+        background: var(--paper);
+        border: 2.6px solid #000;
+        border-radius: 16px 20px 14px 22px / 20px 14px 22px 16px;
+        overflow: hidden;
       }
-      /* The card sits on paper that fades up into the map or the drawing: your streets show above. */
-      .wl-card::before {
+      .wl-scene svg { display: block; width: 100%; height: auto; max-height: 32vh; }
+      /* A phone on its side: the whole scene, and the page scrolls to Start. */
+      @media (max-height: 500px) {
+        .wl-scene { flex: none; }
+        .wl-scene svg { max-height: none; }
+      }
+      .wl-hi {
+        position: absolute;
+        top: 7px;
+        right: 9px;
+        width: 172px;
+        text-align: left;
+        padding: 7px 10px 8px;
+        background: #fff;
+        border: 2px solid #000;
+        border-radius: 16px 20px 18px 14px / 18px 14px 20px 16px;
+        font: 400 14px/1.22 var(--kid);
+      }
+      .wl-hi::after {
         content: '';
         position: absolute;
-        z-index: -1;
-        left: 50%;
-        width: 100vw;
-        top: -110px;
-        bottom: calc(-1 * (var(--bottom) + 22px));
-        transform: translateX(-50%);
-        background: linear-gradient(180deg, rgba(255, 254, 251, 0) 0, rgba(255, 254, 251, 0.86) 70px, var(--paper) 118px);
-        transition: opacity 0.9s ease;
+        left: 30px;
+        bottom: -8px;
+        width: 12px;
+        height: 12px;
+        background: #fff;
+        border-right: 2px solid #000;
+        border-bottom: 2px solid #000;
+        transform: rotate(45deg) skew(8deg, 8deg);
       }
-      .wl-title { margin: 0; font: 400 36px/1.05 var(--serif); letter-spacing: -0.01em; color: var(--ink); text-wrap: balance; }
-      .wl-lead { margin: 10px 0 0; font-size: 15px; line-height: 1.45; color: var(--muted); }
-
-      /* ---- First open, no map behind yet: a corner of the demo city, its walk colored in (ADR 0014) ---- */
-      .wl-cover { position: fixed; top: 0; left: 50%; z-index: -1; width: min(100%, 520px); height: 100%; transform: translateX(-50%); object-fit: cover; object-position: 50% 0; pointer-events: none; }
-      .wl-has-map .wl-cover { display: none; }
-
-      /* After a walk: the distance, large, and what it added to your map. */
-      .wl-sum { display: none; width: 100%; flex-direction: column; align-items: center; text-align: center; }
-      .wl-summary .wl-head, .wl-summary .wl-stats { display: none; }
-      .wl-summary .wl-sum { display: flex; }
-      .wl-hero { margin: 0; font: 400 104px/0.9 var(--serif); letter-spacing: -0.015em; color: var(--ink); white-space: nowrap; }
-      .wl-hero i { margin-left: 8px; font-size: 44px; letter-spacing: 0; color: var(--muted); }
-      .wl-sub { margin: 10px 0 0; font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
-      .wl-rule { width: 100%; height: 1px; margin-top: 20px; background: var(--line); }
-      .wl-label { margin: 18px 0 0; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
-      .wl-names { margin: 6px 0 0; font: italic 400 32px/1.15 var(--serif); color: var(--ink); }
-      .wl-names[data-long] { font-size: 26px; }
-      .wl-more { margin: 6px 0 0; font-size: 14px; line-height: 1.45; color: var(--muted); }
-      .wl-sum[data-empty] .wl-more { margin-top: 18px; }
-
-      .wl-stats { margin: 14px 0 0; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
-      .wl-stats b { color: var(--ink); font-weight: 600; }
-      .wl-msg { margin: 20px 0 0; padding: 12px 14px; width: 100%; border-radius: 12px; background: rgba(226, 96, 63, 0.08); border: 1px solid rgba(168, 54, 28, 0.28); font-size: 14px; line-height: 1.45; text-align: left; color: var(--text); }
-      .wl-msg b { color: var(--ink); font-weight: 600; }
-      /* Start: ink on paper. */
-      .wl-go {
-        position: relative;
-        margin-top: 22px;
-        width: 100%;
-        height: 56px;
-        border: 0;
-        border-radius: 999px;
-        background: var(--ink);
-        color: var(--paper);
-        font-size: 16px;
-        font-weight: 600;
-        box-shadow: 0 10px 24px -14px rgba(17, 17, 17, 0.7);
-        transition: transform 0.12s ease, background 0.2s ease;
+      .arm-wave { transform-box: fill-box; transform-origin: 0% 100%; animation: wave 2.2s ease-in-out infinite; }
+      @keyframes wave { 0%, 55%, 100% { transform: rotate(0); } 65% { transform: rotate(-22deg); } 75% { transform: rotate(6deg); } 85% { transform: rotate(-16deg); } }
+      .wl-ask { margin: 18px 4px 8px; max-width: 20ch; font: 700 23px/1.18 var(--kid); text-wrap: balance; }
+      .wl-lede { margin: 0 6px 18px; max-width: 32ch; font: 400 15.5px/1.42 var(--kid); text-wrap: pretty; }
+      /* A returning walker: what they have colored in so far, the answer in the question's bold
+         (the marker hides the decimal point of 0.4 km). */
+      .wl-stats { margin: -4px 6px 18px; font: 400 15.5px/1.3 var(--kid); }
+      .wl-stats b { font-size: 19px; }
+      /* A problem to explain, such as location turned off: a note in a speech bubble. */
+      .wl-msg {
+        margin: 0 0 20px;
+        max-width: 34ch;
+        padding: 9px 13px 10px;
+        background: #fff;
+        border: 2px solid #000;
+        border-radius: 16px 20px 18px 14px / 18px 14px 20px 16px;
+        box-shadow: 0 3px 0 #000;
+        font: 400 14.5px/1.4 var(--kid);
+        text-align: left;
+        text-wrap: pretty;
       }
-      .wl-summary .wl-go { margin-top: 24px; }
-      .wl-go:hover { background: #2b2b2b; }
-      .wl-go:active { transform: scale(0.98); }
-      .wl-go:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+      .wl-cover :focus-visible { outline: 3px dashed #000; outline-offset: 4px; }
+
+      /* The chunky crayon button, shared by every screen: white paper, colored in with the crayon
+         in --tex (a wax texture: waxURL() in src/ui/wax.ts, or --wax-cerulean before any script). */
+      .crayon-btn, .wl-fatal button {
+        appearance: none;
+        cursor: pointer;
+        border: 2.8px solid #000;
+        border-radius: 22px 30px 20px 28px / 28px 20px 30px 22px;
+        background: #fff var(--tex, none) 0 0 / 128px 128px;
+        box-shadow: 0 4px 0 #000;
+        color: #000;
+        font: 700 20px/1 var(--kid);
+        transition: transform 0.14s ease, box-shadow 0.14s ease;
+      }
+      @media (hover: hover) {
+        .crayon-btn:hover, .wl-fatal button:hover { transform: rotate(-1.6deg) translateY(-1px); }
+      }
+      .crayon-btn:active, .wl-fatal button:active { transform: translateY(3px); box-shadow: 0 1px 0 #000; }
+      .crayon-btn:focus-visible, .wl-fatal button:focus-visible { outline: 3px dashed #000; outline-offset: 4px; }
+      .wl-go { position: relative; padding: 15px 26px 16px; transform: rotate(-1.2deg); --tex: var(--wax-cerulean); }
+      /* Tapped before the app is up, or waiting for the first GPS fix: a scribbled ring turns. */
       .wl-go[aria-busy='true'] { color: transparent; }
       .wl-go[aria-busy='true']::after {
         content: '';
@@ -255,167 +290,114 @@
         width: 22px;
         height: 22px;
         margin: -11px 0 0 -11px;
-        border-radius: 50%;
-        border: 2.5px solid rgba(255, 254, 251, 0.25);
-        border-top-color: var(--paper);
+        border: 3px solid #000;
+        border-right-color: transparent;
+        border-radius: 48% 52% 45% 55%;
         animation: wl-spin 0.8s linear infinite;
       }
       @keyframes wl-spin { to { transform: rotate(360deg); } }
-      /* One line: what happens to your location, or, wherever the map shows, whose map it is. */
-      .wl-fine { margin: 12px 0 0; font-size: 12px; line-height: 1.5; text-align: center; color: var(--faint); }
-      .wl-fine a { text-decoration: none; white-space: nowrap; }
-      .wl-fine a:hover { text-decoration: underline; }
-      .wl-fine__credit, .wl-has-map .wl-fine__privacy { display: none; }
-      .wl-has-map .wl-fine__credit { display: inline; }
-      @media (max-height: 660px) {
-        .wl-title { font-size: 32px; }
-        .wl-hero { font-size: 88px; }
-        .wl-hero i { font-size: 38px; }
-      }
-      /* A phone on its side: the essentials, with Start in view and no scrolling. */
-      @media (max-height: 500px) {
-        .wl-splash { padding-top: calc(var(--top) + 12px); padding-bottom: calc(var(--bottom) + 12px); }
-        .wl-card::before { bottom: calc(-1 * (var(--bottom) + 12px)); }
-        .wl-title { font-size: 28px; }
-        .wl-hero { font-size: 64px; }
-        .wl-hero i { font-size: 30px; }
-        .wl-rule { margin-top: 12px; }
-        .wl-label { margin-top: 10px; }
-        .wl-names, .wl-names[data-long] { font-size: 24px; }
-        .wl-stats { margin-top: 14px; }
-        .wl-go, .wl-summary .wl-go { margin-top: 16px; height: 52px; }
-        .wl-fine { margin-top: 10px; }
+      .wl-fine { margin: 14px 0 0; font: 400 13px/1.3 var(--kid); color: #2b2300; }
+
+      @media (prefers-reduced-motion: reduce) {
+        .wl-cover { transition: opacity 0.2s ease, visibility 0s; }
+        .wl-walking .wl-cover { transform: none; transition: opacity 0.2s ease, visibility 0s linear 0.2s; }
+        .arm-wave { animation: none; }
+        .crayon-btn, .wl-fatal button { transition: none; }
       }
 
-      /* ---- Walk view: only the map. A tap shows this, for a few seconds. ---- */
-      .wl-hud {
+      /* The walk screen over the map (the crayon box, the credits, the toasts) is styled in src/ui/walk.css. */
+      /* Mr Sparkles could not start: the cover's page, with a way to try again. */
+      .wl-fatal {
         position: fixed;
-        left: 50%;
-        bottom: calc(var(--bottom) + 28px);
-        z-index: 5;
-        display: flex;
-        align-items: center;
-        gap: 2px;
-        padding: 6px 6px 6px 16px;
-        border-radius: 999px;
-        background: rgba(251, 249, 244, 0.94);
-        border: 1px solid var(--line);
-        box-shadow: 0 12px 30px -14px rgba(17, 17, 17, 0.45);
-        -webkit-backdrop-filter: blur(10px);
-        backdrop-filter: blur(10px);
-        white-space: nowrap;
-        font-size: 15px;
-        font-variant-numeric: tabular-nums;
-        color: var(--ink);
-        transform: translate(-50%, 0);
-        transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0s;
-      }
-      .wl-hud[hidden] { display: flex; opacity: 0; visibility: hidden; transform: translate(-50%, 16px); transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0.3s; }
-      .wl-hud__dot { width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--stop); box-shadow: 0 0 0 4px rgba(168, 54, 28, 0.14); }
-      .wl-hud__sep { width: 1px; height: 14px; margin: 0 10px; background: var(--line); }
-      .wl-hud__end {
-        margin-left: 12px;
-        height: 36px;
-        padding: 0 16px;
-        border: 0;
-        border-radius: 999px;
-        background: rgba(17, 17, 17, 0.07);
-        color: var(--ink);
-        font-size: 14px;
-        font-weight: 600;
-        transition: background 0.2s ease, color 0.2s ease;
-      }
-      .wl-hud__end[data-armed] { background: var(--stop); color: var(--paper); }
-      .wl-credit {
-        position: fixed;
-        left: 50%;
-        bottom: calc(var(--bottom) + 7px);
-        z-index: 4;
-        margin: 0;
-        white-space: nowrap;
-        transform: translateX(-50%);
-        font-size: 10px;
-        line-height: 1.3;
-        color: var(--faint);
-        /* Paper around the letters, so the credit reads over the drawing. */
-        text-shadow: 0 0 2px var(--paper), 0 0 4px var(--paper);
-        transition: opacity 0.4s ease, visibility 0s linear 0s;
-      }
-      .wl-credit a { text-decoration: none; }
-      .wl-credit[hidden] { display: block; opacity: 0; visibility: hidden; transition: opacity 0.4s ease, visibility 0s linear 0.4s; }
-      .wl-toast {
-        position: fixed;
-        left: 50%;
-        top: calc(var(--top) + 14px);
-        z-index: 6;
-        max-width: min(92vw, 420px);
-        padding: 10px 16px;
-        border-radius: 14px;
-        background: rgba(251, 249, 244, 0.95);
-        border: 1px solid var(--line);
-        box-shadow: 0 10px 26px -14px rgba(17, 17, 17, 0.45);
-        -webkit-backdrop-filter: blur(10px);
-        backdrop-filter: blur(10px);
-        font-size: 14px;
-        line-height: 1.4;
+        inset: 0;
+        z-index: 20;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 14px;
+        padding: 24px;
         text-align: center;
-        color: var(--ink);
-        transform: translate(-50%, 0);
-        transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0s;
+        background: var(--cover);
+        color: #000;
+        font: 400 15.5px/1.42 var(--kid);
       }
-      .wl-toast[hidden] { display: block; opacity: 0; visibility: hidden; transform: translate(-50%, -12px); transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0.3s; }
-      .wl-toast[data-kind='warn'] { border-color: rgba(168, 54, 28, 0.4); }
-      @media (prefers-reduced-motion: reduce) {
-        .wl-splash, .wl-splash::before, .wl-hud, .wl-toast, .wl-credit { transition: none; }
+      .wl-fatal::before {
+        content: '';
+        position: absolute;
+        inset: 12px;
+        pointer-events: none;
+        border: 2.6px solid #000;
+        border-radius: 30px 34px 28px 36px / 34px 28px 36px 30px;
       }
-      .wl-fatal { position: fixed; inset: 0; z-index: 20; display: grid; place-content: center; gap: 12px; padding: 24px; text-align: center; background: var(--paper); }
-      .wl-fatal h2 { margin: 0; font: 400 34px/1.1 var(--serif); color: var(--ink); }
-      .wl-fatal button { justify-self: center; height: 44px; padding: 0 22px; border: 0; border-radius: 999px; background: var(--ink); color: var(--paper); font-weight: 600; }
+      .wl-fatal h2 { margin: 0; font: 700 34px/1.1 var(--hand); text-wrap: balance; }
+      .wl-fatal p { margin: 0 0 6px; max-width: 32ch; }
+      .wl-fatal button { padding: 15px 26px 16px; --tex: var(--wax-cerulean); }
     </style>
   </head>
   <body>
+    <!-- The crayon's filters, shared by every screen (ADR 0014): wax takes the paper's tooth,
+         wobble shakes a line as a hand draws it. -->
+    <svg class="wl-defs" aria-hidden="true" focusable="false">
+      <defs>
+        <filter id="wax" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7" result="n"/>
+          <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -7 0 0 0 4.9" result="m"/>
+          <feComposite in="SourceGraphic" in2="m" operator="in"/>
+        </filter>
+        <filter id="wobble" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency=".03" numOctaves="2" seed="3" result="t"/>
+          <feDisplacementMap in="SourceGraphic" in2="t" scale="2.4" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+      </defs>
+    </svg>
+
     <div id="map" class="wl-map"></div>
 
-    <main id="splash" class="wl-splash">
-      <img class="wl-cover" src="/cover.svg" alt="" />
-      <div class="wl-card">
-        <div class="wl-head">
-          <h1 class="wl-title">How much of your city have you really walked?</h1>
-          <p class="wl-lead">Take Mr Sparkles out and see. He colors in every street you walk.</p>
+    <!-- The cover, painted before any script (ADR 0007): its title and scene are static SVG. -->
+    <main id="splash" class="wl-cover" aria-labelledby="wl-title">
+      <div class="wl-page" id="wl-page">
+        <h1 class="wl-title" id="wl-title">
+          <span class="wl-vh">Mr Sparkles</span>
+          <span class="wl-mr" aria-hidden="true">Mr</span>
+          <svg viewBox="0 0 340 104" aria-hidden="true"><text x="170" y="86" text-anchor="middle" textLength="322" lengthAdjust="spacingAndGlyphs" rotate="-6 5 -3 6 -5 3 -6 4" font-weight="700" font-size="88" fill="#000" stroke="#000" stroke-width="9" stroke-linejoin="round">Sparkles</text>
+            <text x="170" y="86" text-anchor="middle" textLength="322" lengthAdjust="spacingAndGlyphs" rotate="-6 5 -3 6 -5 3 -6 4" font-weight="700" font-size="88" fill="#fffefb">Sparkles</text>
+            <g filter="url(#wax)" style="mix-blend-mode:multiply"><text x="170" y="86" text-anchor="middle" textLength="322" lengthAdjust="spacingAndGlyphs" rotate="-6 5 -3 6 -5 3 -6 4" font-weight="700" font-size="88" transform="translate(-1.6 -1.8)"><tspan fill="#1fa2e8">S</tspan><tspan fill="#ff8a1f">p</tspan><tspan fill="#ee3e9e">a</tspan><tspan fill="#ffd02e">r</tspan><tspan fill="#ff5a6e">k</tspan><tspan fill="#8c5cf0">l</tspan><tspan fill="#13bfb0">e</tspan><tspan fill="#3557e6">s</tspan></text></g></svg>
+        </h1>
+        <p class="wl-tagline">your city's coloring book</p>
+        <div class="wl-scene">
+          <svg viewBox="0 0 360 246" aria-hidden="true">
+            <defs><pattern id="wl-hp0" width="4.2" height="4.2" patternUnits="userSpaceOnUse" patternTransform="rotate(-38)"><rect width="4.2" height="4.2" fill="#ff5a6e" fill-opacity=".42"/><rect width="4.2" height="2.5" fill="#ff5a6e"/></pattern><pattern id="wl-hp1" width="4.2" height="4.2" patternUnits="userSpaceOnUse" patternTransform="rotate(-38)"><rect width="4.2" height="4.2" fill="#ffd02e" fill-opacity=".42"/><rect width="4.2" height="2.5" fill="#ffd02e"/></pattern><pattern id="wl-hp2" width="4.2" height="4.2" patternUnits="userSpaceOnUse" patternTransform="rotate(-38)"><rect width="4.2" height="4.2" fill="#13bfb0" fill-opacity=".42"/><rect width="4.2" height="2.5" fill="#13bfb0"/></pattern><pattern id="wl-hp3" width="4.2" height="4.2" patternUnits="userSpaceOnUse" patternTransform="rotate(-38)"><rect width="4.2" height="4.2" fill="#ee3e9e" fill-opacity=".42"/><rect width="4.2" height="2.5" fill="#ee3e9e"/></pattern><clipPath id="wl-cpart"><rect x="140" y="132" width="64" height="70"/></clipPath></defs>
+            <g filter="url(#wax)"><path d="M6 192V84H14V72H22V60H38V72H46V84H54V192Z" transform="translate(2.6 1.7)" fill="url(#wl-hp0)"/><path d="M54 192V94Q54 82 62 80Q64 62 78 54Q92 62 94 80Q102 82 102 94V192Z" transform="translate(2.6 1.7)" fill="url(#wl-hp1)"/><path d="M102 192V98H109V72Q109 66 115 64V52H135V64Q141 66 141 72V98H148V192Z" transform="translate(2.6 1.7)" fill="url(#wl-hp2)"/><path d="M148 192V90L172 60L196 90V192Z" transform="translate(2.6 1.7)" fill="url(#wl-hp3)" clip-path="url(#wl-cpart)"/><polyline points="150,134 156,121 161,134 166,118 171,134 176,122 181,134 186,126 190,134" fill="none" stroke="#ee3e9e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="0" y="196" width="194" height="14" fill="#1fa2e8" fill-opacity=".4"/><polyline points="1,209.1 4.1,196.5 7.2,209.3 10.3,197.1 13.4,209.3 16.5,195.8 19.6,209.9 22.7,196.3 25.8,209.2 28.9,196.4 32,209.5 35.1,196.8 38.2,210.2 41.3,196.6 44.4,209.7 47.5,196.8 50.6,210.1 53.7,196 56.8,209.4 59.9,196 63,210.3 66.1,195.8 69.2,209.6 72.3,196.4 75.4,209.6 78.5,195.9 81.6,209.9 84.7,196.2 87.8,210.3 90.9,196.8 94,209.5 97.1,196.7 100.2,209.1 103.3,196.8 106.4,209.4 109.5,196.1 112.6,209.1 115.7,196.5 118.8,209.6 121.9,196.6 125,209.5 128.1,196.4 131.2,209.2 134.3,196.6 137.4,210 140.5,197 143.6,209.6 146.7,195.6 149.8,209.4 152.9,196.5 156,210 159.1,196.7 162.2,209.3 165.3,196.4 168.4,209.7 171.5,196.6 174.6,209.6 177.7,196.3 180.8,209.8 183.9,196.5 187,210.1 190.1,195.7 193.2,209.7 " fill="none" stroke="#1fa2e8" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/><rect x="0" y="217" width="172" height="23" fill="#55c4f0" fill-opacity=".35"/><polyline points="-8,214.5 7.4,241 -1.2,214.5 14.2,241 5.6,214.5 21,241 12.4,214.5 27.8,241 19.2,214.5 34.6,241 26,214.5 41.4,241 32.8,214.5 48.2,241 39.6,214.5 55,241 46.4,214.5 61.8,241 53.2,214.5 68.6,241 60,214.5 75.4,241 66.8,214.5 82.2,241 73.6,214.5 89,241 80.4,214.5 95.8,241 87.2,214.5 102.6,241 94,214.5 109.4,241 100.8,214.5 116.2,241 107.6,214.5 123,241 114.4,214.5 129.8,241 121.2,214.5 136.6,241 128,214.5 143.4,241 134.8,214.5 150.2,241 141.6,214.5 157,241 148.4,214.5 163.8,241 155.2,214.5 170.6,241 162,214.5 177.4,241 " fill="none" stroke="#55c4f0" stroke-width="2.4" stroke-linejoin="round"/></g>
+            <g fill="none" stroke="#000" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" filter="url(#wobble)"><path d="M6 192V84H14V72H22V60H38V72H46V84H54V192Z"/><rect x="15.4" y="92" width="10" height="13" fill="#fff"/><path d="M20.4 92V105M15.4 98.5H25.4"/><rect x="34.6" y="92" width="10" height="13" fill="#fff"/><path d="M39.6 92V105M34.6 98.5H44.6"/><rect x="15.4" y="114" width="10" height="13" fill="#fff"/><path d="M20.4 114V127M15.4 120.5H25.4"/><rect x="34.6" y="114" width="10" height="13" fill="#fff"/><path d="M39.6 114V127M34.6 120.5H44.6"/><rect x="15.4" y="136" width="10" height="13" fill="#fff"/><path d="M20.4 136V149M15.4 142.5H25.4"/><rect x="34.6" y="136" width="10" height="13" fill="#fff"/><path d="M39.6 136V149M34.6 142.5H44.6"/><rect x="26" y="63" width="8" height="10" fill="#fff"/><rect x="12" y="170" width="10" height="13" fill="#fff"/><path d="M37 192V178Q37 171 42.5 171Q48 171 48 178V192" fill="#fff"/><path d="M54 192V94Q54 82 62 80Q64 62 78 54Q92 62 94 80Q102 82 102 94V192Z"/><rect x="63.4" y="102" width="10" height="13" fill="#fff"/><path d="M68.4 102V115M63.4 108.5H73.4"/><rect x="82.6" y="102" width="10" height="13" fill="#fff"/><path d="M87.6 102V115M82.6 108.5H92.6"/><rect x="63.4" y="124" width="10" height="13" fill="#fff"/><path d="M68.4 124V137M63.4 130.5H73.4"/><rect x="82.6" y="124" width="10" height="13" fill="#fff"/><path d="M87.6 124V137M82.6 130.5H92.6"/><rect x="63.4" y="146" width="10" height="13" fill="#fff"/><path d="M68.4 146V159M63.4 152.5H73.4"/><rect x="82.6" y="146" width="10" height="13" fill="#fff"/><path d="M87.6 146V159M82.6 152.5H92.6"/><rect x="74" y="66" width="8" height="10" fill="#fff"/><rect x="60" y="170" width="10" height="13" fill="#fff"/><path d="M85 192V178Q85 171 90.5 171Q96 171 96 178V192" fill="#fff"/><path d="M102 192V98H109V72Q109 66 115 64V52H135V64Q141 66 141 72V98H148V192Z"/><rect x="110.8" y="106" width="10" height="13" fill="#fff"/><path d="M115.8 106V119M110.8 112.5H120.8"/><rect x="129.2" y="106" width="10" height="13" fill="#fff"/><path d="M134.2 106V119M129.2 112.5H139.2"/><rect x="110.8" y="128" width="10" height="13" fill="#fff"/><path d="M115.8 128V141M110.8 134.5H120.8"/><rect x="129.2" y="128" width="10" height="13" fill="#fff"/><path d="M134.2 128V141M129.2 134.5H139.2"/><rect x="110.8" y="150" width="10" height="13" fill="#fff"/><path d="M115.8 150V163M110.8 156.5H120.8"/><rect x="129.2" y="150" width="10" height="13" fill="#fff"/><path d="M134.2 150V163M129.2 156.5H139.2"/><rect x="121" y="57" width="8" height="10" fill="#fff"/><rect x="108" y="170" width="10" height="13" fill="#fff"/><path d="M131 192V178Q131 171 136.5 171Q142 171 142 178V192" fill="#fff"/><path d="M148 192V90L172 60L196 90V192Z"/><rect x="157.4" y="100" width="10" height="13" fill="#fff"/><path d="M162.4 100V113M157.4 106.5H167.4"/><rect x="176.6" y="100" width="10" height="13" fill="#fff"/><path d="M181.6 100V113M176.6 106.5H186.6"/><rect x="157.4" y="122" width="10" height="13" fill="#fff"/><path d="M162.4 122V135M157.4 128.5H167.4"/><rect x="176.6" y="122" width="10" height="13" fill="#fff"/><path d="M181.6 122V135M176.6 128.5H186.6"/><rect x="157.4" y="144" width="10" height="13" fill="#fff"/><path d="M162.4 144V157M157.4 150.5H167.4"/><rect x="176.6" y="144" width="10" height="13" fill="#fff"/><path d="M181.6 144V157M176.6 150.5H186.6"/><rect x="168" y="73" width="8" height="10" fill="#fff"/><rect x="154" y="170" width="10" height="13" fill="#fff"/><path d="M179 192V178Q179 171 184.5 171Q190 171 190 178V192" fill="#fff"/><path d="M196 192V78H246V192Z"/><path d="M193 78H249M196 84H246"/><rect x="206" y="88" width="10" height="13" fill="#fff"/><path d="M211 88V101M206 94.5H216"/><rect x="226" y="88" width="10" height="13" fill="#fff"/><path d="M231 88V101M226 94.5H236"/><rect x="206" y="110" width="10" height="13" fill="#fff"/><path d="M211 110V123M206 116.5H216"/><rect x="226" y="110" width="10" height="13" fill="#fff"/><path d="M231 110V123M226 116.5H236"/><rect x="206" y="132" width="10" height="13" fill="#fff"/><path d="M211 132V145M206 138.5H216"/><rect x="226" y="132" width="10" height="13" fill="#fff"/><path d="M231 132V145M226 138.5H236"/><rect x="202" y="170" width="10" height="13" fill="#fff"/><path d="M229 192V178Q229 171 234.5 171Q240 171 240 178V192" fill="#fff"/><path d="M246 192V96H253V86H260V76H278V86H285V96H292V192Z"/><rect x="254.8" y="104" width="10" height="13" fill="#fff"/><path d="M259.8 104V117M254.8 110.5H264.8"/><rect x="273.2" y="104" width="10" height="13" fill="#fff"/><path d="M278.2 104V117M273.2 110.5H283.2"/><rect x="254.8" y="126" width="10" height="13" fill="#fff"/><path d="M259.8 126V139M254.8 132.5H264.8"/><rect x="273.2" y="126" width="10" height="13" fill="#fff"/><path d="M278.2 126V139M273.2 132.5H283.2"/><rect x="254.8" y="148" width="10" height="13" fill="#fff"/><path d="M259.8 148V161M254.8 154.5H264.8"/><rect x="273.2" y="148" width="10" height="13" fill="#fff"/><path d="M278.2 148V161M273.2 154.5H283.2"/><rect x="265" y="80" width="8" height="10" fill="#fff"/><rect x="252" y="170" width="10" height="13" fill="#fff"/><path d="M275 192V178Q275 171 280.5 171Q286 171 286 178V192" fill="#fff"/><path d="M0 194H360M0 212H360M0 216.5H360"/><path d="M8 233q3 -3 6 0t6 0"/><path d="M34 226q3 -3 6 0t6 0"/><path d="M60 233q3 -3 6 0t6 0"/><path d="M86 226q3 -3 6 0t6 0"/><path d="M112 233q3 -3 6 0t6 0"/><path d="M138 226q3 -3 6 0t6 0"/><path d="M164 233q3 -3 6 0t6 0"/><path d="M190 226q3 -3 6 0t6 0"/><path d="M216 233q3 -3 6 0t6 0"/><path d="M242 226q3 -3 6 0t6 0"/><path d="M268 233q3 -3 6 0t6 0"/><path d="M294 226q3 -3 6 0t6 0"/><path d="M320 233q3 -3 6 0t6 0"/><path d="M346 226q3 -3 6 0t6 0"/><path d="M322 192V140M322 164L312 154M322 158L332 148"/><path d="M341 113.6A11 11 0 0 1 341 134.4L342.8 130A11 11 0 0 1 328 144.8L332.4 143A11 11 0 0 1 311.6 143L316 144.8A11 11 0 0 1 301.2 130L303 134.4A11 11 0 0 1 303 113.6L301.2 118A11 11 0 0 1 316 103.2L311.6 105A11 11 0 0 1 332.4 105L328 103.2A11 11 0 0 1 342.8 118Z" fill="#fff"/><path d="M30 40Q26 28 38 27Q42 16 54 20Q62 12 70 21Q82 20 80 31Q88 38 78 42Z" fill="#fff"/></g>
+            <ellipse cx="201" cy="205" rx="13" ry="3.2" fill="#000" opacity=".14"/>
+            <g transform="rotate(8 200 204)"><svg x="168" y="101" width="64" height="107" viewBox="0 0 60 100" overflow="visible" style="--wax:#1fa2e8;--press:#0b6eaa"><g stroke="#000" stroke-width="2.1" stroke-linejoin="round" stroke-linecap="round">
+            <path d="M21 58 Q14 60 11.6 54" fill="none"/>
+            <circle cx="11" cy="53" r="2.5" fill="#fff"/>
+            <g class="arm-wave"><path d="M39 57 Q46 55 47.6 48" fill="none"/><circle cx="48" cy="46.8" r="2.5" fill="#fff"/></g>
+            <path d="M20.5 79 L26.8 94.4 Q30.4 96.6 33.8 95.2 L39.5 79 Z" style="fill:var(--wax)"/>
+            <rect x="20" y="72" width="20" height="7" style="fill:var(--wax)"/>
+            <path d="M20 25 H40 V74.5 l-2.5 2.2 -2.9 -2.1 -2.9 2.3 -2.9 -2.1 -2.9 2.3 -2.9 -2.1 L20 75.6 Z" fill="#fff"/>
+            <path d="M20 28.5 H40 V33.5 H20 Z" style="fill:var(--wax)" stroke-width="1.5"/>
+            <path d="M20 36 l2.5 -1.6 2.5 1.6 2.5 -1.6 2.5 1.6 2.5 -1.6 2.5 1.6 2.5 -1.6 2.5 1.6" fill="none" stroke-width="1.2"/><path d="M20 69 H40" stroke-width="1.3"/>
+            <ellipse cx="30" cy="25" rx="10" ry="3" style="fill:var(--press)"/>
+            </g>
+            <ellipse cx="25.6" cy="52" rx="2.1" ry="3" fill="#000"/><ellipse cx="34.4" cy="52" rx="2.1" ry="3" fill="#000"/>
+            <circle cx="26.3" cy="50.9" r=".8" fill="#fff"/><circle cx="35.1" cy="50.9" r=".8" fill="#fff"/>
+            <ellipse cx="22.4" cy="56" rx="1.9" ry="1.1" fill="#ff8fb3"/><ellipse cx="37.6" cy="56" rx="1.9" ry="1.1" fill="#ff8fb3"/>
+            <path d="M26.4 56.2 Q30 61.4 33.6 56.2 Z" fill="#000" stroke="#000" stroke-width="1" stroke-linejoin="round"/>
+            <path d="M28.2 58.6 Q30 57.6 31.8 58.6 Q30 60.3 28.2 58.6 Z" fill="#ff6f91"/></svg></g>
+            </svg>
+          <p class="wl-hi">Hi! I color in every street you walk.</p>
         </div>
-
-        <section class="wl-sum" aria-live="polite">
-          <p class="wl-hero"><span id="wl-sum-dist">0</span><i id="wl-sum-unit">m</i></p>
-          <p class="wl-sub" id="wl-sum-sub"></p>
-          <div class="wl-rule" aria-hidden="true"></div>
-          <p class="wl-label" id="wl-sum-label">New on your map</p>
-          <p class="wl-names" id="wl-sum-names"></p>
-          <p class="wl-more" id="wl-sum-more"></p>
-        </section>
-
+        <h2 class="wl-ask">How much of your city have you colored in?</h2>
+        <p class="wl-lede">Every street stays a blank outline until you walk it. Then it's colored in for good, with its houses and its name. Tapping colors nothing. Walking does.</p>
         <p class="wl-stats" id="wl-stats" hidden></p>
         <p class="wl-msg" id="wl-msg" role="alert" hidden></p>
-        <button class="wl-go" id="wl-go" type="button">Start walking</button>
-        <p class="wl-fine">
-          <span class="wl-fine__privacy">Your location stays on this phone.</span>
-          <span class="wl-fine__credit">
-            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>&nbsp;·
-            <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a>&nbsp;·
-            <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>
-          </span>
-        </p>
+        <button class="wl-go crayon-btn" id="wl-go" type="button">Start walking</button>
+        <p class="wl-fine" id="wl-fine">Your location stays on this phone.</p>
       </div>
     </main>
 
-    <div class="wl-hud" id="wl-hud" hidden>
-      <span class="wl-hud__dot" aria-hidden="true"></span>
-      <span id="wl-hud-time">0:00</span>
-      <span class="wl-hud__sep" aria-hidden="true"></span>
-      <span id="wl-hud-dist">0 m</span>
-      <span class="wl-hud__sep" aria-hidden="true"></span>
-      <span id="wl-hud-steps">0 steps</span>
-      <button class="wl-hud__end" id="wl-end" type="button">End</button>
-    </div>
     <p class="wl-credit" id="wl-credit" hidden>
       <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> ·
       <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> ·
@@ -430,7 +412,7 @@
         var B = window.__wl, go = document.getElementById('wl-go');
         if (B.sim) {
           go.textContent = 'Start the demo walk';
-          document.querySelector('.wl-fine__privacy').textContent = 'A walk through Amsterdam, no location needed.';
+          document.getElementById('wl-fine').textContent = 'A walk through Amsterdam, no location needed.';
         }
         try {
           var s = JSON.parse(localStorage.getItem('wl-stats' + B.sfx) || 'null');

@@ -4,9 +4,9 @@
  */
 
 /**
- * - `lit`, `houses`: streets and houses you walked (gold);
+ * - `lit`, `houses`: streets and houses you walked (colored in);
  * - `seen`: the seen memory, one z17 raster tile per record (`{ key, data: Uint8Array }`);
- * - `seenHouses`, `places`: houses and landmarks you have seen (moonlit, labelled);
+ * - `seenHouses`, `places`: houses and landmarks you have seen (landmarks get their pictogram colored in);
  * - `walks`, `meta`: walk records and the walk in progress.
  */
 export type StoreName = 'lit' | 'walks' | 'houses' | 'seen' | 'seenHouses' | 'places' | 'meta';
