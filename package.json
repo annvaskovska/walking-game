@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Mr Sparkles: a walking motivator that lights up the streets you actually walk.",
+  "description": "Mr Sparkles: your city's coloring book. Every street you walk gets colored in with crayon, for good.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
