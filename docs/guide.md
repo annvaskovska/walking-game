@@ -43,11 +43,12 @@ During a walk iOS shows a blue location pill in the status bar: that is the walk
 An app signed with a free Apple Account stops opening after 7 days; press Run again, and your streets stay on the phone.
 
 After changing the web code, run `npm run ios:sync` (build and copy) before running from Xcode again.
-CI builds the iPhone app on every pull request (`.github/workflows/ios.yml`).
+CI builds the iPhone app on every pull request, and uploads `main` to TestFlight on every push (`.github/workflows/ios.yml`, ADR 0016).
 
 ### Upload to TestFlight
 
-This needs a paid Apple Developer Program membership (ADR 0009).
+Every push to `main` uploads a build from CI (ADR 0016).
+This needs a paid Apple Developer Program membership.
 The first time, on the web:
 
 1. On developer.apple.com, in *Certificates, Identifiers & Profiles → Identifiers → +*, register an App ID with the bundle ID from `capacitor.config.ts`.
@@ -55,7 +56,7 @@ The first time, on the web:
    If it says the paid application agreement is outdated, the account holder accepts the new version in *Business → Agreements* first, also for a free app.
 3. In App Store Connect, *Users and Access → Integrations → App Store Connect API → Team Keys → +*, make a key with **Admin** access and download its `.p8` file once.
 
-Then set four values in the environment and run the upload:
+Then set four values as Actions secrets of the repository, and in the environment for an upload from a Mac:
 
 | Variable | Where it is |
 | --- | --- |
@@ -68,9 +69,9 @@ Then set four values in the environment and run the upload:
 npm run ios:testflight
 ```
 
-Keep the four values in a secret store, never in this repository or in a file inside it (ADR 0010).
-`scripts/testflight.sh` runs the tests, builds the app, signs it and uploads it.
-Xcode makes the certificate and the profile from the key, and gives each upload the next build number.
+Keep the four values in a secret store, never in this repository or in a file inside it (ADR 0014).
+`scripts/testflight.sh` runs the tests, builds the app unsigned, signs it and uploads it.
+Xcode signs it with a cloud-managed certificate and makes the profile from the key, so no machine needs either, and it gives each upload the next build number.
 The first time, in *TestFlight*, create an internal group with automatic distribution and add yourself.
 Once App Store Connect has processed a build, it shows in the TestFlight app on your iPhone.
 
