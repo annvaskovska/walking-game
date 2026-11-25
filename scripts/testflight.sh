@@ -1,12 +1,13 @@
 #!/bin/sh
-# Builds the iPhone app and uploads it to TestFlight, signed by Xcode with an App Store Connect API
-# key, so no Xcode account, certificate or profile has to be set up by hand (ADR 0009). Xcode gives
-# each upload the next build number. Every account detail comes from the environment and none is
-# in this public repository (ADR 0010):
+# Builds the iPhone app and uploads it to TestFlight, from CI on every push to main or from a Mac
+# (ADR 0016). The archive is unsigned; the export signs it with a cloud-managed distribution
+# certificate through an App Store Connect API key, so no machine needs a certificate or a profile.
+# Xcode gives each upload the next build number. Every account detail comes from the environment
+# and none is in this public repository (ADR 0014):
 #   ASC_TEAM_ID    the team that publishes; the Xcode project in git holds none
 #   ASC_KEY_ID     the API key's ID
 #   ASC_ISSUER_ID  the issuer ID above the list of keys
-#   ASC_KEY        the text of the key's .p8 file; Admin access lets Xcode make the certificate
+#   ASC_KEY        the text of the key's .p8 file; Admin access lets Xcode sign in the cloud
 set -eu
 : "${ASC_TEAM_ID:?set ASC_TEAM_ID}" "${ASC_KEY_ID:?set ASC_KEY_ID}"
 : "${ASC_ISSUER_ID:?set ASC_ISSUER_ID}" "${ASC_KEY:?set ASC_KEY}"
@@ -40,14 +41,13 @@ cat > "$tmp/export.plist" <<EOF
 </plist>
 EOF
 
-set -- -allowProvisioningUpdates -authenticationKeyPath "$key" \
-  -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
-
 xcodebuild -quiet -project ios/App/App.xcodeproj -scheme App -configuration Release \
   -destination 'generic/platform=iOS' -archivePath "$tmp/App.xcarchive" \
-  DEVELOPMENT_TEAM="$ASC_TEAM_ID" "$@" archive
+  CODE_SIGNING_ALLOWED=NO archive
 
 xcodebuild -quiet -exportArchive -archivePath "$tmp/App.xcarchive" \
-  -exportOptionsPlist "$tmp/export.plist" -exportPath "$tmp/export" "$@"
+  -exportOptionsPlist "$tmp/export.plist" -exportPath "$tmp/export" \
+  -allowProvisioningUpdates -authenticationKeyPath "$key" \
+  -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
 echo "Uploaded. The build shows in TestFlight once App Store Connect has processed it."

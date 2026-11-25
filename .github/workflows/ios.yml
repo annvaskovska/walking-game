@@ -1,7 +1,8 @@
 name: iPhone app
 
-# Builds the iPhone app (ios/) for the simulator, unsigned, so a change that breaks the native
-# side shows up on the pull request. Running it on a phone still needs Xcode and a signing team.
+# Pull requests build the iPhone app (ios/) for the simulator, unsigned, so a change that breaks the
+# native side shows up there. Every push to main tests it, signs it and uploads it to TestFlight with
+# the App Store Connect API key in the repository's Actions secrets (ADR 0016).
 on:
   pull_request:
   push:
@@ -17,10 +18,11 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-15
+    if: github.ref != 'refs/heads/main'
+    runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -34,3 +36,20 @@ jobs:
           xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+
+  testflight:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run ios:testflight
+        env:
+          ASC_TEAM_ID: ${{ secrets.ASC_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY: ${{ secrets.ASC_KEY }}

@@ -1,6 +1,6 @@
 # 0009 - TestFlight uploads from a Mac with an App Store Connect API key
 
-Status: accepted
+Status: superseded by 0016
 
 ## Context
 

@@ -96,9 +96,9 @@ Every change keeps these invariants:
 - `npm test` runs the unit tests, `npm run typecheck` type-checks, `npm run build` does both and builds into `dist/`.
 - `npm run ios` builds, copies the web app into `ios/` and opens Xcode; `npm run ios:sync` only builds and copies.
   Real GPS is tested only in the iPhone app, run from Xcode or installed from TestFlight.
-- `npm run ios:testflight` uploads a build to TestFlight with an App Store Connect API key from the environment (ADR 0009).
+- `npm run ios:testflight` uploads a build to TestFlight with an App Store Connect API key from the environment (ADR 0016).
   `xcodebuild` resolves Swift packages in a sandbox of its own, so run it outside any other sandbox.
-- CI: `.github/workflows/ios.yml` tests and builds the iPhone app on every pull request; `.github/workflows/pages.yml` deploys `main` to GitHub Pages as the public demo.
+- CI: `.github/workflows/ios.yml` tests and builds the iPhone app on every pull request, and uploads `main` to TestFlight on every push; `.github/workflows/pages.yml` deploys `main` to GitHub Pages as the public demo.
 - Commit subjects and pull request titles are plain imperative sentences that say what changes for the walker, as `git log` shows.
 
 ## Code: lazy senior developer
